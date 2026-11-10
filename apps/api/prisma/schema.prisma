@@ -1,0 +1,158 @@
+// Gauge — application database schema (source of truth).
+// Nine tables, matching docs/PRD.md. The warehouse (Phase 2) copies from these.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ExpertStatus {
+  APPLIED
+  SCREENING
+  ACCEPTED
+  REJECTED
+  ACTIVE
+}
+
+enum Verdict {
+  APPROVE
+  REJECT
+  NEEDS_REVIEW
+}
+
+enum TaskStatus {
+  DRAFT
+  SUBMITTED
+  IN_REVIEW
+  ACCEPTED
+  REJECTED
+}
+
+model Expert {
+  id        String       @id @default(cuid())
+  name      String
+  domain    String
+  status    ExpertStatus @default(APPLIED)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  intakeRuns IntakeRun[]
+  tasks      Task[] @relation("TaskAuthor")
+  events     Event[] @relation("EventActor")
+}
+
+model Posting {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  rubricId    String
+  rubric   Rubric   @relation(fields: [rubricId], references: [id])
+
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  intakeRuns IntakeRun[]
+}
+
+model Rubric {
+  id       String @id @default(cuid())
+  version  Int    @default(1)
+  criteria Json // [{ id, label, description, weight }]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  postings  Posting[]
+}
+
+model IntakeRun {
+  id            String  @id @default(cuid())
+  expertId      String
+  postingId     String
+  scores        Json // [{ criterionId, label, score, evidence, confidence }]
+  confidence    Float // overall confidence (0..1)
+  promptVersion String
+  cost          Float   @default(0)
+  latencyMs     Int     @default(0)
+  createdAt     DateTime @default(now())
+
+  expert  Expert  @relation(fields: [expertId], references: [id])
+  posting Posting @relation(fields: [postingId], references: [id])
+
+  @@index([expertId])
+  @@index([postingId])
+}
+
+// Polymorphic: subject_id points at an intake run OR a task.
+model ReviewDecision {
+  id          String   @id @default(cuid())
+  subjectType String // "intake_run" | "task"
+  subjectId   String
+  reviewerId  String
+  verdict     Verdict
+  reason      String?
+  createdAt   DateTime @default(now())
+
+  @@index([subjectType, subjectId])
+}
+
+model Campaign {
+  id          String @id @default(cuid())
+  name        String
+  targetCount Int    @default(0)
+  specVersion String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tasks Task[]
+}
+
+model Task {
+  id         String     @id @default(cuid())
+  campaignId String
+  authorId   String
+  prompt     String
+  spec       String?
+  reference  String?
+  status     TaskStatus @default(DRAFT)
+  isGold     Boolean    @default(false)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id])
+  author   Expert   @relation("TaskAuthor", fields: [authorId], references: [id])
+
+  taskReviews TaskReview[]
+
+  @@index([campaignId])
+  @@index([authorId])
+}
+
+model TaskReview {
+  id         String   @id @default(cuid())
+  taskId     String
+  reviewerId String
+  scores     Json
+  accepted   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id])
+
+  @@index([taskId])
+}
+
+// Append-only log of every user and system action.
+model Event {
+  id        String   @id @default(cuid())
+  actorId   String?
+  type      String
+  payload   Json
+  createdAt DateTime @default(now())
+
+  actor Expert? @relation("EventActor", fields: [actorId], references: [id])
+
+  @@index([type])
+  @@index([createdAt])
+}

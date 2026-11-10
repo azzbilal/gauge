@@ -8,6 +8,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Prisma generate reads this during typecheck/build; it does not connect.
+      DATABASE_URL: postgresql://gauge:gauge@localhost:5432/gauge
     steps:
       - uses: actions/checkout@v4
 

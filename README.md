@@ -70,6 +70,32 @@ npm run typecheck  # typecheck every workspace
 npm run db:down    # stop PostgreSQL
 ```
 
+## M1 — Intake agent (score a CV against a posting)
+
+1. Create the schema and seed a sample rubric + posting:
+
+   ```bash
+   docker compose up -d
+   cd apps/api
+   npx prisma migrate deploy   # applies prisma/migrations
+   npm run prisma:seed         # prints a posting id to use below
+   ```
+
+2. Set `ANTHROPIC_API_KEY` (and optionally `ANTHROPIC_MODEL`) in `apps/api/.env`.
+
+3. Run the API and score a CV:
+
+   ```bash
+   npm run dev:api             # from apps/api
+   curl -X POST http://localhost:3000/intake/runs \
+     -H "Content-Type: application/json" \
+     -d '{"cv":"...","postingId":"<id from seed>","expertName":"Bilal"}'
+   ```
+
+   The response has per-criterion `{score, evidence, confidence}`, an overall
+   `confidence`, and a `needsReview` flag (true when confidence is below 0.7, which
+   routes the run to the human review queue in the `review_decisions` table).
+
 ## Repository layout
 
 ```
