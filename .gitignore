@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test / coverage
+coverage/
+
+# Python (data pipeline)
+.venv/
+__pycache__/
+*.pyc
+
+# dbt
+data/dbt/target/
+data/dbt/dbt_packages/
+data/dbt/logs/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Private study notes (local only — never committed)
+docs/lessons/

@@ -1,0 +1,23 @@
+{
+  "name": "gauge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Gauge: a miniature human-data lab for CAD reasoning, built end to end in ~3 weeks.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "setup": "cd apps/web && npm install && cd ../api && npm install",
+    "dev:web": "cd apps/web && npm run dev",
+    "dev:api": "cd apps/api && npm run start:dev",
+    "build": "npm run build:web && npm run build:api",
+    "build:web": "cd apps/web && npm run build",
+    "build:api": "cd apps/api && npm run build",
+    "typecheck": "npm run typecheck:web && npm run typecheck:api",
+    "typecheck:web": "cd apps/web && npm run typecheck",
+    "typecheck:api": "cd apps/api && npm run typecheck",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down"
+  }
+}

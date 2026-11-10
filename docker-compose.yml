@@ -1,0 +1,22 @@
+# Local PostgreSQL: the single source of truth for the application.
+# Everything else (the warehouse, the model loop) reads from copies of this.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: gauge-postgres
+    environment:
+      POSTGRES_USER: gauge
+      POSTGRES_PASSWORD: gauge
+      POSTGRES_DB: gauge
+    ports:
+      - "5432:5432"
+    volumes:
+      - gauge_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gauge -d gauge"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  gauge_pgdata:
