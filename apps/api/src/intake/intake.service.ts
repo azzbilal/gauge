@@ -3,6 +3,7 @@ import { Prisma, Verdict } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { LLM_PROVIDER, LlmScoringProvider, RubricCriterion } from './llm/types';
 import { RunIntakeDto } from './dto/run-intake.dto';
+import { SlackService } from '../slack/slack.service';
 
 // Below this, the run is routed to a human for review.
 const LOW_CONFIDENCE_THRESHOLD = 0.7;
@@ -14,6 +15,7 @@ export class IntakeService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(LLM_PROVIDER) private readonly llm: LlmScoringProvider,
+    private readonly slack: SlackService,
   ) {}
 
   async runIntake(dto: RunIntakeDto) {
@@ -73,6 +75,21 @@ export class IntakeService {
           verdict: Verdict.NEEDS_REVIEW,
           reason: `low confidence: overall ${assessment.overallConfidence.toFixed(2)}, min criterion ${minConfidence.toFixed(2)}`,
         },
+      });
+    }
+
+    // Alert reviewers. SlackService never throws, so this cannot fail the run.
+    if (needsReview) {
+      const expert = await this.prisma.expert.findUnique({
+        where: { id: expertId },
+        select: { name: true },
+      });
+      await this.slack.alertLowConfidence({
+        runId: run.id,
+        expertName: expert?.name ?? expertId,
+        postingTitle: posting.title,
+        confidence: assessment.overallConfidence,
+        needsReview,
       });
     }
 
