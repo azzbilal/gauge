@@ -1,0 +1,62 @@
+[
+  {
+    "id": "strong-code-first-cad",
+    "cv": "Maria Okafor — Senior Mechanical Design Engineer\n\nExperience\n- Senior Design Engineer, Velox Robotics (2019–present): Lead designer for gripper and end-effector assemblies. Built an internal CadQuery library of 40+ parametric components (brackets, flexures, gear housings) driven from a YAML spec, used by 12 engineers. Introduced GD&T on all production drawings and ran tolerance stack-ups for every new assembly.\n- Design Engineer, Kessler Automation (2015–2019): Modeled sheet-metal and machined parts in SolidWorks; owned the design-table configurations for a 300-variant conveyor product line.\n\nSkills: CadQuery, SolidWorks, FreeCAD, Python (pytest, numpy), GD&T (ASME Y14.5), tolerance analysis.\n\nWriting: Authored the team's 'How to write a parametric part spec' guide; mentor junior engineers on design-intent documentation.",
+    "posting": "CAD Task Author (parametric modeling)\nWe are hiring CAD experts to write precise, verifiable parametric-modeling tasks. You should be fluent in CadQuery or similar code-first CAD, comfortable reasoning about constraints and dimensions, and able to document a task so another engineer can solve it.",
+    "reasoning": "cad (weight 0.4): Nine years of parametric CAD across SolidWorks and CadQuery, including owning design-table configurations for a 300-variant product line and building a 40+ component CadQuery library. That is exactly the code-first parametric depth the posting asks for, so 5. Evidence is concrete and specific, so confidence is high.\n\ngeo (0.3): GD&T on all production drawings plus tolerance stack-ups for every assembly shows they reason about constraints and dimensions precisely, not just draw shapes. Flexures and gear housings also demand geometric reasoning. Score 5.\n\ncode (0.2): A CadQuery library driven from YAML specs means they express CAD intent in Python and design for reuse. pytest and numpy suggest decent engineering hygiene. I stop at 4 rather than 5 because there is no evidence of software beyond this library (open source, larger codebases), and I should not infer more than the CV states.\n\ncomm (0.1): They wrote a 'How to write a parametric part spec' guide, which is almost the same job as writing a verifiable task for another engineer. Mentoring on design-intent documentation supports it. Score 4. The CV itself is clear, but I have no writing sample to judge precision directly.\n\nOverall: a strong, well-evidenced match on every criterion. Confidence is high because each score rests on explicit statements, not inference.",
+    "output": {
+      "scores": [
+        { "criterionId": "cad", "score": 5, "evidence": "Built an internal CadQuery library of 40+ parametric components (brackets, flexures, gear housings) driven from a YAML spec", "confidence": 0.95 },
+        { "criterionId": "geo", "score": 5, "evidence": "Introduced GD&T on all production drawings and ran tolerance stack-ups for every new assembly.", "confidence": 0.9 },
+        { "criterionId": "code", "score": 4, "evidence": "Built an internal CadQuery library of 40+ parametric components (brackets, flexures, gear housings) driven from a YAML spec, used by 12 engineers.", "confidence": 0.85 },
+        { "criterionId": "comm", "score": 4, "evidence": "Authored the team's 'How to write a parametric part spec' guide", "confidence": 0.8 }
+      ],
+      "overallConfidence": 0.88
+    }
+  },
+  {
+    "id": "gui-only-mechanical",
+    "cv": "Daniel Weiss — Mechanical Engineer\n\nExperience\n- Mechanical Engineer, Brightline HVAC (2020–present): Design fan housings, ductwork transitions and mounting brackets in Autodesk Inventor and SolidWorks. Produce fully dimensioned 2D manufacturing drawings and coordinate with the machine shop on tolerances.\n- Junior Engineer, Torres Fabrication (2018–2020): Updated legacy AutoCAD drawings and created BOMs.\n\nSkills: SolidWorks, Autodesk Inventor, AutoCAD, Excel, basic GD&T.\n\nEducation: BSc Mechanical Engineering, 2018.",
+    "posting": "CAD Task Author (parametric modeling)\nWe are hiring CAD experts to write precise, verifiable parametric-modeling tasks. You should be fluent in CadQuery or similar code-first CAD, comfortable reasoning about constraints and dimensions, and able to document a task so another engineer can solve it.",
+    "reasoning": "cad (weight 0.4): About six years of professional feature-based CAD in Inventor and SolidWorks on real manufactured parts. That is solid domain depth. The posting asks for code-first CAD, which the next criterion covers, so I do not double-penalise here. The CV does not say they build parametric or configurable models (design tables, equations), so 4, not 5.\n\ngeo (0.3): 'Fully dimensioned 2D manufacturing drawings', tolerance work with the machine shop and 'basic GD&T' show working dimensional reasoning. 'Basic' GD&T and no stack-up analysis keep it at 3. Competent but not demonstrably advanced.\n\ncode (0.2): No programming language, no CadQuery, OpenSCAD or CAD API, no macros. Excel is not CAD scripting. The criterion is about expressing CAD intent in code, and there is no evidence of that, so 0. Absence is explicit in the skills list, so confidence is fairly high.\n\ncomm (0.1): Producing manufacturing drawings and coordinating with a shop implies some technical communication, but there is no writing, documentation or teaching evidence. Score 2 with low confidence because the CV says little either way.\n\nOverall: a capable GUI CAD engineer who lacks the code-first skill that is central to this role. Hire signal is mixed. Confidence is moderate because comm is thinly evidenced.",
+    "output": {
+      "scores": [
+        { "criterionId": "cad", "score": 4, "evidence": "Design fan housings, ductwork transitions and mounting brackets in Autodesk Inventor and SolidWorks.", "confidence": 0.85 },
+        { "criterionId": "geo", "score": 3, "evidence": "Produce fully dimensioned 2D manufacturing drawings and coordinate with the machine shop on tolerances.", "confidence": 0.75 },
+        { "criterionId": "code", "score": 0, "evidence": "no evidence", "confidence": 0.85 },
+        { "criterionId": "comm", "score": 2, "evidence": "coordinate with the machine shop on tolerances", "confidence": 0.55 }
+      ],
+      "overallConfidence": 0.72
+    }
+  },
+  {
+    "id": "openscad-hobbyist",
+    "cv": "Priya Natarajan — Final-year Physics Student\n\nProjects\n- Designed 25+ 3D-printable enclosures and camera mounts in OpenSCAD; every model takes wall thickness, screw size and clearance as parameters. Published on Printables (~4k downloads).\n- Wrote a short blog series 'OpenSCAD for people who hate clicking' explaining modules, hull() and minkowski().\n\nSkills: OpenSCAD, Python (Jupyter, matplotlib), some Fusion 360, 3D printing (FDM).\n\nNo professional engineering experience yet.",
+    "posting": "CAD Task Author (parametric modeling)\nWe are hiring CAD experts to write precise, verifiable parametric-modeling tasks. You should be fluent in CadQuery or similar code-first CAD, comfortable reasoning about constraints and dimensions, and able to document a task so another engineer can solve it.",
+    "reasoning": "cad (weight 0.4): The work is hobby-level but truly parametric and code-first: 25+ OpenSCAD models with wall thickness, screw size and clearance as parameters. There is no professional experience, and 'some Fusion 360' is vague. Score 2. The modeling style fits the posting, but the depth and range of parts are limited to simple printable enclosures and mounts.\n\ngeo (0.3): Parameterising clearances and screw sizes shows awareness of fit and dimensions. Explaining hull() and minkowski() shows they understand CSG operations. There is no tolerancing, GD&T or engineering constraint work, so 3, with moderate confidence.\n\ncode (0.2): OpenSCAD is named explicitly in the rubric as a way to express CAD intent in code, and they use it fluently enough to teach it. Python is listed but only for analysis (Jupyter, matplotlib), not CadQuery. Score 3. Clear code-first CAD, but OpenSCAD only and at hobby scale.\n\ncomm (0.1): The blog series teaching OpenSCAD concepts is direct evidence of explaining geometry to others, which is close to task authoring. 4 would be generous for blog posts I cannot read, so 3, with moderate confidence.\n\nOverall: promising on code-first modeling style and communication, but junior with no professional CAD depth. A reviewer should check portfolio quality. Confidence is moderate-low because the evidence is self-reported hobby work.",
+    "output": {
+      "scores": [
+        { "criterionId": "cad", "score": 2, "evidence": "Designed 25+ 3D-printable enclosures and camera mounts in OpenSCAD; every model takes wall thickness, screw size and clearance as parameters.", "confidence": 0.7 },
+        { "criterionId": "geo", "score": 3, "evidence": "every model takes wall thickness, screw size and clearance as parameters", "confidence": 0.6 },
+        { "criterionId": "code", "score": 3, "evidence": "Wrote a short blog series 'OpenSCAD for people who hate clicking' explaining modules, hull() and minkowski().", "confidence": 0.7 },
+        { "criterionId": "comm", "score": 3, "evidence": "Wrote a short blog series 'OpenSCAD for people who hate clicking'", "confidence": 0.6 }
+      ],
+      "overallConfidence": 0.62
+    }
+  },
+  {
+    "id": "off-domain-backend",
+    "cv": "Tom Lindqvist — Senior Backend Engineer\n\nExperience\n- Senior Backend Engineer, Payflow (2018–present): Designed and ran Go and Python microservices handling 20k req/s. Led the migration to Kubernetes. Wrote most of the team's architecture decision records and onboarding docs.\n- Software Engineer, Nordic Telecom (2014–2018): Built billing pipelines in Python and PostgreSQL.\n\nSkills: Go, Python, PostgreSQL, Kubernetes, Terraform, AWS.\n\nInterests: woodworking, cycling.",
+    "posting": "CAD Task Author (parametric modeling)\nWe are hiring CAD experts to write precise, verifiable parametric-modeling tasks. You should be fluent in CadQuery or similar code-first CAD, comfortable reasoning about constraints and dimensions, and able to document a task so another engineer can solve it.",
+    "reasoning": "cad (weight 0.4): No CAD tool, mechanical design or modeling experience anywhere in the CV. Woodworking is a hobby and says nothing about CAD. Score 0 with high confidence because the absence is clear in a detailed CV.\n\ngeo (0.3): Nothing about geometry, dimensions or constraints. I must not infer geometric skill from general engineering seniority or a woodworking hobby. Score 0, 'no evidence'.\n\ncode (0.2): Strong general programming in Python and Go, but the criterion is about expressing CAD intent in code. Python would make learning CadQuery easy, so the skill partly transfers, but nothing shows CAD scripting. Score 1 to credit the transferable Python, not 3 or more, since the rubric targets CAD code specifically.\n\ncomm (0.1): Wrote most of the team's architecture decision records and onboarding docs. That is good evidence of clear technical writing for other engineers, though not about geometry. Score 3.\n\nOverall: a strong software engineer but not a CAD expert. Not a fit for this posting. Confidence in the low CAD and geometry scores is high. Confidence in the code and comm calibration is moderate.",
+    "output": {
+      "scores": [
+        { "criterionId": "cad", "score": 0, "evidence": "no evidence", "confidence": 0.95 },
+        { "criterionId": "geo", "score": 0, "evidence": "no evidence", "confidence": 0.9 },
+        { "criterionId": "code", "score": 1, "evidence": "Designed and ran Go and Python microservices handling 20k req/s.", "confidence": 0.75 },
+        { "criterionId": "comm", "score": 3, "evidence": "Wrote most of the team's architecture decision records and onboarding docs.", "confidence": 0.75 }
+      ],
+      "overallConfidence": 0.85
+    }
+  }
+]

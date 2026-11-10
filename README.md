@@ -81,7 +81,15 @@ npm run db:down    # stop PostgreSQL
    npm run prisma:seed         # prints a posting id to use below
    ```
 
-2. Set `ANTHROPIC_API_KEY` (and optionally `ANTHROPIC_MODEL`) in `apps/api/.env`.
+2. Choose the scoring backend in `apps/api/.env` (see `.env.example`):
+
+   - **Local (default):** `LLM_PROVIDER=ollama`. Run `ollama serve`, then
+     `ollama pull qwen3.5:9b-q4_K_M` (or set `OLLAMA_MODEL`). The local model is
+     given four worked scorings from `src/intake/llm/examples.json` as few-shot
+     turns, so it follows the same rubric calibration and reasons per criterion
+     before scoring. Edit that file to change how the model scores.
+   - **Claude:** `LLM_PROVIDER=anthropic` with `ANTHROPIC_API_KEY` (and optionally
+     `ANTHROPIC_MODEL`).
 
 3. Run the API and score a CV:
 
@@ -95,6 +103,9 @@ npm run db:down    # stop PostgreSQL
    The response has per-criterion `{score, evidence, confidence}`, an overall
    `confidence`, and a `needsReview` flag (true when confidence is below 0.7, which
    routes the run to the human review queue in the `review_decisions` table).
+   It also returns `provider`, `model` and, for the local model, its `reasoning`.
+   `promptVersion` (stored on every run) records provider and model, e.g.
+   `intake-v3-fewshot@ollama/qwen3.5:9b-q4_K_M`.
 
 ## Repository layout
 

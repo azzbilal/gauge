@@ -1,16 +1,11 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma, Verdict } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { AnthropicService, RubricCriterion } from './anthropic.service';
+import { LLM_PROVIDER, LlmScoringProvider, RubricCriterion } from './llm/types';
 import { RunIntakeDto } from './dto/run-intake.dto';
 
 // Below this, the run is routed to a human for review.
 const LOW_CONFIDENCE_THRESHOLD = 0.7;
-
-// Approximate USD per million tokens (input, output). Configurable per model.
-const PRICE_USD_PER_MTok: Record<string, { input: number; output: number }> = {
-  'claude-sonnet-4-20250514': { input: 3, output: 15 },
-};
 
 @Injectable()
 export class IntakeService {
@@ -18,7 +13,7 @@ export class IntakeService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly anthropic: AnthropicService,
+    @Inject(LLM_PROVIDER) private readonly llm: LlmScoringProvider,
   ) {}
 
   async runIntake(dto: RunIntakeDto) {
@@ -43,15 +38,10 @@ export class IntakeService {
     }
 
     const startedAt = Date.now();
-    const assessment = await this.anthropic.scoreCv(dto.cv, postingText, criteria);
+    const assessment = await this.llm.scoreCv(dto.cv, postingText, criteria);
     const latencyMs = Date.now() - startedAt;
 
-    const model = process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-20250514';
-    const price = PRICE_USD_PER_MTok[model] ?? { input: 3, output: 15 };
-    const cost =
-      (assessment.usage.inputTokens * price.input +
-        assessment.usage.outputTokens * price.output) /
-      1_000_000;
+    const cost = assessment.costUsd;
 
     const minConfidence = Math.min(
       assessment.overallConfidence,
@@ -67,7 +57,7 @@ export class IntakeService {
         postingId: posting.id,
         scores: assessment.scores as unknown as Prisma.InputJsonValue,
         confidence: assessment.overallConfidence,
-        promptVersion: this.anthropic.promptVersion,
+        promptVersion: this.llm.promptVersion,
         cost,
         latencyMs,
       },
@@ -95,6 +85,8 @@ export class IntakeService {
           runId: run.id,
           postingId: posting.id,
           needsReview,
+          provider: this.llm.name,
+          model: assessment.model,
         } as Prisma.InputJsonValue,
       },
     });
@@ -108,7 +100,11 @@ export class IntakeService {
       needsReview,
       cost,
       latencyMs,
-      promptVersion: this.anthropic.promptVersion,
+      promptVersion: this.llm.promptVersion,
+      provider: this.llm.name,
+      model: assessment.model,
+      reasoning: assessment.reasoning,
+      usage: assessment.usage,
     };
   }
 }

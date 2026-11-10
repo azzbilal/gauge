@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
 import { IntakeController } from './intake.controller';
 import { IntakeService } from './intake.service';
-import { AnthropicService } from './anthropic.service';
+import { llmProvider } from './llm/llm.provider';
 
 @Module({
   controllers: [IntakeController],
-  providers: [IntakeService, AnthropicService],
+  providers: [IntakeService, llmProvider],
 })
 export class IntakeModule {}
