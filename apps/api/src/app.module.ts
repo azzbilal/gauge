@@ -5,6 +5,7 @@ import { HealthModule } from './health/health.module';
 import { IntakeModule } from './intake/intake.module';
 import { CampaignModule } from './campaign/campaign.module';
 import { ReviewModule } from './review/review.module';
+import { ExpertsModule } from './experts/experts.module';
 
 /**
  * One NestJS app, domain modules (no microservices).
@@ -17,6 +18,7 @@ import { ReviewModule } from './review/review.module';
     IntakeModule,
     CampaignModule,
     ReviewModule,
+    ExpertsModule,
   ],
 })
 export class AppModule {}
