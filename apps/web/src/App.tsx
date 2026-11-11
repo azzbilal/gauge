@@ -3,6 +3,12 @@ import { api, Campaign, Expert, Task } from './api';
 
 const CRITERIA = ['verifiable', 'unambiguous', 'correct_reference', 'complete_constraints', 'difficulty'] as const;
 
+// Mirrors the backend acceptance rule (docs/pipeline.md §2):
+// every criterion >= 3 and verifiable >= 4.
+function isAccepted(scores: Record<string, number>): boolean {
+  return CRITERIA.every((c) => (scores[c] ?? 3) >= 3) && (scores['verifiable'] ?? 3) >= 4;
+}
+
 type Tab = 'campaigns' | 'author' | 'review';
 
 const LABELS: Record<Tab, string> = {
@@ -174,7 +180,6 @@ function ReviewView() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
   const [scores, setScores] = useState<Record<string, number>>({});
-  const [accepted, setAccepted] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -187,7 +192,6 @@ function ReviewView() {
   function open(task: Task) {
     setOpenId(openId === task.id ? null : task.id);
     setScores(Object.fromEntries(CRITERIA.map((c) => [c, 3])));
-    setAccepted(true);
     setError('');
   }
 
@@ -195,7 +199,7 @@ function ReviewView() {
     setBusy(true);
     setError('');
     try {
-      await api.post(`/api/tasks/${taskId}/reviews`, { reviewerId: 'me', scores, accepted });
+      await api.post(`/api/tasks/${taskId}/reviews`, { reviewerId: 'me', scores });
       setOpenId(null);
       load();
     } catch (err) {
@@ -238,10 +242,11 @@ function ReviewView() {
                     </label>
                   ))}
                   <div className="row">
-                    <label className="accept">
-                      <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
-                      Accept
-                    </label>
+                    {isAccepted(scores) ? (
+                      <span className="ok">Accepted ✓</span>
+                    ) : (
+                      <span className="error">Rejected ✗ — verifiable ≥ 4, all ≥ 3</span>
+                    )}
                     <button disabled={busy} onClick={() => submitReview(t.id)}>
                       Submit review
                     </button>

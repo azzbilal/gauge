@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, TaskStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTaskDto } from './dto/task.dto';
-import { CreateTaskReviewDto } from './dto/task-review.dto';
+import { CreateTaskReviewDto, isAccepted } from './dto/task-review.dto';
 
 @Injectable()
 export class TaskService {
@@ -69,18 +69,21 @@ export class TaskService {
       throw new NotFoundException(`Task "${taskId}" not found`);
     }
 
+    // The rubric decides acceptance (docs/pipeline.md §2), not the client.
+    const accepted = isAccepted(dto.scores);
+
     const review = await this.prisma.taskReview.create({
       data: {
         taskId,
         reviewerId: dto.reviewerId,
         scores: dto.scores as Prisma.InputJsonValue,
-        accepted: dto.accepted,
+        accepted,
       },
     });
 
     await this.prisma.task.update({
       where: { id: taskId },
-      data: { status: dto.accepted ? TaskStatus.ACCEPTED : TaskStatus.REJECTED },
+      data: { status: accepted ? TaskStatus.ACCEPTED : TaskStatus.REJECTED },
     });
 
     // The reviewer may not be an Expert row, so the event actor stays null and
@@ -93,7 +96,7 @@ export class TaskService {
           taskId,
           reviewId: review.id,
           reviewerId: dto.reviewerId,
-          accepted: dto.accepted,
+          accepted,
         } as Prisma.InputJsonValue,
       },
     });
