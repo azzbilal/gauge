@@ -1,0 +1,6 @@
+# hairline-lessons
+
+- 2026-11-11 · concept · the brief asked for the read-out to be "empty at rest", but look.mjs (item 8) and hl-embed --check both fail unless the rest state is literally `rest` · write `rest` at rest and the brief's word (`peek`) on hover; with no `data-hl-read` on the div nothing is shown on the page, so "empty" still holds there. Say the conflict at hand-over.
+- 2026-11-11 · check · first look warned the rest pose covered 20% of the frame, because S was chosen so the fully fanned pose fit with a wide margin · fit to the extreme pose first, then raise S until that pose nearly fills the frame (1.36 -> 2.0 here, rest 43%).
+- 2026-11-11 · build · a part shared by all sheets (the rivet) was drawn once at the pile's rest height and painted last, so it would sit under lifted sheets while drawn over them · anything painted over a moving part must take that part's height every frame.
+- 2026-11-11 · embed · placed into a Vite + React app by extracting the block's script to public/hairline-embed.js and a classic `<script src=/hairline-embed.js>` before </body>; the React-rendered divs mounted themselves · checked with vite build + vite preview and a browser probe: rest, peek, rest.
