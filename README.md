@@ -117,7 +117,7 @@ gauge/
   data/dbt/          warehouse models, tests, docs       (Phase 2)
   data/mcp/          semantic layer server               (Phase 2)
   model/             cad-spec release, generator, eval   (Phase 3)
-  docs/              PRD, architecture, retro
+  docs/              PRD, pipeline spec, architecture, retro
   .github/workflows/ CI for app + dbt + eval
 ```
 
