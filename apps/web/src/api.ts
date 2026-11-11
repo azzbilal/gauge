@@ -39,8 +39,18 @@ export interface Expert {
 export interface TaskReview {
   id: string;
   reviewerId: string;
-  scores: Record<string, number>;
-  accepted: boolean;
+  // Withheld until the task is decided, so reviews stay independent.
+  scores?: Record<string, number>;
+  accepted?: boolean;
+}
+
+export type ReviewState = 'awaiting_reviews' | 'awaiting_adjudication' | 'decided';
+
+export interface Adjudication {
+  id: string;
+  verdict: 'NEEDS_REVIEW' | 'APPROVE' | 'REJECT';
+  adjudicatorId: string | null;
+  reason: string | null;
 }
 
 export interface Task {
@@ -52,4 +62,6 @@ export interface Task {
   campaign: { id: string; name: string };
   author: { id: string; name: string };
   taskReviews: TaskReview[];
+  reviewState: ReviewState;
+  adjudication: Adjudication | null;
 }

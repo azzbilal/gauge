@@ -42,6 +42,7 @@ model Expert {
 
   intakeRuns IntakeRun[]
   tasks      Task[] @relation("TaskAuthor")
+  taskReviews TaskReview[] @relation("TaskReviewer")
   events     Event[] @relation("EventActor")
 }
 
@@ -86,6 +87,8 @@ model IntakeRun {
 }
 
 // Polymorphic: subject_id points at an intake run OR a task.
+// For tasks this is the adjudication record (docs/pipeline.md §2.1): opened as
+// NEEDS_REVIEW when the two peer reviewers split, resolved to APPROVE / REJECT.
 model ReviewDecision {
   id          String   @id @default(cuid())
   subjectType String // "intake_run" | "task"
@@ -118,6 +121,9 @@ model Task {
   reference  String?
   status     TaskStatus @default(DRAFT)
   isGold     Boolean    @default(false)
+  // Gold tasks only: the known answer (true = a reviewer should accept it,
+  // false = deliberately broken). Null on every normal task.
+  goldExpectedAccept Boolean?
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
 
@@ -133,14 +139,24 @@ model Task {
 model TaskReview {
   id         String   @id @default(cuid())
   taskId     String
+  // Legacy free-text label. New rows store the reviewer's Expert id here too, so
+  // existing readers keep working; identity is enforced by reviewerExpertId.
   reviewerId String
+  // The reviewer's identity. Null only on reviews written before the two-reviewer
+  // protocol; those rows are ignored by consensus, IAA and calibration.
+  reviewerExpertId String?
   scores     Json
   accepted   Boolean  @default(false)
   createdAt  DateTime @default(now())
 
-  task Task @relation(fields: [taskId], references: [id])
+  task     Task    @relation(fields: [taskId], references: [id])
+  reviewer Expert? @relation("TaskReviewer", fields: [reviewerExpertId], references: [id], onDelete: Restrict)
 
+  // One review per reviewer per task. Postgres treats NULLs as distinct, so
+  // legacy rows never collide.
+  @@unique([taskId, reviewerExpertId])
   @@index([taskId])
+  @@index([reviewerExpertId])
 }
 
 // Append-only log of every user and system action.

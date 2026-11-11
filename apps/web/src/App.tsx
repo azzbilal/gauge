@@ -178,28 +178,38 @@ function AuthorView() {
 
 function ReviewView() {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [experts, setExperts] = useState<Expert[]>([]);
+  const [reviewerId, setReviewerId] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
   const [scores, setScores] = useState<Record<string, number>>({});
+  const [reason, setReason] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
+  // With a reviewer chosen the API returns that reviewer's own queue: only the
+  // tasks they may review or adjudicate. Without one it is the read-only overview.
   const load = useCallback(() => {
-    api.get<Task[]>('/api/tasks').then(setTasks).catch((e) => setError(String(e.message)));
-  }, []);
+    const url = reviewerId ? `/api/tasks?reviewerId=${encodeURIComponent(reviewerId)}` : '/api/tasks';
+    api.get<Task[]>(url).then(setTasks).catch((e) => setError(String(e.message)));
+  }, [reviewerId]);
 
   useEffect(load, [load]);
+  useEffect(() => {
+    api.get<Expert[]>('/api/experts').then(setExperts).catch(() => undefined);
+  }, []);
 
   function open(task: Task) {
     setOpenId(openId === task.id ? null : task.id);
     setScores(Object.fromEntries(CRITERIA.map((c) => [c, 3])));
+    setReason('');
     setError('');
   }
 
-  async function submitReview(taskId: string) {
+  async function send(url: string, body: unknown) {
     setBusy(true);
     setError('');
     try {
-      await api.post(`/api/tasks/${taskId}/reviews`, { reviewerId: 'me', scores });
+      await api.post(url, body);
       setOpenId(null);
       load();
     } catch (err) {
@@ -209,24 +219,81 @@ function ReviewView() {
     }
   }
 
+  const submitReview = (taskId: string) =>
+    send(`/api/tasks/${taskId}/reviews`, { reviewerId, scores });
+
+  const adjudicate = (taskId: string, verdict: 'accept' | 'reject') =>
+    send(`/api/tasks/${taskId}/adjudication`, { adjudicatorId: reviewerId, verdict, reason });
+
   return (
     <section>
       <h2>Review queue</h2>
+      <div className="row">
+        <select value={reviewerId} onChange={(e) => setReviewerId(e.target.value)}>
+          <option value="">Reviewing as…</option>
+          {experts.map((x) => (
+            <option key={x.id} value={x.id}>
+              {x.name}
+            </option>
+          ))}
+        </select>
+        <span className="muted">
+          {reviewerId
+            ? 'Your queue — two reviewers per task; a split goes to a third.'
+            : 'All tasks. Choose who you are to review.'}
+        </span>
+      </div>
       {error && <p className="error">{error}</p>}
       {tasks.length === 0 ? (
-        <EmptyState title="No tasks yet" body="Tasks authors submit will show up here for review." />
+        <EmptyState
+          title={reviewerId ? 'Nothing to review' : 'No tasks yet'}
+          body={
+            reviewerId
+              ? 'There is nothing waiting for you right now.'
+              : 'Tasks authors submit will show up here for review.'
+          }
+        />
       ) : (
         <ul className="list">
           {tasks.map((t) => (
             <li key={t.id} className="task">
               <button className="task-head" onClick={() => open(t)}>
                 <span className="strong">{truncate(t.prompt, 70)}</span>
-                <span className={`badge badge-${t.status.toLowerCase()}`}>{t.status}</span>
+                <span className={`badge badge-${t.status.toLowerCase()}`}>
+                  {t.reviewState === 'awaiting_adjudication' ? 'needs adjudication' : t.status}
+                </span>
               </button>
               <span className="muted">
-                {t.author.name} · {t.campaign.name} · {t.taskReviews.length} review(s)
+                {t.author.name} · {t.campaign.name} · {t.taskReviews.length} of 2 reviews
               </span>
-              {openId === t.id && (
+              {openId === t.id && !reviewerId && (
+                <p className="muted">Choose who you are reviewing as, above.</p>
+              )}
+              {openId === t.id && reviewerId && t.reviewState === 'awaiting_adjudication' && (
+                <div className="review-form">
+                  <p className="muted">The two reviewers disagreed. Your decision is final.</p>
+                  <textarea
+                    placeholder="Reason for your decision (required)"
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                  />
+                  <div className="row">
+                    <button disabled={busy || !reason.trim()} onClick={() => adjudicate(t.id, 'accept')}>
+                      Accept task
+                    </button>
+                    <button disabled={busy || !reason.trim()} onClick={() => adjudicate(t.id, 'reject')}>
+                      Reject task
+                    </button>
+                  </div>
+                </div>
+              )}
+              {openId === t.id && reviewerId && t.reviewState === 'decided' && (
+                <p className="muted">
+                  Decided: {t.status.toLowerCase()}
+                  {t.adjudication?.reason ? ` by adjudication — ${t.adjudication.reason}` : ''}
+                </p>
+              )}
+              {openId === t.id && reviewerId && t.reviewState === 'awaiting_reviews' && (
                 <div className="review-form">
                   {CRITERIA.map((c) => (
                     <label key={c} className="criterion">
@@ -243,9 +310,9 @@ function ReviewView() {
                   ))}
                   <div className="row">
                     {isAccepted(scores) ? (
-                      <span className="ok">Accepted ✓</span>
+                      <span className="ok">Your verdict: accept ✓</span>
                     ) : (
-                      <span className="error">Rejected ✗ — verifiable ≥ 4, all ≥ 3</span>
+                      <span className="error">Your verdict: reject ✗ — verifiable ≥ 4, all ≥ 3</span>
                     )}
                     <button disabled={busy} onClick={() => submitReview(t.id)}>
                       Submit review

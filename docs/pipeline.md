@@ -34,12 +34,44 @@ Every task is scored 0–5 on five criteria, each with an evidence quote from th
 
 **Acceptance bar:** every criterion ≥ 3, and *Verifiable* ≥ 4. Two reviewers per task.
 
+### 2.1 Review protocol
+
+Scores are whole numbers. Each review yields a verdict (accept / reject) from the acceptance
+bar; the reviewer never sets the verdict directly.
+
+| Reviews in | Task status | What happens |
+|------------|-------------|--------------|
+| 0 | `SUBMITTED` | waiting for a first reviewer |
+| 1 | `IN_REVIEW` | waiting for a second, independent reviewer |
+| 2, same verdict | `ACCEPTED` / `REJECTED` | decided |
+| 2, different verdicts | `IN_REVIEW` | adjudication opened |
+| adjudicated | `ACCEPTED` / `REJECTED` | decided; the adjudicator's verdict is final |
+
+Rules:
+
+- **Identity.** A reviewer is an expert (`experts` row). No anonymous reviews.
+- **Independence.** Nobody reviews their own task, nobody reviews a task twice, and a
+  reviewer does not see the other reviewer's scores until the task is decided.
+- **Exactly two.** A third peer review is refused; a decided task is closed to review.
+- **Adjudication.** A split is recorded as a `review_decisions` row (`subject_type = task`,
+  verdict `NEEDS_REVIEW`). A third expert — not the author, not either reviewer — resolves
+  it to `APPROVE` or `REJECT` with a written reason.
+
 ## 3. Gold tasks
 
 A small set of tasks with known-good reference solutions (and a few deliberately broken ones),
 mixed into the review queue at ~20%. They measure **reviewer accuracy**: does a reviewer
 accept the good ones and reject the broken ones? A reviewer who drifts from the gold answers
 is flagged, not fired — the gold set is a calibration instrument, not a test of loyalty.
+
+Each gold task stores its known answer (`gold_expected_accept`). Reviewers cannot tell a gold
+task from a normal one: the marker and the answer are never returned by the task API. A gold
+review never changes the task's status, is not capped at two reviewers, and is left out of
+IAA. A gold task therefore never becomes `ACCEPTED` and never reaches the training set.
+
+**Reviewer accuracy** = gold reviews whose verdict matches the known answer ÷ gold reviews.
+A reviewer is flagged below **0.8**, once they have at least **5** gold reviews. The flag is
+a prompt to recalibrate; it never blocks a reviewer.
 
 ## 4. QA layers (top to bottom)
 
@@ -50,6 +82,14 @@ is flagged, not fired — the gold set is a calibration instrument, not a test o
    the task or rubric is unclear, not that a reviewer is bad.
 5. **(M5) cad-spec verifier** — a deterministic geometry check on every accepted task's
    reference before it enters the training set.
+
+**How IAA is measured.** Per criterion, over non-gold tasks with two reviews: Krippendorff's
+alpha with the interval metric (1 = perfect agreement, 0 = no better than chance). It is used
+because the pair of reviewers changes from task to task and because it corrects for chance.
+The same statistic is reported for the accept / reject verdict, alongside the plain share of
+identical scores and of scores within one point. "Low IAA" means alpha under **0.7**, and is
+only called once at least **10** tasks have two reviews — fewer than that is reported as
+insufficient data.
 
 ## 5. Throughput math (days 7–12)
 
