@@ -12,6 +12,9 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3000',
         changeOrigin: true,
+        // Strip the /api prefix: the browser calls /api/campaigns, the API
+        // route is /campaigns.
+        rewrite: (path) => path.replace(/^\/api/, ''),
       },
     },
   },
