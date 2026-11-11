@@ -1,0 +1,142 @@
+[
+  {
+    "id": "gold-01",
+    "cv": "Senior Mechanical Design Engineer. Built a 40-part CadQuery library driven from YAML specs used by 12 engineers; introduced GD&T and tolerance stack-ups on every assembly; wrote the team's parametric-spec guide.",
+    "postingTitle": "CAD Task Author (parametric modeling)",
+    "goldScores": { "cad": 5, "geo": 5, "code": 5, "comm": 4 },
+    "goldOverallConfidence": 0.85
+  },
+  {
+    "id": "gold-02",
+    "cv": "SolidWorks designer, 8 years of sheet-metal and machined parts. Owns a 300-variant design table. No scripting beyond Excel-driven configurations.",
+    "postingTitle": "CAD Task Author (parametric modeling)",
+    "goldScores": { "cad": 5, "geo": 4, "code": 1, "comm": 4 },
+    "goldOverallConfidence": 0.7
+  },
+  {
+    "id": "gold-03",
+    "cv": "FreeCAD technician, 3 years. Models brackets and enclosures for a small workshop; writes occasional Python macros. Self-taught.",
+    "postingTitle": "CAD Task Author (parametric modeling)",
+    "goldScores": { "cad": 3, "geo": 3, "code": 2, "comm": 3 },
+    "goldOverallConfidence": 0.6
+  },
+  {
+    "id": "gold-04",
+    "cv": "3D-printing hobbyist. Designs simple prints in Tinkercad and Fusion hobby tier. No engineering background.",
+    "postingTitle": "CAD Task Author (parametric modeling)",
+    "goldScores": { "cad": 2, "geo": 2, "code": 1, "comm": 3 },
+    "goldOverallConfidence": 0.55
+  },
+  {
+    "id": "gold-05",
+    "cv": "Marketing coordinator, 5 years. Runs campaigns in HubSpot, writes copy. Has never used a CAD tool.",
+    "postingTitle": "CAD Task Author (parametric modeling)",
+    "goldScores": { "cad": 0, "geo": 0, "code": 0, "comm": 3 },
+    "goldOverallConfidence": 0.65
+  },
+  {
+    "id": "gold-06",
+    "cv": "Backend engineer, 6 years in Python and Go. Builds APIs and data pipelines. No mechanical or CAD experience.",
+    "postingTitle": "CAD Task Author (parametric modeling)",
+    "goldScores": { "cad": 0, "geo": 0, "code": 5, "comm": 4 },
+    "goldOverallConfidence": 0.6
+  },
+  {
+    "id": "gold-07",
+    "cv": "Mechanical engineer with deep GD&T expertise. Runs tolerance stack-ups and DFM reviews daily; documents every decision. Light Python for analysis.",
+    "postingTitle": "CAD Task Author (parametric modeling)",
+    "goldScores": { "cad": 4, "geo": 5, "code": 2, "comm": 5 },
+    "goldOverallConfidence": 0.75
+  },
+  {
+    "id": "gold-08",
+    "cv": "Architectural drafter, 10 years in AutoCAD. Produces plans and sections. No parametric or code-driven work.",
+    "postingTitle": "CAD Task Author (parametric modeling)",
+    "goldScores": { "cad": 3, "geo": 2, "code": 0, "comm": 4 },
+    "goldOverallConfidence": 0.55
+  },
+  {
+    "id": "gold-09",
+    "cv": "Engineering student, one semester of SolidWorks and a MATLAB course. Some project experience, no industry work.",
+    "postingTitle": "CAD Task Author (parametric modeling)",
+    "goldScores": { "cad": 2, "geo": 2, "code": 2, "comm": 3 },
+    "goldOverallConfidence": 0.5
+  },
+  {
+    "id": "gold-10",
+    "cv": "Product designer using Figma and Blender for renders. Focus on visuals and UX, not engineering or manufacturing.",
+    "postingTitle": "CAD Task Author (parametric modeling)",
+    "goldScores": { "cad": 1, "geo": 1, "code": 1, "comm": 4 },
+    "goldOverallConfidence": 0.5
+  },
+  {
+    "id": "gold-11",
+    "cv": "Manufacturing engineer, 7 years. Programs CNC and CAM, reads and edits CAD models for tooling. Writes G-code by hand.",
+    "postingTitle": "CAD Task Author (parametric modeling)",
+    "goldScores": { "cad": 4, "geo": 3, "code": 2, "comm": 3 },
+    "goldOverallConfidence": 0.6
+  },
+  {
+    "id": "gold-12",
+    "cv": "OpenSCAD enthusiast. Maintains a library of parametric models shared on Thingiverse; comfortable with modules and variables.",
+    "postingTitle": "CAD Task Author (parametric modeling)",
+    "goldScores": { "cad": 3, "geo": 3, "code": 4, "comm": 3 },
+    "goldOverallConfidence": 0.65
+  },
+  {
+    "id": "gold-13",
+    "cv": "Data scientist, 5 years in Python and SQL. Builds models and dashboards. No engineering or geometry background.",
+    "postingTitle": "CAD Task Author (parametric modeling)",
+    "goldScores": { "cad": 0, "geo": 0, "code": 4, "comm": 4 },
+    "goldOverallConfidence": 0.55
+  },
+  {
+    "id": "gold-14",
+    "cv": "Robotics engineer. Works daily with URDF, kinematics and inverse kinematics. Uses CAD only to import meshes into simulators.",
+    "postingTitle": "CAD Task Author (parametric modeling)",
+    "goldScores": { "cad": 2, "geo": 4, "code": 4, "comm": 4 },
+    "goldOverallConfidence": 0.65
+  },
+  {
+    "id": "gold-15",
+    "cv": "Furniture carpenter, 20 years. Builds by hand from sketches. No digital tools.",
+    "postingTitle": "CAD Task Author (parametric modeling)",
+    "goldScores": { "cad": 1, "geo": 2, "code": 0, "comm": 3 },
+    "goldOverallConfidence": 0.45
+  },
+  {
+    "id": "gold-16",
+    "cv": "Aerospace engineer. Works on surface modeling and G-code for composites; writes Python scripts to generate toolpaths.",
+    "postingTitle": "CAD Task Author (parametric modeling)",
+    "goldScores": { "cad": 4, "geo": 5, "code": 2, "comm": 4 },
+    "goldOverallConfidence": 0.7
+  },
+  {
+    "id": "gold-17",
+    "cv": "Frontend developer, 4 years in React. Builds web apps. No CAD or geometry work.",
+    "postingTitle": "CAD Task Author (parametric modeling)",
+    "goldScores": { "cad": 0, "geo": 0, "code": 4, "comm": 4 },
+    "goldOverallConfidence": 0.5
+  },
+  {
+    "id": "gold-18",
+    "cv": "CAD instructor. Teaches parametric modeling and GD&T; has written course materials and graded hundreds of student models.",
+    "postingTitle": "CAD Task Author (parametric modeling)",
+    "goldScores": { "cad": 4, "geo": 4, "code": 3, "comm": 5 },
+    "goldOverallConfidence": 0.75
+  },
+  {
+    "id": "gold-19",
+    "cv": "Hobbyist who reverse-engineers parts: 3D-scans objects and rebuilds them in Fusion. Self-taught, no formal training.",
+    "postingTitle": "CAD Task Author (parametric modeling)",
+    "goldScores": { "cad": 2, "geo": 3, "code": 1, "comm": 3 },
+    "goldOverallConfidence": 0.5
+  },
+  {
+    "id": "gold-20",
+    "cv": "Structural engineer using Revit. Defines load paths and sections; does not write parametric scripts.",
+    "postingTitle": "CAD Task Author (parametric modeling)",
+    "goldScores": { "cad": 2, "geo": 4, "code": 0, "comm": 4 },
+    "goldOverallConfidence": 0.55
+  }
+]

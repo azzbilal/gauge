@@ -1,18 +1,21 @@
-import { Controller, Get } from '@nestjs/common';
+import { Body, Controller, Get, Post } from '@nestjs/common';
+import { CampaignService } from './campaign.service';
+import { parseCampaignDto } from './dto/campaign.dto';
 
 /**
- * M2 — Task pipeline and campaign (placeholder).
- * Day 4–7: task templates, assignment, review, gold tasks, inter-annotator
- * agreement.
+ * M2 — Task campaigns.
  */
 @Controller('campaigns')
 export class CampaignController {
+  constructor(private readonly campaigns: CampaignService) {}
+
   @Get()
-  status() {
-    return {
-      module: 'campaign',
-      status: 'stub',
-      note: 'M2 — task pipeline and campaign (day 4–7)',
-    };
+  list() {
+    return this.campaigns.list();
+  }
+
+  @Post()
+  create(@Body() body: unknown) {
+    return this.campaigns.create(parseCampaignDto(body));
   }
 }
