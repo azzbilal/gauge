@@ -4,23 +4,28 @@
     result = probe(packet_dict, "qwen2.5-coder:7b")   # 3 rollouts by default
 
 Asks a local Ollama model to solve the task N times, scores every attempt with the M8
-Verifier Pack static check and turns the solve rate into a difficulty tier:
+Verifier Pack dimension and hole checks and turns the solve rate into a difficulty tier:
 
     t0      solve_rate > 0.8            too easy
     t1      0.4 <= solve_rate <= 0.8    in band
     t2      solve_rate < 0.4            hard
     broken  verifier errors and nothing solved: the task cannot be judged
 
-A rollout is *solved* when the packet has at least one static_cad verdict and every one of
-them passes. manifold_volume verdicts are ignored: they never run without the CAD kernel.
+A rollout is *solved* when the packet has at least one geometry_cad or static_cad verdict
+and every one of them passes. manifold_volume verdicts are ignored: they only run when the
+CAD kernel is available.
 A *verifier error* is a rollout the verifier could not judge: it raised, the packet
-produced no static_cad verdict, or nothing failed but a static check came back not_run
-(a quantity the static check does not cover, or code it cannot resolve). A rollout with
-any failed static check, including generated code that does not parse, is an ordinary
-failed rollout, not a verifier error.
+produced no geometry_cad or static_cad verdict, or nothing failed but a check came back
+not_run (a quantity the checks do not cover, or code the static reader cannot resolve). A
+rollout with any failed check, including generated code that does not parse or that builds
+no solid, is an ordinary failed rollout, not a verifier error.
 
-The model only ever sees the prompt and the spec, never the reference solution. Generated
-code is parsed by the verifier, never executed. Standard library only.
+The model only ever sees the prompt and the spec, never the reference solution.
+
+Generated code is EXECUTED by the verifier, in a worker process with a timeout, to measure
+the solid it builds (see verifiers/cad_exec.py). A timeout is not a sandbox. Set
+GAUGE_CAD_EXEC=0 to score from the static reading alone, without running anything.
+Standard library only; the worker needs cadquery.
 """
 import dataclasses
 import json
@@ -36,7 +41,9 @@ except ImportError:  # verify/ is not on sys.path yet
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from lint.packet import PacketError, TaskPacket
 from verifiers import VerifierPack
-from verifiers.verifiers import FAIL, NOT_RUN, STATIC_CAD
+from verifiers.verifiers import FAIL, GEOMETRY_CAD, NOT_RUN, STATIC_CAD
+
+SCORED = (GEOMETRY_CAD, STATIC_CAD)  # the checks a rollout is scored on
 
 T0 = "t0"
 T1 = "t1"
@@ -127,14 +134,14 @@ def rollout(prompt: str, spec: str, model: str, *, url: str = OLLAMA_URL,
 
 
 def score(parsed: TaskPacket, code: str) -> dict:
-    """Score one generated solution with the Verifier Pack static check."""
+    """Score one generated solution with the Verifier Pack dimension and hole checks."""
     result = {"code": code, "solved": False, "verdicts": [], "error": None}
     try:
         verdicts = VerifierPack().verify(dataclasses.replace(parsed, reference=code))
     except Exception as err:  # a verifier crash is a verifier error, not a failed task
         result["error"] = f"verifier raised {type(err).__name__}: {err}"
         return result
-    static = [v for v in verdicts if v["check"] == STATIC_CAD]
+    static = [v for v in verdicts if v["check"] in SCORED]
     result["verdicts"] = static
     statuses = [v["status"] for v in static]
     if not static:
@@ -142,7 +149,7 @@ def score(parsed: TaskPacket, code: str) -> dict:
     elif FAIL in statuses:
         pass  # the solution is wrong: an ordinary failed rollout
     elif NOT_RUN in statuses:
-        result["error"] = "static check could not run: " + "; ".join(
+        result["error"] = "check could not run: " + "; ".join(
             v["detail"] for v in static if v["status"] == NOT_RUN)
     else:
         result["solved"] = True

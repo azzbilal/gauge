@@ -1,8 +1,10 @@
-"""Tests for the M8 Verifier Pack. Run from the repo root:
+"""Tests for the M8 Verifier Pack static checks (the executed geometry check is in
+test_geometry.py). Run from the repo root:
 
     python -m unittest discover -s verify/verifiers/tests -v
 """
 import json
+import os
 import sys
 import threading
 import unittest
@@ -10,6 +12,7 @@ import urllib.error
 import urllib.request
 from http.server import HTTPServer
 from pathlib import Path
+from unittest import mock
 
 VERIFY_DIR = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(VERIFY_DIR))
@@ -19,6 +22,18 @@ from verifiers import PacketError, VerifierPack, verify  # noqa: E402
 from verifiers.cad_static import extract_model  # noqa: E402
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def setUpModule():
+    # These tests pin the static path: no reference code is executed here. The executed
+    # geometry check has its own tests in test_geometry.py.
+    global _static_only
+    _static_only = mock.patch.dict(os.environ, {"GAUGE_CAD_EXEC": "0"})
+    _static_only.start()
+
+
+def tearDownModule():
+    _static_only.stop()
 
 
 def reference(name: str) -> str:

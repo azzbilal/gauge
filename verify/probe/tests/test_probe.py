@@ -3,6 +3,7 @@
     python -m unittest discover -s verify/probe/tests -v
 """
 import json
+import os
 import sys
 import threading
 import unittest
@@ -23,6 +24,18 @@ FIXTURES = VERIFY_DIR / "verifiers" / "tests" / "fixtures"
 OK = (FIXTURES / "plate_ok.py").read_text(encoding="utf-8")
 WRONG = (FIXTURES / "plate_wrong_dimension.py").read_text(encoding="utf-8")
 SECRET = "REFERENCE_SOLUTION_MARKER"
+
+
+def setUpModule():
+    # These tests pin the static path: no reference code is executed here. The executed
+    # geometry check has its own tests in ExecutedRollouts below.
+    global _static_only
+    _static_only = mock.patch.dict(os.environ, {"GAUGE_CAD_EXEC": "0"})
+    _static_only.start()
+
+
+def tearDownModule():
+    _static_only.stop()
 
 
 def packet() -> dict:
@@ -193,6 +206,38 @@ class Probe(unittest.TestCase):
             with self.assertRaises(ValueError):
                 probe(packet(), "tiny", n=n, rollout_fn=fn)
         self.assertEqual(fn.calls, [])
+
+
+class ExecutedRollouts(unittest.TestCase):
+    """Rollouts are executed and measured when cadquery is available to the worker."""
+
+    DEAD_CODE = (FIXTURES / "plate_dead_code.py").read_text(encoding="utf-8")
+
+    def setUp(self):
+        from verifiers import cad_exec
+
+        available = cad_exec.measure("import cadquery")
+        if available.kind == cad_exec.UNAVAILABLE:
+            self.skipTest(f"no cadquery in the worker interpreter: {available.detail}")
+        patch = mock.patch.dict(os.environ, {"GAUGE_CAD_EXEC": "1"})
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_dead_code_rollout_is_not_solved(self):
+        result = probe(packet(), "tiny", n=2, rollout_fn=fake_rollouts(OK, self.DEAD_CODE))
+        good, dead = result["rollouts"]
+        self.assertTrue(good["solved"])
+        self.assertEqual([v["check"] for v in good["verdicts"]],
+                         ["geometry_cad", "static_cad"])
+        self.assertFalse(dead["solved"])
+        self.assertIsNone(dead["error"])  # a wrong solution, not a verifier error
+        self.assertIn("`result` measures 10 mm", dead["verdicts"][0]["detail"])
+        self.assertEqual(result["solve_rate"], 0.5)
+
+    def test_static_only_scoring_would_have_solved_it(self):
+        with mock.patch.dict(os.environ, {"GAUGE_CAD_EXEC": "0"}):
+            result = probe(packet(), "tiny", n=1, rollout_fn=fake_rollouts(self.DEAD_CODE))
+        self.assertTrue(result["rollouts"][0]["solved"])
 
 
 class FakeOllama(BaseHTTPRequestHandler):
