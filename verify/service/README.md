@@ -9,8 +9,14 @@ Runs on `http://127.0.0.1:4000`.
 - `POST /lint` — M7 Packet Lint; returns `{"findings": [...]}`
 - `POST /verify` — M8 Verifier Pack; returns `{"verdicts": [...]}`, one per
   machine-checkable rubric item
+- `POST /probe` — M9 Probe Gate; body `{"packet": {...}, "model": "<ollama model>",
+  "rollouts": 3}` (`rollouts` optional, default 3, max 20); returns `{"tier", "solve_rate",
+  "solved", "verifier_errors", "model", "rollouts": [...]}`. Needs Ollama on
+  `localhost:11434` and answers 502 when it cannot be reached. Rollouts run one after
+  another, so the call blocks for as long as the model takes.
 
-Both POST endpoints take a task packet as JSON and answer 400 when it is malformed.
+`/lint` and `/verify` take a task packet as JSON. All POST endpoints answer 400 when the
+body is malformed.
 
 ```bash
 python main.py

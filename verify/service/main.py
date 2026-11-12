@@ -2,8 +2,11 @@
 
 POST /lint runs M7 Packet Lint on a task packet and returns {"findings": [...]}.
 POST /verify runs the M8 Verifier Pack on a task packet and returns {"verdicts": [...]},
-one per machine-checkable rubric item. The Probe Gate lands here later; /health proves the
-seam works. Uses only the standard library.
+one per machine-checkable rubric item.
+POST /probe runs the M9 Probe Gate: body {"packet": {...}, "model": "...", "rollouts": 3}
+(rollouts optional, default 3) and returns {"tier": ..., "rollouts": [...], ...}. It calls
+the local Ollama server and answers 502 when that fails.
+/health proves the seam works. Uses only the standard library.
 """
 import json
 import sys
@@ -14,10 +17,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lint import PacketError, lint  # noqa: E402
+from probe import DEFAULT_ROLLOUTS, OllamaError, probe  # noqa: E402
 from verifiers import verify  # noqa: E402
 
 PORT = 4000
 MAX_BODY_BYTES = 1_000_000
+MAX_ROLLOUTS = 20
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -74,6 +79,32 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(400, {"error": str(err)})
                 return
             self._json(200, {"verdicts": verdicts})
+        elif self.path == "/probe":
+            body = self._read_json()
+            if body is None:
+                return
+            if not isinstance(body, dict):
+                self._json(400, {"error": "body must be a JSON object"})
+                return
+            model = body.get("model")
+            if not isinstance(model, str) or not model.strip():
+                self._json(400, {"error": "'model' must be a non-empty string"})
+                return
+            rollouts = body.get("rollouts", DEFAULT_ROLLOUTS)
+            if (isinstance(rollouts, bool) or not isinstance(rollouts, int)
+                    or not 1 <= rollouts <= MAX_ROLLOUTS):
+                self._json(400, {
+                    "error": f"'rollouts' must be an integer from 1 to {MAX_ROLLOUTS}"})
+                return
+            try:
+                result = probe(body.get("packet"), model.strip(), rollouts)
+            except PacketError as err:
+                self._json(400, {"error": str(err)})
+                return
+            except OllamaError as err:
+                self._json(502, {"error": str(err)})
+                return
+            self._json(200, result)
         else:
             self._json(404, {"error": "not found"})
 
