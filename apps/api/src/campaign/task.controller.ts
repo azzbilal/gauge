@@ -32,6 +32,12 @@ export class TaskController {
     return this.tasks.get(id);
   }
 
+  /** Layer 2 results stored when the task was created: lint findings and verifier runs. */
+  @Get(':id/verification')
+  verification(@Param('id') id: string) {
+    return this.tasks.verification(id);
+  }
+
   @Post()
   create(@Body() body: unknown) {
     return this.tasks.create(parseCreateTaskDto(body));

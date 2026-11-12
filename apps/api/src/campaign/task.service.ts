@@ -2,10 +2,21 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, ReviewDecision, TaskStatus, Verdict } from '@prisma/client';
+import {
+  CheckMethod,
+  Prisma,
+  ReviewDecision,
+  Task,
+  TaskStatus,
+  Verdict,
+  VerifySubjectType,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { buildPacket, rubricItemIdOf } from '../verify/packet-builder';
+import { VerifyClient } from '../verify/verify.client';
 import { CreateTaskDto } from './dto/task.dto';
 import { AdjudicateTaskDto, CreateTaskReviewDto } from './dto/task-review.dto';
 import {
@@ -24,6 +35,12 @@ import {
 const TASK_SUBJECT = 'task';
 // Who "wrote" an adjudication that is still open (reviewerId is non-null).
 const SYSTEM_REVIEWER = 'system';
+// The verify service does not report a version yet; this names the M8 static CAD pack.
+const VERIFIER_VERSION = 'm8-static-cad';
+
+function message(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
 
 const TASK_INCLUDE = {
   campaign: { select: { id: true, name: true } },
@@ -38,7 +55,12 @@ export type ReviewState = 'awaiting_reviews' | 'awaiting_adjudication' | 'decide
 
 @Injectable()
 export class TaskService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(TaskService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly verifyClient: VerifyClient,
+  ) {}
 
   /**
    * All tasks, newest first. With `reviewerId` it becomes that reviewer's work queue:
@@ -115,7 +137,90 @@ export class TaskService {
       },
     });
 
+    await this.runVerification(task);
+
     return task;
+  }
+
+  /** The stored Layer 2 results for a task: lint findings and verifier runs. */
+  async verification(taskId: string) {
+    const task = await this.prisma.task.findUnique({ where: { id: taskId }, select: { id: true } });
+    if (!task) {
+      throw new NotFoundException(`Task "${taskId}" not found`);
+    }
+    const [lintFindings, verifierRuns] = await Promise.all([
+      this.prisma.lintFinding.findMany({ where: { taskId }, orderBy: { createdAt: 'asc' } }),
+      this.prisma.verifierRun.findMany({ where: { taskId }, orderBy: { createdAt: 'asc' } }),
+    ]);
+    return { taskId, lintFindings, verifierRuns };
+  }
+
+  /**
+   * Layer 2 on a new task: build its packet, lint it and verify its reference, and store
+   * what comes back. Never throws: the task already exists, and neither a verify service
+   * that is down nor a failed write here may fail the create.
+   */
+  private async runVerification(task: Task): Promise<void> {
+    try {
+      const { requirements, rubricItems, packet } = buildPacket(task);
+      const [lint, verify] = await Promise.allSettled([
+        this.verifyClient.lint(packet),
+        this.verifyClient.verify(packet),
+      ]);
+      for (const call of [lint, verify]) {
+        if (call.status === 'rejected') {
+          this.logger.warn(`Task ${task.id} created without verification: ${message(call.reason)}`);
+        }
+      }
+      if (lint.status === 'rejected' && verify.status === 'rejected') return;
+
+      // The stored findings and verdicts quote these ids, so the rows keep them.
+      const writes: Prisma.PrismaPromise<unknown>[] = [
+        this.prisma.requirement.createMany({
+          data: requirements.map((r) => ({ ...r, taskId: task.id })),
+        }),
+        this.prisma.rubricItem.createMany({
+          data: rubricItems.map((item) => ({
+            id: item.id,
+            taskId: task.id,
+            requirementId: item.requirementId,
+            text: item.text,
+            checkMethod: item.checkMethod === 'machine' ? CheckMethod.MACHINE : CheckMethod.MANUAL,
+            weight: item.weight,
+          })),
+        }),
+      ];
+      if (lint.status === 'fulfilled') {
+        writes.push(
+          this.prisma.lintFinding.createMany({
+            data: lint.value.map((f) => ({ ...f, taskId: task.id })),
+          }),
+        );
+      }
+      if (verify.status === 'fulfilled') {
+        const verdicts = verify.value.map((v) => ({
+          ...v,
+          rubric_item_id: rubricItemIdOf(v.rubric_item_id),
+        }));
+        writes.push(
+          this.prisma.verifierRun.create({
+            data: {
+              taskId: task.id,
+              subjectType: VerifySubjectType.REFERENCE_SOLUTION,
+              // The reference lives on the task row; there is no separate entity.
+              subjectId: task.id,
+              verifierVersion: VERIFIER_VERSION,
+              results: verdicts as unknown as Prisma.InputJsonValue,
+              // A check that did not run is not a pass, and neither is no check at all.
+              passed: verdicts.length > 0 && verdicts.every((v) => v.pass),
+            },
+          }),
+        );
+      }
+      await this.prisma.$transaction(writes);
+    } catch (err) {
+      this.logger.warn(`Verification of task ${task.id} was not stored: ${message(err)}`);
+    }
   }
 
   /**
