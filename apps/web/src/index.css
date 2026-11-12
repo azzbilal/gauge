@@ -44,6 +44,9 @@ body { margin: 0; min-height: 100vh; background: var(--ground); color: var(--hi)
 
 .topbar nav { display: flex; }
 
+.identity { margin-left: auto; }
+.identity select { max-width: 240px; }
+
 .tab {
   background: none; border: none; border-bottom: 1px solid transparent;
   font: inherit; color: var(--text-2);
