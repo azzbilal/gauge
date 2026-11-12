@@ -4,6 +4,8 @@ import { api, Task } from '../api';
 import { notify } from '../toast';
 import { navigate } from '../useHashRoute';
 import { EmptyState } from '../components/EmptyState';
+import { PrimaryButton } from '../components/PrimaryButton';
+import { staggerAt } from '../stagger';
 
 const CRITERIA = ['verifiable', 'unambiguous', 'correct_reference', 'complete_constraints', 'difficulty'] as const;
 type Criterion = (typeof CRITERIA)[number];
@@ -184,12 +186,12 @@ export function ReviewView({ identityId, taskId }: { identityId: string; taskId?
           <h2>Review queue</h2>
           <span className="num">{tasks.length}</span>
         </header>
-        <ul className="rv-rows">
-          {tasks.map((t) => {
+        <ul className="rv-rows stagger">
+          {tasks.map((t, i) => {
             const split = t.reviewState === 'awaiting_adjudication';
             const done = Math.min(t.taskReviews.length, REVIEWS_REQUIRED);
             return (
-              <li key={t.id}>
+              <li key={t.id} style={staggerAt(i)}>
                 <button
                   ref={(el) => {
                     if (el) rows.current.set(t.id, el);
@@ -321,9 +323,11 @@ export function ReviewView({ identityId, taskId }: { identityId: string; taskId?
             {error && <p className="error">{error}</p>}
 
             <div className="rv-actions">
-              <button disabled={!canSubmit} onClick={() => void submit()}>
-                {mode === 'adjudicate' ? `${accepted ? 'Accept' : 'Reject'} task` : 'Submit review'}
-              </button>
+              <PrimaryButton
+                disabled={!canSubmit}
+                onClick={() => void submit()}
+                label={mode === 'adjudicate' ? `${accepted ? 'Accept' : 'Reject'} task` : 'Submit review'}
+              />
               <span className="rv-keys">
                 <kbd>1</kbd>–<kbd>5</kbd> score · <kbd>↑</kbd>
                 <kbd>↓</kbd> criterion · <kbd>J</kbd>

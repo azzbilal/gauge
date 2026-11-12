@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, Campaign, Task } from '../api';
 import { notify } from '../toast';
+import { PrimaryButton } from '../components/PrimaryButton';
 
 // The rubric a reviewer will score this task on (docs/pipeline.md §2), shown to the
 // author as a read-only self-check. Order and names match the backend CRITERIA.
@@ -190,9 +191,7 @@ export function AuthorView({ identityId }: { identityId: string }) {
               <button type="button" onClick={() => setCheckedText(text)}>
                 Run check
               </button>
-              <button type="submit" disabled={!canSubmit}>
-                {busy ? 'Submitting…' : 'Submit task'}
-              </button>
+              <PrimaryButton type="submit" disabled={!canSubmit} label={busy ? 'Submitting…' : 'Submit task'} />
             </div>
           </form>
           {error && <p className="error">{error}</p>}

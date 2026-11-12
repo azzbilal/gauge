@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, Campaign, Task } from '../api';
 import { EmptyState } from '../components/EmptyState';
+import { staggerAt } from '../stagger';
 
 const statusWord = (t: Task) =>
   t.reviewState === 'awaiting_adjudication' ? 'split' : t.status.toLowerCase().replace(/_/g, ' ');
@@ -97,11 +98,11 @@ export function CampaignView({ id }: { id: string }) {
       {error && <p className="error">{error}</p>}
 
       {tasks && tasks.length > 0 && (
-        <ul className="cd-rows">
-          {tasks.map((t) => {
+        <ul className="cd-rows stagger">
+          {tasks.map((t, i) => {
             const word = statusWord(t);
             return (
-              <li key={t.id}>
+              <li key={t.id} style={staggerAt(i)}>
                 <a className="cd-row" href={`#/review/${t.id}`}>
                   <span className="cd-row-prompt">{t.prompt}</span>
                   <span className="cd-row-meta">

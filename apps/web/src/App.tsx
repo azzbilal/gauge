@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, Expert } from './api';
+import { CommandPalette } from './components/CommandPalette';
 import { Toasts } from './toast';
 import { navigate, useHashRoute } from './useHashRoute';
 import { CampaignsView } from './views/Campaigns';
@@ -17,6 +18,7 @@ export default function App() {
   const { path, param } = useHashRoute();
   const [experts, setExperts] = useState<Expert[]>([]);
   const [identityId, setIdentityId] = useState<string>(() => localStorage.getItem('gauge.identity') ?? '');
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   useEffect(() => {
     api.get<Expert[]>('/api/experts').then(setExperts).catch(() => undefined);
@@ -26,6 +28,19 @@ export default function App() {
     setIdentityId(id);
     localStorage.setItem('gauge.identity', id);
   }
+
+  // Ctrl+K opens the palette from anywhere. While it is open it owns the keyboard
+  // (it stops key events), so closing by the same chord is handled inside it.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const activePath = path.startsWith('/author') ? '/author' : path.startsWith('/review') ? '/review' : '/campaigns';
 
@@ -56,6 +71,14 @@ export default function App() {
         {activePath === '/author' && <AuthorView identityId={identityId} />}
         {activePath === '/review' && <ReviewView identityId={identityId} taskId={param} />}
       </main>
+      {paletteOpen && (
+        <CommandPalette
+          experts={experts}
+          identityId={identityId}
+          onIdentity={setIdentity}
+          onClose={() => setPaletteOpen(false)}
+        />
+      )}
       <Toasts />
     </div>
   );

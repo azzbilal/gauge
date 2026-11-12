@@ -71,6 +71,29 @@ button:active { border-color: var(--hi); }
 button:focus-visible { outline: 1px solid var(--hi); outline-offset: 2px; }
 button:disabled { border-color: var(--mid); color: var(--mid); cursor: not-allowed; }
 
+/* primary action, one per view: the bright stroke, no fill. The label is doubled;
+   on hover the first copy slides out the top as the second slides up into place. */
+.primary { border-color: var(--hi); }
+.primary:hover { border-color: var(--hi); }
+.primary:disabled { border-color: var(--mid); color: var(--text-2); }
+.primary-label { display: block; position: relative; overflow: hidden; }
+.primary-label > span { display: block; }
+.primary-label > span + span { position: absolute; left: 0; top: 100%; width: 100%; }
+
+/* list rows fade in from the top, one --stagger step apart; --i is the row index.
+   The delay is capped at 12 steps so a long list is not kept waiting. */
+@keyframes stagger-in { from { opacity: 0; } }
+
+@media (prefers-reduced-motion: no-preference) {
+  .primary-label > span { transition: transform var(--t-stroke) var(--ease); }
+  .primary:hover:not(:disabled) .primary-label > span { transform: translateY(-100%); }
+
+  .stagger > * {
+    animation: stagger-in var(--t-stroke) var(--ease) backwards;
+    animation-delay: calc(min(var(--i, 0), 12) * var(--stagger));
+  }
+}
+
 h2 { font-size: 20px; font-weight: 600; margin: 0 0 1rem; }
 
 .field { display: flex; flex-direction: column; gap: 0.25rem; }
@@ -500,6 +523,55 @@ textarea { width: 100%; min-height: 72px; resize: vertical; }
 .error {
   color: var(--hi); font-size: 13px;
   padding-left: 0.5rem; border-left: 1px solid var(--hi);
+}
+
+/* ── Command palette: one outlined surface on the bare page, no scrim; rows split by hairlines ── */
+.cmd-layer {
+  position: fixed; inset: 0; z-index: 40;
+  display: flex; justify-content: center; align-items: flex-start;
+  padding: 14vh 1.25rem 0;
+}
+.cmd {
+  display: flex; flex-direction: column;
+  width: 100%; max-width: 520px; max-height: 70vh;
+  background: var(--ground);
+  border: 1px solid var(--hi); border-radius: var(--radius);
+  overflow: hidden;
+}
+.cmd-input {
+  width: 100%; border: none; border-radius: 0; background: transparent;
+  border-bottom: 1px solid var(--lo);
+  padding: 0.8rem 0.9rem; font-size: 16px;
+}
+.cmd-input:focus { border-color: var(--lo); }
+.cmd-input::placeholder { color: var(--text-2); opacity: 1; }
+
+.cmd-rows { list-style: none; margin: 0; padding: 0; overflow-y: auto; }
+.cmd-row {
+  position: relative;
+  display: flex; align-items: baseline; justify-content: space-between; gap: 1rem;
+  padding: 0.55rem 0.9rem 0.55rem 1.2rem;
+  border-bottom: 1px solid var(--lo);
+  color: var(--text-2); cursor: pointer;
+  transition: color var(--t-stroke) var(--ease);
+}
+/* the selected row: brighter words and a short stroke at its left */
+.cmd-row::before {
+  content: ''; position: absolute; left: 0.55rem; top: 0.6rem; bottom: 0.6rem;
+  border-left: 1px solid transparent;
+  transition: border-color var(--t-stroke) var(--ease);
+}
+.cmd-row[aria-selected='true'] { color: var(--hi); }
+.cmd-row[aria-selected='true']::before { border-left-color: var(--hi); }
+.cmd-row-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmd-row-kind { font-size: 12px; color: var(--text-2); white-space: nowrap; }
+
+.cmd-none { margin: 0; padding: 0.7rem 0.9rem; font-size: 14px; color: var(--text-2); border-bottom: 1px solid var(--lo); }
+.cmd-keys { margin: 0; padding: 0.45rem 0.9rem; font-size: 12px; color: var(--text-2); }
+.cmd-keys kbd { font-family: var(--mono); font-size: 12px; margin: 0 0.1rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cmd-row, .cmd-row::before { transition: none; }
 }
 
 /* toasts */

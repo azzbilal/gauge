@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, Campaign, Task } from '../api';
 import { notify } from '../toast';
 import { EmptyState } from '../components/EmptyState';
+import { PrimaryButton } from '../components/PrimaryButton';
+import { staggerAt } from '../stagger';
 
 const DEFAULT_TARGET = 10;
 const MAX_TARGET = 9999;
@@ -89,16 +91,14 @@ export function CampaignsView() {
     <section className="cp">
       <header className="cp-head">
         <h2>Campaigns</h2>
-        <button
+        <PrimaryButton
           ref={openerRef}
           type="button"
-          className="cp-primary"
+          label="New campaign"
           aria-expanded={open}
           aria-controls="campaign-form"
           onClick={() => (open ? nameRef.current?.focus() : setOpen(true))}
-        >
-          New campaign
-        </button>
+        />
       </header>
 
       {open && (
@@ -179,14 +179,14 @@ export function CampaignsView() {
       {campaigns.length === 0 ? (
         <EmptyState title="No campaigns yet" body="Create one to open a task campaign." />
       ) : (
-        <ul className="cp-grid">
-          {campaigns.map((c) => {
+        <ul className="cp-grid stagger">
+          {campaigns.map((c, i) => {
             const tally = tallies ? (tallies.get(c.id) ?? { total: 0, accepted: 0 }) : null;
             const done = tally ? tally.total : (c._count?.tasks ?? 0);
             const progress = c.targetCount > 0 ? Math.min(1, done / c.targetCount) : 0;
             const rate = tally && tally.total > 0 ? Math.round((tally.accepted / tally.total) * 100) : null;
             return (
-              <li key={c.id}>
+              <li key={c.id} style={staggerAt(i)}>
                 <a className="cp-card" href={`#/campaigns/${c.id}`}>
                   <div className="cp-card-head">
                     <h3>{c.name}</h3>
