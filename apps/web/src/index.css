@@ -272,6 +272,112 @@ textarea { width: 100%; min-height: 72px; resize: vertical; }
   .rv-crit { grid-template-columns: 7.5rem minmax(0, 1fr) 1.5rem; }
 }
 
+/* ── Author composer: one outlined surface; its stroke is the only focus signal ── */
+.au-composer {
+  display: flex; flex-direction: column;
+  border: 1px solid var(--edge); border-radius: var(--radius);
+  transition: border-color var(--t-stroke) var(--ease);
+}
+.au-composer:focus-within { border-color: var(--hi); }
+
+.au-field { display: flex; flex-direction: column; min-width: 0; padding: 0.7rem 0.9rem 0.5rem; }
+.au-field label {
+  font-size: 13px; color: var(--text-2);
+  transition: color var(--t-stroke) var(--ease);
+}
+.au-field:focus-within label { color: var(--hi); }
+.au-field textarea {
+  flex: 1; border: none; border-radius: 0; background: transparent;
+  padding: 0.3rem 0 0;
+}
+.au-composer ::placeholder { color: var(--text-2); opacity: 1; }
+
+.au-prompt textarea { min-height: 104px; font-size: 17px; line-height: 1.55; }
+
+.au-sources { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid var(--lo); }
+.au-sources .au-field + .au-field { border-left: 1px solid var(--lo); }
+.au-sources textarea { min-height: 200px; font-family: var(--mono); font-size: 13px; line-height: 1.6; }
+
+.au-tools {
+  display: flex; align-items: center; gap: 0.6rem 1rem; flex-wrap: wrap;
+  padding: 0.6rem 0.9rem; border-top: 1px solid var(--lo);
+}
+.au-tools select {
+  max-width: 260px; border-color: transparent; margin-left: -0.6rem; cursor: pointer;
+  transition: border-color var(--t-stroke) var(--ease);
+}
+.au-tools select:hover { border-color: var(--mid); }
+.au-tools select:focus { border-color: var(--hi); }
+.au-tools button:disabled { color: var(--text-2); }
+.au-hint { margin-left: auto; font-size: 12px; color: var(--text-2); }
+.au-hint kbd { font-family: var(--mono); font-size: 12px; margin: 0 0.1rem; }
+
+.au .error { margin: 0.8rem 0 0; }
+
+/* composer | sticky self-check. The shell widens so the composer keeps its width. */
+.shell:has(.au) { max-width: 1160px; }
+.au-layout {
+  display: grid; grid-template-columns: minmax(0, 1fr) 248px;
+  column-gap: 2rem; align-items: start;
+}
+.au-main { min-width: 0; }
+
+/* read-only rubric: no box, hairline rows; thresholds in mono */
+.au-check { position: sticky; top: 1.5rem; }
+.au-check-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding-bottom: 0.55rem; border-bottom: 1px solid var(--lo);
+}
+.au-check-head h3 { margin: 0; font-size: 13px; font-weight: 400; color: var(--text-2); }
+.au-check-head span { font-size: 12px; color: var(--text-2); }
+.au-check ol { list-style: none; margin: 0; padding: 0; }
+.au-check li {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 0.75rem;
+  align-items: baseline;
+  padding: 0.6rem 0; border-bottom: 1px solid var(--lo);
+}
+.au-check-name { font-size: 14px; line-height: 20px; }
+.au-check-min { font-family: var(--mono); font-size: 13px; line-height: 20px; white-space: nowrap; }
+.au-check li p {
+  grid-column: 1 / -1; margin: 0.15rem 0 0;
+  font-size: 13px; line-height: 1.45; color: var(--text-2);
+}
+.au-check-foot { margin: 0.6rem 0 0; font-size: 12px; line-height: 1.5; color: var(--text-2); }
+
+/* basic lint: dot + words. Ring until run, filled on pass, bright ring on fail; the word carries it too */
+.au-lint { margin-top: 1.75rem; }
+.au-lint h3 {
+  margin: 0; padding-bottom: 0.55rem; border-bottom: 1px solid var(--lo);
+  font-size: 13px; font-weight: 400; color: var(--text-2);
+}
+.au-lint ul { list-style: none; margin: 0; padding: 0; }
+.au-check .au-lint li {
+  grid-template-columns: 7px minmax(0, 1fr) auto; column-gap: 0.6rem;
+  color: var(--text-2);
+  transition: color var(--t-stroke) var(--ease);
+}
+.au-lint i {
+  width: 7px; height: 7px; border-radius: 50%; align-self: center;
+  border: 1px solid var(--mid);
+  transition: border-color var(--t-stroke) var(--ease), background-color var(--t-stroke) var(--ease);
+}
+.au-lint-name { font-size: 14px; line-height: 20px; }
+.au-lint-word { font-family: var(--mono); font-size: 12px; line-height: 20px; white-space: nowrap; }
+.au-lint li[data-state='pass'] i { border-color: var(--hi); background: var(--hi); }
+.au-lint li[data-state='fail'] { color: var(--hi); }
+.au-lint li[data-state='fail'] i { border-color: var(--hi); }
+
+@media (max-width: 800px) {
+  .au-layout { grid-template-columns: minmax(0, 1fr); row-gap: 1.75rem; }
+  .au-check { position: static; }
+}
+
+@media (max-width: 640px) {
+  .au-sources { grid-template-columns: minmax(0, 1fr); }
+  .au-sources .au-field + .au-field { border-left: none; border-top: 1px solid var(--lo); }
+  .au-sources textarea { min-height: 140px; }
+}
+
 /* box-free empty state: figure sits bare on the page ground */
 .empty { text-align: center; padding: 2.5rem 1rem; }
 .empty-figure { width: 220px; margin: 0 auto 0.5rem; }
