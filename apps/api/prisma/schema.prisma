@@ -132,6 +132,13 @@ model Task {
 
   taskReviews TaskReview[]
 
+  // Layer 2 verification relations (additive; no columns on Task itself).
+  requirements Requirement[]
+  rubricItems  RubricItem[]
+  lintFindings LintFinding[]
+  verifierRuns VerifierRun[]
+  probeRuns    ProbeRun[]
+
   @@index([campaignId])
   @@index([authorId])
 }
@@ -171,4 +178,104 @@ model Event {
 
   @@index([type])
   @@index([createdAt])
+}
+
+// ================================================================
+// Layer 2: verification (docs/pipeline.md §2 Layer 2).
+// Purely additive: five tables keyed by task_id, no Layer 1 changes.
+// ================================================================
+
+enum CheckMethod {
+  MACHINE
+  VISUAL
+  MANUAL
+}
+
+enum VerifySubjectType {
+  REFERENCE_SOLUTION
+  EXPERT_SUBMISSION
+  MODEL_ROLLOUT
+}
+
+enum DifficultyTier {
+  T0
+  T1
+  T2
+  BROKEN
+}
+
+model Requirement {
+  id        String  @id @default(cuid())
+  taskId    String
+  text      String
+  kind      String? // dimension, hole, file, value, …
+  value     String?
+  tolerance String?
+  createdAt DateTime @default(now())
+
+  task        Task         @relation(fields: [taskId], references: [id])
+  rubricItems RubricItem[]
+
+  @@index([taskId])
+}
+
+model RubricItem {
+  id            String      @id @default(cuid())
+  taskId        String
+  requirementId String?
+  text          String
+  checkMethod   CheckMethod @default(MANUAL)
+  weight        Float       @default(1)
+  createdAt     DateTime    @default(now())
+
+  task        Task         @relation(fields: [taskId], references: [id])
+  requirement Requirement? @relation(fields: [requirementId], references: [id])
+
+  @@index([taskId])
+  @@index([requirementId])
+}
+
+model LintFinding {
+  id        String   @id @default(cuid())
+  taskId    String
+  rule      String
+  severity  String // info | warning | critical
+  detail    String?
+  resolved  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id])
+
+  @@index([taskId])
+}
+
+model VerifierRun {
+  id              String             @id @default(cuid())
+  taskId          String
+  subjectType     VerifySubjectType
+  subjectId       String
+  verifierVersion String
+  results         Json
+  passed          Boolean
+  createdAt       DateTime           @default(now())
+
+  task Task @relation(fields: [taskId], references: [id])
+
+  @@index([taskId])
+  @@index([subjectType, subjectId])
+}
+
+model ProbeRun {
+  id              String        @id @default(cuid())
+  taskId          String
+  model           String
+  rollouts        Int
+  solveRate       Float
+  tier            DifficultyTier
+  verifierVersion String
+  createdAt       DateTime      @default(now())
+
+  task Task @relation(fields: [taskId], references: [id])
+
+  @@index([taskId])
 }
