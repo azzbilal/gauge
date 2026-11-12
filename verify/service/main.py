@@ -1,8 +1,9 @@
 """Layer 2 verification service — the HTTP wrapper the API calls.
 
-Scaffold for Phase 2. POST /lint runs M7 Packet Lint on a task packet. The real /verify
-endpoint (Verifier Pack + Probe Gate) lands here later; /health proves the seam works.
-Uses only the standard library.
+POST /lint runs M7 Packet Lint on a task packet and returns {"findings": [...]}.
+POST /verify runs the M8 Verifier Pack on a task packet and returns {"verdicts": [...]},
+one per machine-checkable rubric item. The Probe Gate lands here later; /health proves the
+seam works. Uses only the standard library.
 """
 import json
 import sys
@@ -13,6 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lint import PacketError, lint  # noqa: E402
+from verifiers import verify  # noqa: E402
 
 PORT = 4000
 MAX_BODY_BYTES = 1_000_000
@@ -62,8 +64,18 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(400, {"error": str(err)})
                 return
             self._json(200, {"findings": findings})
+        elif self.path == "/verify":
+            packet = self._read_json()
+            if packet is None:
+                return
+            try:
+                verdicts = verify(packet)
+            except PacketError as err:
+                self._json(400, {"error": str(err)})
+                return
+            self._json(200, {"verdicts": verdicts})
         else:
-            self._json(501, {"error": "verify endpoint not implemented yet (M8 pending)"})
+            self._json(404, {"error": "not found"})
 
     def log_message(self, *args):
         pass
