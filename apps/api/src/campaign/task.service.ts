@@ -366,8 +366,10 @@ export class TaskService {
   /**
    * The shape the API returns. Two things are deliberately withheld:
    *  - gold markers and the gold answer, or calibration would measure nothing;
-   *  - other reviewers' scores while a task is undecided, so the second review
-   *    (and the agreement statistic built on it) stays independent.
+   *  - other reviewers' scores while a second review is still open, so that
+   *    review (and the agreement statistic built on it) stays independent. Scores
+   *    release once the two reviewers are done — at adjudication and after the
+   *    decision — so the adjudicator can see the dispute.
    * A gold task is presented as an ordinary task nobody has reviewed yet.
    */
   private toView(task: TaskRow, adjudication?: ReviewDecision) {
@@ -396,7 +398,7 @@ export class TaskService {
       ...rest,
       reviewState,
       taskReviews: taskReviews.map((r) =>
-        decided
+        decided || awaitingAdjudication
           ? r
           : { id: r.id, taskId: r.taskId, reviewerId: r.reviewerId, createdAt: r.createdAt },
       ),

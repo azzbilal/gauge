@@ -1,52 +1,121 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { api, Task } from '../api';
 import { notify } from '../toast';
+import { navigate } from '../useHashRoute';
 import { EmptyState } from '../components/EmptyState';
 
 const CRITERIA = ['verifiable', 'unambiguous', 'correct_reference', 'complete_constraints', 'difficulty'] as const;
+type Criterion = (typeof CRITERIA)[number];
+type Scores = Record<string, number>;
+
+const STOPS = [0, 1, 2, 3, 4, 5];
+const MAX = 5;
+const REVIEWS_REQUIRED = 2;
 
 // Mirrors the backend acceptance rule (docs/pipeline.md §2):
 // every criterion >= 3 and verifiable >= 4.
-function isAccepted(scores: Record<string, number>): boolean {
-  return CRITERIA.every((c) => (scores[c] ?? 3) >= 3) && (scores['verifiable'] ?? 3) >= 4;
+const threshold = (c: Criterion) => (c === 'verifiable' ? 4 : 3);
+const label = (c: Criterion) => c.replace(/_/g, ' ');
+const failing = (scores: Scores) => CRITERIA.filter((c) => (scores[c] ?? 3) < threshold(c));
+const freshScores = (): Scores => Object.fromEntries(CRITERIA.map((c) => [c, 3]));
+
+/** Position along the slider track, 0..1, consumed by the CSS as --p. */
+const at = (value: number) => ({ '--p': value / MAX }) as CSSProperties;
+
+type Mode = 'read' | 'decided' | 'review' | 'adjudicate';
+
+function modeOf(task: Task, identityId: string): Mode {
+  if (!identityId) return 'read';
+  if (task.reviewState === 'decided') return 'decided';
+  return task.reviewState === 'awaiting_adjudication' ? 'adjudicate' : 'review';
 }
 
-function truncate(s: string, n: number) {
-  return s.length > n ? s.slice(0, n) + '…' : s;
+function isTyping(el: HTMLElement | null): boolean {
+  if (!el) return false;
+  if (el.isContentEditable || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return true;
+  return el.tagName === 'INPUT' && (el as HTMLInputElement).type !== 'range';
 }
 
 export function ReviewView({ identityId, taskId }: { identityId: string; taskId?: string }) {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [openId, setOpenId] = useState<string | null>(taskId ?? null);
-  const [scores, setScores] = useState<Record<string, number>>({});
+  const [loaded, setLoaded] = useState(false);
+  const [scores, setScores] = useState<Scores>(freshScores);
+  const [crit, setCrit] = useState(0);
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const reviewerId = identityId;
+  const sliders = useRef<(HTMLInputElement | null)[]>([]);
+  const rows = useRef(new Map<string, HTMLButtonElement>());
 
   const load = useCallback(() => {
-    const url = reviewerId ? `/api/tasks?reviewerId=${encodeURIComponent(reviewerId)}` : '/api/tasks';
-    api.get<Task[]>(url).then(setTasks).catch((e) => setError(String(e.message)));
-  }, [reviewerId]);
+    const url = identityId ? `/api/tasks?reviewerId=${encodeURIComponent(identityId)}` : '/api/tasks';
+    api
+      .get<Task[]>(url)
+      .then(setTasks)
+      .catch((e) => setError(String(e.message)))
+      .finally(() => setLoaded(true));
+  }, [identityId]);
 
   useEffect(load, [load]);
 
-  function open(task: Task) {
-    setOpenId(openId === task.id ? null : task.id);
-    setScores(Object.fromEntries(CRITERIA.map((c) => [c, 3])));
+  // The address is the selection: '/review/:id'. One task is always open.
+  const selected = tasks.find((t) => t.id === taskId) ?? tasks[0];
+  const selectedId = selected?.id;
+  const mode: Mode = selected ? modeOf(selected, identityId) : 'read';
+  const editable = mode === 'review' || mode === 'adjudicate';
+  const failed = failing(scores);
+  const accepted = failed.length === 0;
+  const canSubmit = editable && !busy && (mode === 'review' || reason.trim().length > 0);
+
+  useEffect(() => {
+    setScores(freshScores());
+    setCrit(0);
     setReason('');
     setError('');
+    if (selectedId) rows.current.get(selectedId)?.scrollIntoView({ block: 'nearest' });
+  }, [selectedId]);
+
+  const select = (id: string) => navigate(`/review/${id}`);
+
+  function step(delta: number) {
+    if (!selected) return;
+    // Read the address, not the last render: held J/K outruns hashchange.
+    const hashId = window.location.hash.split('/')[2];
+    const from = tasks.findIndex((t) => t.id === hashId);
+    const next = tasks[(from >= 0 ? from : tasks.findIndex((t) => t.id === selected.id)) + delta];
+    if (next) select(next.id);
   }
 
-  async function send(url: string, body: unknown, okMsg: string) {
+  function focusCriterion(i: number) {
+    const next = Math.max(0, Math.min(CRITERIA.length - 1, i));
+    setCrit(next);
+    sliders.current[next]?.focus();
+  }
+
+  const setScore = (c: Criterion, value: number) => setScores((s) => ({ ...s, [c]: value }));
+
+  async function submit() {
+    if (!selected || !canSubmit) return;
+    const i = tasks.findIndex((t) => t.id === selected.id);
+    const next = tasks[i + 1] ?? tasks[i - 1];
     setBusy(true);
     setError('');
     try {
-      await api.post(url, body);
-      setOpenId(null);
+      if (mode === 'adjudicate') {
+        await api.post(`/api/tasks/${selected.id}/adjudication`, {
+          adjudicatorId: identityId,
+          verdict: accepted ? 'accept' : 'reject',
+          reason: reason.trim(),
+        });
+        notify('Adjudication saved');
+      } else {
+        await api.post(`/api/tasks/${selected.id}/reviews`, { reviewerId: identityId, scores });
+        notify('Review saved');
+      }
+      navigate(next ? `/review/${next.id}` : '/review');
       load();
-      notify(okMsg);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -54,88 +123,219 @@ export function ReviewView({ identityId, taskId }: { identityId: string; taskId?
     }
   }
 
-  const submitReview = (id: string) => send(`/api/tasks/${id}/reviews`, { reviewerId, scores }, 'Review saved');
+  // One listener; the ref keeps it reading current state.
+  const onKey = useRef<(e: KeyboardEvent) => void>(() => undefined);
+  onKey.current = (e) => {
+    if (e.altKey) return;
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      // A held chord must not walk down the queue submitting defaults.
+      if (!e.repeat) void submit();
+      return;
+    }
+    if (e.ctrlKey || e.metaKey || isTyping(e.target as HTMLElement | null)) return;
 
-  const adjudicate = (id: string, verdict: 'accept' | 'reject') =>
-    send(`/api/tasks/${id}/adjudication`, { adjudicatorId: reviewerId, verdict, reason }, 'Adjudication saved');
+    const key = e.key.toLowerCase();
+    if (key === 'j' || key === 'k') {
+      e.preventDefault();
+      step(key === 'j' ? 1 : -1);
+      return;
+    }
+    if (!editable) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault(); // a focused range would otherwise change its value
+      focusCriterion(crit + (e.key === 'ArrowDown' ? 1 : -1));
+      return;
+    }
+    if (/^[1-5]$/.test(e.key)) {
+      e.preventDefault();
+      setScore(CRITERIA[crit], Number(e.key));
+    }
+  };
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => onKey.current(e);
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  if (!selected) {
+    return (
+      <section>
+        <h2>Review queue</h2>
+        {error && <p className="error">{error}</p>}
+        {loaded && (
+          <EmptyState
+            title={identityId ? 'Nothing to review' : 'No tasks yet'}
+            body={identityId ? 'There is nothing waiting for you right now.' : 'Tasks authors submit will show up here for review.'}
+          />
+        )}
+      </section>
+    );
+  }
+
+  // Reviewer scores are only present once the API releases them.
+  const [first, second] = selected.taskReviews;
+  const peers = mode === 'adjudicate' && first?.scores && second?.scores ? [first.scores, second.scores] : null;
 
   return (
-    <section>
-      <h2>Review queue</h2>
-      {error && <p className="error">{error}</p>}
-      {tasks.length === 0 ? (
-        <EmptyState
-          title={reviewerId ? 'Nothing to review' : 'No tasks yet'}
-          body={reviewerId ? 'There is nothing waiting for you right now.' : 'Tasks authors submit will show up here for review.'}
-        />
-      ) : (
-        <ul className="list">
-          {tasks.map((t) => (
-            <li key={t.id} className="task">
-              <button className="task-head" onClick={() => open(t)}>
-                <span className="strong">{truncate(t.prompt, 70)}</span>
-                <span className={`badge badge-${t.status.toLowerCase()}${t.reviewState === 'awaiting_adjudication' ? ' badge-split' : ''}`}>
-                  {t.reviewState === 'awaiting_adjudication' ? 'needs adjudication' : t.status}
-                </span>
-              </button>
-              <span className="muted">
-                {t.author.name} · {t.campaign.name} · {t.taskReviews.length} of 2 reviews
-              </span>
-              {openId === t.id && !reviewerId && (
-                <p className="muted">Choose who you are (top right) to review.</p>
-              )}
-              {openId === t.id && reviewerId && t.reviewState === 'awaiting_adjudication' && (
-                <div className="review-form">
-                  <p className="muted">The two reviewers disagreed. Your decision is final.</p>
-                  <div className="field">
-                    <label htmlFor="adjudication-reason">Reason</label>
-                    <textarea id="adjudication-reason" placeholder="Why (required)" value={reason} onChange={(e) => setReason(e.target.value)} />
-                  </div>
-                  <div className="row">
-                    <button disabled={busy || !reason.trim()} onClick={() => adjudicate(t.id, 'accept')}>
-                      Accept task
-                    </button>
-                    <button disabled={busy || !reason.trim()} onClick={() => adjudicate(t.id, 'reject')}>
-                      Reject task
-                    </button>
-                  </div>
-                </div>
-              )}
-              {openId === t.id && reviewerId && t.reviewState === 'decided' && (
-                <p className="muted">
-                  Decided: {t.status.toLowerCase()}
-                  {t.adjudication?.reason ? ` by adjudication — ${t.adjudication.reason}` : ''}
-                </p>
-              )}
-              {openId === t.id && reviewerId && t.reviewState === 'awaiting_reviews' && (
-                <div className="review-form">
-                  {CRITERIA.map((c) => (
-                    <label key={c} className="criterion">
-                      <span>{c.replace(/_/g, ' ')}</span>
+    <section className="rv">
+      <aside className="rv-queue" aria-label="Review queue">
+        <header className="rv-queue-head">
+          <h2>Review queue</h2>
+          <span className="num">{tasks.length}</span>
+        </header>
+        <ul className="rv-rows">
+          {tasks.map((t) => {
+            const split = t.reviewState === 'awaiting_adjudication';
+            const done = Math.min(t.taskReviews.length, REVIEWS_REQUIRED);
+            return (
+              <li key={t.id}>
+                <button
+                  ref={(el) => {
+                    if (el) rows.current.set(t.id, el);
+                    else rows.current.delete(t.id);
+                  }}
+                  className="rv-row"
+                  aria-current={t.id === selected.id ? 'true' : undefined}
+                  onClick={() => select(t.id)}
+                >
+                  <span className="rv-row-prompt">{t.prompt}</span>
+                  <span className="rv-row-meta">
+                    <span className="rv-row-who">
+                      {t.author.name} · {t.campaign.name}
+                    </span>
+                    <span className="rv-dots" role="img" aria-label={`${done} of ${REVIEWS_REQUIRED} reviews`}>
+                      {Array.from({ length: REVIEWS_REQUIRED }, (_, i) => (
+                        <i key={i} className={i < done ? 'done' : undefined} />
+                      ))}
+                    </span>
+                    <span className={`rv-status${split ? ' split' : ''}`}>
+                      {split ? 'split' : t.status.toLowerCase().replace(/_/g, ' ')}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </aside>
+
+      <article className="rv-task" key={selected.id}>
+        <p className="rv-prompt">{selected.prompt}</p>
+
+        <div className="rv-sources">
+          <div>
+            <h3>Spec</h3>
+            {selected.spec ? <pre>{selected.spec}</pre> : <p className="muted">No spec</p>}
+          </div>
+          <div>
+            <h3>Reference</h3>
+            {selected.reference ? <pre>{selected.reference}</pre> : <p className="muted">No reference</p>}
+          </div>
+        </div>
+
+        {mode === 'read' && <p className="muted rv-note">Choose who you are (top right) to review.</p>}
+
+        {mode === 'decided' && (
+          <p className="muted rv-note">
+            Decided: {selected.status.toLowerCase()}
+            {selected.adjudication?.reason ? ` by adjudication — ${selected.adjudication.reason}` : ''}
+          </p>
+        )}
+
+        {editable && (
+          <div className="rv-form">
+            {mode === 'adjudicate' && <p className="muted">The two reviewers disagreed. Your decision is final.</p>}
+
+            <div className="rv-rubric">
+              {CRITERIA.map((c, i) => {
+                const value = scores[c] ?? 3;
+                const min = threshold(c);
+                const disagree = peers ? peers[0][c] !== peers[1][c] : false;
+                return (
+                  <div key={c} className={`rv-crit${i === crit ? ' focus' : ''}`}>
+                    <label htmlFor={`rv-${c}`}>{label(c)}</label>
+                    <div className="rv-slider">
                       <input
+                        id={`rv-${c}`}
+                        ref={(el) => {
+                          sliders.current[i] = el;
+                        }}
                         type="range"
                         min={0}
-                        max={5}
-                        value={scores[c] ?? 3}
-                        onChange={(e) => setScores((s) => ({ ...s, [c]: Number(e.target.value) }))}
+                        max={MAX}
+                        step={1}
+                        value={value}
+                        aria-valuetext={`${value} of ${MAX}, passes at ${min}`}
+                        onFocus={() => setCrit(i)}
+                        onChange={(e) => setScore(c, Number(e.target.value))}
                       />
-                      <b>{scores[c] ?? 3}</b>
-                    </label>
-                  ))}
-                  <div className="row">
-                    <span className="muted">
-                      {isAccepted(scores) ? 'Verdict: accept' : 'Verdict: reject — verifiable ≥ 4, all ≥ 3'}
-                    </span>
-                    <button disabled={busy} onClick={() => submitReview(t.id)}>
-                      Submit review
-                    </button>
+                      <div className="rv-ticks" aria-hidden="true">
+                        {STOPS.map((s) => (
+                          <i key={s} className={s === min ? 'pass' : undefined} style={at(s)} />
+                        ))}
+                      </div>
+                    </div>
+                    <output htmlFor={`rv-${c}`} className={value >= min ? 'ok' : undefined}>
+                      {value}
+                    </output>
+                    {peers?.map((p, r) => (
+                      <div key={r} className={`rv-peer${disagree ? ' disagree' : ''}`}>
+                        <span>reviewer {r + 1}</span>
+                        <div className="rv-peer-track">
+                          <i style={at(p[c] ?? 0)} />
+                        </div>
+                        <b>{p[c] ?? '–'}</b>
+                      </div>
+                    ))}
                   </div>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+                );
+              })}
+            </div>
+
+            {mode === 'adjudicate' && (
+              <div className="field">
+                <label htmlFor="adjudication-reason">Reason</label>
+                <textarea
+                  id="adjudication-reason"
+                  placeholder="Why (required)"
+                  required
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                />
+              </div>
+            )}
+
+            <p className={`rv-verdict${accepted ? ' accept' : ''}`} aria-live="polite">
+              <b>{accepted ? 'Accept' : 'Reject'}</b>
+              {failed.map((c) => (
+                <span key={c}>
+                  {label(c)}{' '}
+                  <span className="num">
+                    {scores[c] ?? 3} &lt; {threshold(c)}
+                  </span>
+                </span>
+              ))}
+            </p>
+
+            {error && <p className="error">{error}</p>}
+
+            <div className="rv-actions">
+              <button disabled={!canSubmit} onClick={() => void submit()}>
+                {mode === 'adjudicate' ? `${accepted ? 'Accept' : 'Reject'} task` : 'Submit review'}
+              </button>
+              <span className="rv-keys">
+                <kbd>1</kbd>–<kbd>5</kbd> score · <kbd>↑</kbd>
+                <kbd>↓</kbd> criterion · <kbd>J</kbd>
+                <kbd>K</kbd> task · <kbd>Ctrl</kbd>
+                <kbd>Enter</kbd> submit
+              </span>
+            </div>
+          </div>
+        )}
+
+        {!editable && error && <p className="error">{error}</p>}
+      </article>
     </section>
   );
 }
