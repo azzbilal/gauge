@@ -378,6 +378,118 @@ textarea { width: 100%; min-height: 72px; resize: vertical; }
   .au-sources textarea { min-height: 140px; }
 }
 
+/* ── Campaigns: card grid; creation sits behind one primary action ── */
+.cp-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+.cp-head h2 { margin: 0; }
+
+/* primary is a brighter stroke, nothing else */
+.cp-primary { border-color: var(--hi); }
+.cp-primary:hover { border-color: var(--hi); }
+.cp-primary:disabled { border-color: var(--mid); }
+.cp button:disabled { color: var(--text-2); }
+
+.cp-form {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.9rem 1rem; align-items: end;
+  border: 1px solid var(--edge); border-radius: var(--radius);
+  padding: 0.9rem; margin-bottom: 1.25rem;
+  transition: border-color var(--t-stroke) var(--ease);
+}
+.cp-form:focus-within { border-color: var(--text-2); }
+.cp-form ::placeholder { color: var(--text-2); opacity: 1; }
+.cp-form-name { min-width: 0; }
+.cp-form-actions { grid-column: 1 / -1; display: flex; gap: 0.6rem; }
+.cp-form .error { grid-column: 1 / -1; margin: 0; }
+
+/* minus | mono number | plus, as one outlined control */
+.cp-stepper {
+  display: flex; align-items: stretch;
+  border: 1px solid var(--edge); border-radius: var(--radius);
+  transition: border-color var(--t-stroke) var(--ease);
+}
+.cp-stepper:focus-within { border-color: var(--hi); }
+.cp-stepper button {
+  border: none; border-radius: 0; padding: 0.45rem 0.75rem;
+  font-family: var(--mono); line-height: 1.5; color: var(--text-2);
+}
+.cp-stepper button:hover:not(:disabled) { color: var(--hi); }
+.cp-stepper button:focus-visible { outline-offset: -3px; }
+.cp-stepper input {
+  width: 4.5rem; text-align: center;
+  border: none; border-radius: 0;
+  border-left: 1px solid var(--lo); border-right: 1px solid var(--lo);
+}
+.cp-stepper input:focus { border-color: var(--lo); }
+
+.cp-grid {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 0.8rem;
+}
+.cp-grid > li { display: flex; min-width: 0; }
+/* the whole card is the link to its campaign page */
+.cp-card {
+  flex: 1; display: flex; flex-direction: column; gap: 0.9rem; min-width: 0;
+  color: inherit; text-decoration: none;
+  border: 1px solid var(--mid); border-radius: var(--radius);
+  padding: 0.9rem 1rem;
+  transition: border-color var(--t-stroke) var(--ease);
+}
+.cp-card:hover { border-color: var(--text-2); }
+.cp-card:active { border-color: var(--hi); }
+.cp-card:focus-visible { outline: 1px solid var(--hi); outline-offset: 2px; }
+.cp-card-head { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+.cp-card-head h3 { margin: 0; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.cp-spec { font-size: 13px; color: var(--text-2); }
+
+.cp-progress { display: flex; flex-direction: column; gap: 0.45rem; margin-top: auto; }
+.cp-line {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem;
+  font-size: 13px; color: var(--text-2);
+}
+.cp-line .num { color: var(--hi); }
+
+/* hairline progress: a 1px track with a brighter 1px stretch */
+.cp-bar { height: 1px; background: var(--lo); }
+.cp-bar i {
+  display: block; height: 1px; background: var(--hi);
+  transition: width var(--t-choice) var(--ease);
+}
+
+@media (max-width: 560px) {
+  .cp-form { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ── Campaign page: back link, header with the card's progress line, hairline task rows ── */
+.cd-back {
+  display: inline-block; margin-bottom: 1rem;
+  font-size: 13px; color: var(--text-2); text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: color var(--t-stroke) var(--ease), border-color var(--t-stroke) var(--ease);
+}
+.cd-back:hover { color: var(--hi); border-bottom-color: var(--edge); }
+.cd-back:focus-visible { outline: 1px solid var(--hi); outline-offset: 2px; }
+
+.cd-head { display: flex; flex-direction: column; gap: 0.1rem; margin-bottom: 1.5rem; }
+.cd-head h2 { margin: 0; overflow-wrap: anywhere; }
+.cd-head .cp-progress { margin-top: 0.9rem; max-width: 360px; }
+
+.cd-rows { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--lo); }
+.cd-row {
+  display: flex; flex-direction: column; gap: 0.35rem;
+  padding: 0.7rem 0 0.7rem 0.8rem;
+  color: var(--text-2); text-decoration: none;
+  border-left: 1px solid transparent; border-bottom: 1px solid var(--lo);
+  transition: color var(--t-stroke) var(--ease), border-color var(--t-stroke) var(--ease);
+}
+.cd-row:hover { color: var(--hi); border-left-color: var(--edge); }
+.cd-row:active { border-left-color: var(--hi); }
+.cd-row:focus-visible { outline: none; color: var(--hi); border-left-color: var(--hi); }
+.cd-row-prompt {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
+  overflow: hidden; font-size: 14px; overflow-wrap: anywhere;
+}
+.cd-row-meta { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; font-size: 13px; color: var(--text-2); }
+.cd-row-who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* box-free empty state: figure sits bare on the page ground */
 .empty { text-align: center; padding: 2.5rem 1rem; }
 .empty-figure { width: 220px; margin: 0 auto 0.5rem; }

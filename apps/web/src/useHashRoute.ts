@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 export interface Route {
   /** '/campaigns' | '/author' | '/review' */
   path: string;
-  /** task id for '/review/:id' */
+  /** task id for '/review/:id', campaign id for '/campaigns/:id' */
   param?: string;
 }
 

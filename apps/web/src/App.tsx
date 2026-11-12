@@ -3,6 +3,7 @@ import { api, Expert } from './api';
 import { Toasts } from './toast';
 import { navigate, useHashRoute } from './useHashRoute';
 import { CampaignsView } from './views/Campaigns';
+import { CampaignView } from './views/Campaign';
 import { AuthorView } from './views/Author';
 import { ReviewView } from './views/Review';
 
@@ -51,7 +52,7 @@ export default function App() {
         </div>
       </header>
       <main className="content">
-        {activePath === '/campaigns' && <CampaignsView />}
+        {activePath === '/campaigns' && (path === '/campaigns' && param ? <CampaignView key={param} id={param} /> : <CampaignsView />)}
         {activePath === '/author' && <AuthorView identityId={identityId} />}
         {activePath === '/review' && <ReviewView identityId={identityId} taskId={param} />}
       </main>
