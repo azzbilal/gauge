@@ -1,0 +1,86 @@
+# Gauge on Render (Blueprint). Steps and caveats: docs/DEPLOY.md.
+# Not deployed from this repo yet; the file is checked only for YAML shape.
+#
+#   gauge-web     static site; /api/* is rewritten to the API's public URL
+#   gauge-api     Docker web service; the image entrypoint runs prisma migrate deploy on start
+#   gauge-verify  Docker web service on port 4000 (no cadquery: cannot run submitted CAD code)
+#   gauge-db      Render Postgres
+services:
+  - type: web
+    name: gauge-web
+    runtime: static
+    rootDir: apps/web
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+    routes:
+      # First match wins, so /api/* must come before the SPA fallback. The prefix is
+      # stripped, as nginx and the vite dev proxy do: /api/campaigns -> /campaigns.
+      # If Render gives the API a different URL than this, edit it here.
+      - type: rewrite
+        source: /api/*
+        destination: https://gauge-api.onrender.com/*
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+  - type: web
+    name: gauge-api
+    runtime: docker
+    # Plans are explicit: an omitted plan defaults to 0.5c-512mb (paid).
+    plan: free
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: ./apps/api
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: gauge-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 12h
+      # Render has no Ollama, so the intake agent uses Anthropic. ANTHROPIC_MODEL is left to
+      # the code default; add it in the dashboard to override.
+      - key: LLM_PROVIDER
+        value: anthropic
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      # Entered by hand, WITH the scheme: http://<gauge-verify internal hostname>:4000.
+      # fromService would give host:port with no scheme, which the API cannot use.
+      - key: VERIFY_SERVICE_URL
+        sync: false
+      # Used only by the one-off seed (required with NODE_ENV=production).
+      - key: SEED_ADMIN_PASSWORD
+        sync: false
+      - key: SEED_REVIEWER_PASSWORD
+        sync: false
+      - key: SLACK_WEBHOOK_URL
+        sync: false
+    # PORT is set by Render; the API listens on it.
+
+  - type: web
+    name: gauge-verify
+    runtime: docker
+    # Paid on purpose: free web services cannot RECEIVE private-network traffic, and the
+    # API reaches verify on its internal http:// address. To run it free instead, set
+    # plan: free and point VERIFY_SERVICE_URL at its public https URL (docs/DEPLOY.md).
+    plan: 0.5c-512mb
+    dockerfilePath: ./verify/Dockerfile
+    dockerContext: ./verify
+    healthCheckPath: /health
+    envVars:
+      # The service always listens on 4000; this tells Render which port to route.
+      - key: PORT
+        value: "4000"
+
+databases:
+  - name: gauge-db
+    databaseName: gauge
+    user: gauge
+    plan: free

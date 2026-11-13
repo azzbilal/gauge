@@ -6,18 +6,42 @@ const prisma = new PrismaClient();
 
 // Development logins. Override the passwords with SEED_ADMIN_PASSWORD and
 // SEED_REVIEWER_PASSWORD; the defaults are for a local database only.
+const DEV_PASSWORDS = {
+  SEED_ADMIN_PASSWORD: 'gauge-admin-dev',
+  SEED_REVIEWER_PASSWORD: 'gauge-reviewer-dev',
+} as const;
+
+/**
+ * The password for one seeded login. Outside production an unset variable falls back to
+ * the dev default. In production (NODE_ENV=production) the variable is required and may
+ * not be a dev default, so a deployed database never gets a publicly known password.
+ */
+function seedPassword(key: keyof typeof DEV_PASSWORDS): string {
+  const raw = process.env[key];
+  const value = raw?.trim() ? raw : undefined; // blank counts as unset
+  if (process.env.NODE_ENV !== 'production') return value ?? DEV_PASSWORDS[key];
+  if (!value) {
+    throw new Error(`${key} is required when NODE_ENV=production; refusing to seed a default password`);
+  }
+  if ((Object.values(DEV_PASSWORDS) as string[]).includes(value.trim())) {
+    throw new Error(`${key} is a development default; refusing to seed it when NODE_ENV=production`);
+  }
+  return value;
+}
+
+// Read before anything touches the database, so a refused seed writes nothing.
 const SEED_USERS = [
   {
     name: 'Admin',
     email: 'admin@gauge.local',
     role: Role.ADMIN,
-    password: process.env.SEED_ADMIN_PASSWORD || 'gauge-admin-dev',
+    password: seedPassword('SEED_ADMIN_PASSWORD'),
   },
   {
     name: 'Reviewer',
     email: 'reviewer@gauge.local',
     role: Role.REVIEWER,
-    password: process.env.SEED_REVIEWER_PASSWORD || 'gauge-reviewer-dev',
+    password: seedPassword('SEED_REVIEWER_PASSWORD'),
   },
 ];
 

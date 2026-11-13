@@ -15,6 +15,7 @@ One thread per request, so a lint (pure and fast) is never queued behind a verif
 probe that is waiting on a worker process or on Ollama.
 """
 import json
+import os
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -27,6 +28,7 @@ from probe import DEFAULT_ROLLOUTS, OllamaError, probe  # noqa: E402
 from verifiers import verify  # noqa: E402
 
 PORT = 4000
+HOST = os.environ.get("VERIFY_HOST", "127.0.0.1")
 MAX_BODY_BYTES = 1_000_000
 MAX_ROLLOUTS = 20
 
@@ -148,5 +150,5 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    print(f"verify service listening on http://127.0.0.1:{PORT}")
-    ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
+    print(f"verify service listening on http://{HOST}:{PORT}")
+    ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()

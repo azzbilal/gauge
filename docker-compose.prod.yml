@@ -1,0 +1,97 @@
+# Gauge, self-hosted: postgres + api + verify + web. See docs/DEPLOY.md.
+#
+#   put JWT_SECRET (32+ chars) in a root .env, then:
+#   docker compose -f docker-compose.prod.yml up -d --build
+#   open http://localhost:8080
+#
+# Its own project name and its own volume, and postgres publishes no host port, so this
+# stack cannot touch the dev database (docker-compose.yml, project "gauge", volume
+# gauge_gauge_pgdata, port 5432). Both can run side by side.
+#
+# The seed is not automatic. Run it once, after the first `up`:
+#
+#   docker compose -f docker-compose.prod.yml run --rm -e SEED_ADMIN_PASSWORD=... \
+#     -e SEED_REVIEWER_PASSWORD=... api node dist-seed/prisma/seed.js
+name: gauge-prod
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: gauge
+      POSTGRES_PASSWORD: gauge
+      POSTGRES_DB: gauge
+    volumes:
+      - gauge_prod_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gauge -d gauge"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  verify:
+    build: ./verify
+    healthcheck:
+      # python:3.12-slim has neither curl nor wget.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+  api:
+    build: ./apps/api
+    # The entrypoint runs `prisma migrate deploy` before starting the API.
+    environment:
+      NODE_ENV: production
+      # Literals, so nothing from a local .env (localhost URLs) can leak in.
+      DATABASE_URL: postgresql://gauge:gauge@postgres:5432/gauge
+      VERIFY_SERVICE_URL: http://verify:4000
+      PORT: "3000"
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET (at least 32 characters)}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-12h}
+      # Intake agent. No Ollama in this stack: use anthropic, or point OLLAMA_BASE_URL at a
+      # host Ollama (http://host.docker.internal:11434) with LLM_PROVIDER=ollama.
+      LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
+      # Empty values would override the code defaults (it uses ??), so pass those defaults.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-20250514}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:9b-q4_K_M}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      # Read only by the one-off seed; required there because NODE_ENV=production.
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+      SEED_REVIEWER_PASSWORD: ${SEED_REVIEWER_PASSWORD:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      verify:
+        condition: service_healthy
+    healthcheck:
+      # /health answers 200 even with the database down, so require "db":"up".
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health | grep -q '\"db\":\"up\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    restart: unless-stopped
+
+  web:
+    build: ./apps/web
+    # nginx resolves http://api:3000 at startup, so the api must be up first.
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  gauge_prod_pgdata:
