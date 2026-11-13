@@ -46,3 +46,29 @@ export function parseCreateTaskDto(body: unknown): CreateTaskDto {
     goldExpectedAccept: isGold === true ? (goldExpectedAccept as boolean) : undefined,
   };
 }
+
+/** A draft to check before it is submitted: no campaign or author yet. */
+export interface PreviewTaskDto {
+  prompt: string;
+  spec?: string;
+  reference?: string;
+}
+
+/**
+ * The text is trimmed exactly as parseCreateTaskDto trims it, so the preview checks what
+ * a create would store. An empty prompt is allowed: a draft may be checked at any point.
+ */
+export function parsePreviewTaskDto(body: unknown): PreviewTaskDto {
+  if (!body || typeof body !== 'object') {
+    throw new BadRequestException('Request body must be a JSON object');
+  }
+  const { prompt, spec, reference } = body as Record<string, unknown>;
+  for (const [name, value] of Object.entries({ prompt, spec, reference })) {
+    if (value !== undefined && value !== null && typeof value !== 'string') {
+      throw new BadRequestException(`${name} must be a string`);
+    }
+  }
+  const text = (value: unknown) =>
+    typeof value === 'string' && value.trim() ? value.trim() : undefined;
+  return { prompt: text(prompt) ?? '', spec: text(spec), reference: text(reference) };
+}

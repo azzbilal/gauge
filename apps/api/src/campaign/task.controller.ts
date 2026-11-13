@@ -1,6 +1,6 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
 import { TaskService } from './task.service';
-import { parseCreateTaskDto } from './dto/task.dto';
+import { parseCreateTaskDto, parsePreviewTaskDto } from './dto/task.dto';
 import { parseAdjudicateTaskDto, parseCreateTaskReviewDto } from './dto/task-review.dto';
 
 /**
@@ -41,6 +41,16 @@ export class TaskController {
   @Post()
   create(@Body() body: unknown) {
     return this.tasks.create(parseCreateTaskDto(body));
+  }
+
+  /**
+   * Lint and verify a draft without creating anything. Always 200: a verify service
+   * that is down is reported as `not_run` in the body, not as an error.
+   */
+  @Post('preview')
+  @HttpCode(200)
+  preview(@Body() body: unknown) {
+    return this.tasks.preview(parsePreviewTaskDto(body));
   }
 
   @Post(':id/reviews')

@@ -65,3 +65,25 @@ export interface Task {
   reviewState: ReviewState;
   adjudication: Adjudication | null;
 }
+
+/** One packet lint finding from POST /tasks/preview. */
+export interface LintFinding {
+  rule: string;
+  severity: string; // info | warning | critical
+  detail: string | null;
+}
+
+/** One verifier verdict on the reference solution. */
+export interface PreviewVerdict {
+  criterion: string;
+  requirement: string | null;
+  check: string;
+  status: string; // pass | fail | not_run
+  detail: string;
+}
+
+/** `not_run` means the verify service could not be reached; `note` says why. */
+export interface TaskPreview {
+  lint: { status: 'ok' | 'not_run'; findings: LintFinding[]; note?: string };
+  verify: { status: 'ok' | 'not_run'; verdicts: PreviewVerdict[]; note?: string };
+}

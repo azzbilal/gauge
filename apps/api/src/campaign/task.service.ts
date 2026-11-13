@@ -15,9 +15,9 @@ import {
   VerifySubjectType,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { buildPacket, rubricItemIdOf } from '../verify/packet-builder';
-import { VerifyClient } from '../verify/verify.client';
-import { CreateTaskDto } from './dto/task.dto';
+import { BuiltPacket, buildPacket, rubricItemIdOf } from '../verify/packet-builder';
+import { LintFindingResult, VerifyClient } from '../verify/verify.client';
+import { CreateTaskDto, PreviewTaskDto } from './dto/task.dto';
 import { AdjudicateTaskDto, CreateTaskReviewDto } from './dto/task-review.dto';
 import {
   REVIEWS_REQUIRED,
@@ -52,6 +52,47 @@ type TaskRow = Prisma.TaskGetPayload<{ include: typeof TASK_INCLUDE }>;
 type Tx = Prisma.TransactionClient;
 
 export type ReviewState = 'awaiting_reviews' | 'awaiting_adjudication' | 'decided';
+
+/** One verifier verdict as the author reads it: names instead of packet ids. */
+export interface PreviewVerdict {
+  /** The rubric criterion that was checked, e.g. `correct_reference`. */
+  criterion: string;
+  /** The requirement it was checked against, e.g. `width of 60 mm`. */
+  requirement: string | null;
+  check: string;
+  status: string; // pass | fail | not_run
+  detail: string;
+}
+
+/** Each half ran (`ok`) or did not (`not_run`, with a note saying why). */
+export interface TaskPreview {
+  lint: { status: 'ok' | 'not_run'; findings: LintFindingResult[]; note?: string };
+  verify: { status: 'ok' | 'not_run'; verdicts: PreviewVerdict[]; note?: string };
+}
+
+/**
+ * The packet ids are random and exist only for this one preview, so the text shown to the
+ * author names the rubric criterion and quotes the requirement instead.
+ */
+function packetLabels(built: BuiltPacket) {
+  const requirement = new Map(built.requirements.map((r) => [r.id, r.text]));
+  // Rubric item text opens with its criterion key ("correct_reference: ...").
+  const criterion = new Map(built.rubricItems.map((i) => [i.id, i.text.split(':')[0]]));
+  const names: Array<[string, string]> = [
+    ...built.packet.rubricItems.map((i): [string, string] => [
+      i.id,
+      criterion.get(rubricItemIdOf(i.id)) ?? i.id,
+    ]),
+    ...built.requirements.map((r): [string, string] => [r.id, `"${r.text}"`]),
+  ];
+  // Longest first: a machine item's packet id is `<rubricItemId>:<requirementId>`.
+  names.sort((a, b) => b[0].length - a[0].length);
+  return {
+    requirement: (id: string | null) => (id ? requirement.get(id) ?? null : null),
+    criterion: (packetItemId: string) => criterion.get(rubricItemIdOf(packetItemId)) ?? packetItemId,
+    readable: (text: string) => names.reduce((out, [id, name]) => out.split(id).join(name), text),
+  };
+}
 
 @Injectable()
 export class TaskService {
@@ -140,6 +181,46 @@ export class TaskService {
     await this.runVerification(task);
 
     return task;
+  }
+
+  /**
+   * Layer 2 on a draft: the same packet, lint and verify a create would run, with nothing
+   * stored. Never throws for a verify service that is down or slow: each half reports
+   * `not_run` with the reason, because a check that did not run is not a clean result.
+   */
+  async preview(dto: PreviewTaskDto): Promise<TaskPreview> {
+    const built = buildPacket(dto);
+    const labels = packetLabels(built);
+    const [lint, verify] = await Promise.allSettled([
+      this.verifyClient.lint(built.packet),
+      this.verifyClient.verify(built.packet),
+    ]);
+    return {
+      lint:
+        lint.status === 'fulfilled'
+          ? {
+              status: 'ok',
+              findings: lint.value.map((f) => ({
+                ...f,
+                detail: f.detail === null ? null : labels.readable(f.detail),
+              })),
+            }
+          : { status: 'not_run', findings: [], note: message(lint.reason) },
+      verify:
+        verify.status === 'fulfilled'
+          ? {
+              status: 'ok',
+              verdicts: verify.value.map((v) => ({
+                criterion: labels.criterion(v.rubric_item_id),
+                requirement: labels.requirement(v.requirement_id),
+                check: v.check,
+                // Only the three known states pass through; anything else did not run.
+                status: v.status === 'pass' || v.status === 'fail' ? v.status : 'not_run',
+                detail: labels.readable(v.detail),
+              })),
+            }
+          : { status: 'not_run', verdicts: [], note: message(verify.reason) },
+    };
   }
 
   /** The stored Layer 2 results for a task: lint findings and verifier runs. */

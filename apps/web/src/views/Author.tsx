@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { api, Campaign, Task } from '../api';
+import { useEffect, useRef, useState } from 'react';
+import { api, Campaign, LintFinding, Task, TaskPreview } from '../api';
 import { notify } from '../toast';
 import { PrimaryButton } from '../components/PrimaryButton';
 
@@ -38,13 +38,81 @@ function loadDraft(): Draft {
   }
 }
 
-// Basic client-side lint. A stand-in until the real verifier runs the reference.
-function lint(prompt: string, spec: string, reference: string) {
-  return [
-    { name: 'Prompt present', ok: prompt.trim() !== '' },
-    { name: 'Spec present', ok: spec.trim() !== '' },
-    { name: 'Reference starts with import or from', ok: /^(import|from)\s/.test(reference.trimStart()) },
-  ];
+// One row of the check column. `state` drives the dot: ring (idle), filled (pass),
+// bright ring (fail). The word says the same thing in text.
+type Row = { state: 'idle' | 'pass' | 'fail'; name: string; word: string; detail?: string | null };
+
+const SEVERITY_ORDER = ['critical', 'warning', 'info'];
+const isCritical = (f: LintFinding) => f.severity === 'critical';
+const words = (s: string) => s.replace(/_/g, ' ');
+
+// A check that could not be asked for at all reads the same as one the API could not run.
+function notRun(note: string): TaskPreview {
+  return {
+    lint: { status: 'not_run', findings: [], note },
+    verify: { status: 'not_run', verdicts: [], note },
+  };
+}
+
+function lintRows(preview: TaskPreview | null): Row[] {
+  if (!preview) return [{ state: 'idle', name: 'Packet lint', word: 'not run' }];
+  const { status, findings, note } = preview.lint;
+  if (status !== 'ok') return [{ state: 'idle', name: 'Packet lint', word: 'not run', detail: note }];
+  if (findings.length === 0) return [{ state: 'pass', name: 'No findings', word: 'pass' }];
+  // Critical first; a severity this view does not know sorts last.
+  const rank = (f: LintFinding) => {
+    const at = SEVERITY_ORDER.indexOf(f.severity);
+    return at < 0 ? SEVERITY_ORDER.length : at;
+  };
+  return [...findings]
+    .sort((a, b) => rank(a) - rank(b))
+    .map((f) => ({
+      state: isCritical(f) ? 'fail' : 'idle',
+      name: words(f.rule),
+      word: f.severity,
+      detail: f.detail,
+    }));
+}
+
+function verdictRows(preview: TaskPreview | null): Row[] {
+  if (!preview) return [{ state: 'idle', name: 'Reference', word: 'not run' }];
+  const { status, verdicts, note } = preview.verify;
+  if (status !== 'ok') return [{ state: 'idle', name: 'Reference', word: 'not run', detail: note }];
+  // No verdict is not a pass: nothing was checked.
+  if (verdicts.length === 0) {
+    return [
+      {
+        state: 'idle',
+        name: 'Reference',
+        word: 'not run',
+        detail: 'The spec states no named dimension a machine can check.',
+      },
+    ];
+  }
+  return verdicts.map((v) => ({
+    state: v.status === 'pass' ? 'pass' : v.status === 'fail' ? 'fail' : 'idle',
+    name: v.requirement ?? words(v.criterion),
+    word: v.status === 'pass' || v.status === 'fail' ? v.status : 'not run',
+    detail: [words(v.check), v.detail].filter(Boolean).join(': '),
+  }));
+}
+
+function CheckRows({ title, rows }: { title: string; rows: Row[] }) {
+  return (
+    <>
+      <h3>{title}</h3>
+      <ul>
+        {rows.map((r, i) => (
+          <li key={i} data-state={r.state}>
+            <i aria-hidden="true" />
+            <span className="au-lint-name">{r.name}</span>
+            <span className="au-lint-word">{r.word}</span>
+            {r.detail && <p>{r.detail}</p>}
+          </li>
+        ))}
+      </ul>
+    </>
+  );
 }
 
 export function AuthorView({ identityId }: { identityId: string }) {
@@ -54,8 +122,13 @@ export function AuthorView({ identityId }: { identityId: string }) {
   const [prompt, setPrompt] = useState(draft.prompt);
   const [spec, setSpec] = useState(draft.spec);
   const [reference, setReference] = useState(draft.reference);
-  // The text the last check ran against; any edit makes the result stale.
-  const [checkedText, setCheckedText] = useState<string | null>(null);
+  // The last check and the text it ran against; any edit makes the result stale.
+  const [result, setResult] = useState<{ text: string; preview: TaskPreview } | null>(null);
+  const [checking, setChecking] = useState(false);
+  // Only the newest check may report: an older answer is for text that has moved on.
+  const latestCheck = useRef(0);
+  // The text a submit was refused for; the refusal stands until that text changes.
+  const [blockedText, setBlockedText] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -79,8 +152,8 @@ export function AuthorView({ identityId }: { identityId: string }) {
   }, [prompt, spec, reference, campaignId]);
 
   const text = JSON.stringify([prompt, spec, reference]);
-  const checks = lint(prompt, spec, reference);
-  const checked = checkedText === text;
+  const preview = result?.text === text ? result.preview : null;
+  const blocking = blockedText === text ? (preview?.lint.findings.filter(isCritical) ?? []) : [];
 
   // The first thing still missing, said in words: the button alone can't explain itself.
   const missing = !identityId
@@ -92,11 +165,35 @@ export function AuthorView({ identityId }: { identityId: string }) {
         : '';
   const canSubmit = !busy && !missing;
 
+  /** Lint and verify the draft as it stands. Never throws: a failed request is `not_run`. */
+  async function runCheck(): Promise<TaskPreview> {
+    const id = ++latestCheck.current;
+    setChecking(true);
+    let answer: TaskPreview;
+    try {
+      answer = await api.post<TaskPreview>('/api/tasks/preview', { prompt, spec, reference });
+    } catch (err) {
+      answer = notRun(`The check could not be requested (${(err as Error).message})`);
+    }
+    if (id === latestCheck.current) {
+      setResult({ text, preview: answer });
+      setChecking(false);
+    }
+    return answer;
+  }
+
   async function submit() {
     if (!canSubmit) return;
     setBusy(true);
     setError('');
     try {
+      // The gate is the lint of exactly this text: reuse a finished check of it, otherwise
+      // run one now. A lint that could not run does not block, as on the server.
+      const checked = preview?.lint.status === 'ok' ? preview : await runCheck();
+      if (checked.lint.findings.some(isCritical)) {
+        setBlockedText(text);
+        return;
+      }
       const task = await api.post<Task>('/api/tasks', {
         campaignId,
         authorId: identityId,
@@ -188,12 +285,29 @@ export function AuthorView({ identityId }: { identityId: string }) {
                   </>
                 )}
               </span>
-              <button type="button" onClick={() => setCheckedText(text)}>
-                Run check
+              <button type="button" disabled={checking} onClick={() => void runCheck()}>
+                {checking ? 'Checking…' : 'Run check'}
               </button>
               <PrimaryButton type="submit" disabled={!canSubmit} label={busy ? 'Submitting…' : 'Submit task'} />
             </div>
           </form>
+          {blocking.length > 0 && (
+            <div className="error au-blocked" role="alert">
+              <p>
+                Not submitted:{' '}
+                {blocking.length === 1 ? 'a critical lint finding' : `${blocking.length} critical lint findings`}.
+                Fix the draft and submit again.
+              </p>
+              <ul>
+                {blocking.map((f, i) => (
+                  <li key={i}>
+                    <span className="au-blocked-rule">{words(f.rule)}</span>
+                    {f.detail}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {error && <p className="error">{error}</p>}
         </div>
 
@@ -217,20 +331,9 @@ export function AuthorView({ identityId }: { identityId: string }) {
             Two reviewers score each criterion <span className="num">0–{MAX}</span>. Every row must pass.
           </p>
 
-          <div className="au-lint" aria-live="polite">
-            <h3>Basic check, verifier coming</h3>
-            <ul>
-              {checks.map((c) => {
-                const state = !checked ? 'idle' : c.ok ? 'pass' : 'fail';
-                return (
-                  <li key={c.name} data-state={state}>
-                    <i aria-hidden="true" />
-                    <span className="au-lint-name">{c.name}</span>
-                    <span className="au-lint-word">{state === 'idle' ? 'not run' : state}</span>
-                  </li>
-                );
-              })}
-            </ul>
+          <div className="au-lint" aria-live="polite" aria-busy={checking}>
+            <CheckRows title="Lint" rows={lintRows(preview)} />
+            <CheckRows title="Verifier" rows={verdictRows(preview)} />
           </div>
         </aside>
       </div>
