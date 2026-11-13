@@ -56,7 +56,14 @@ def load(db_path: Path) -> dict[str, int]:
     try:
         con.execute("INSTALL postgres; LOAD postgres;")
         quoted = database_url().replace("'", "''")
-        con.execute(f"ATTACH '{quoted}' AS pg (TYPE postgres, READ_ONLY)")
+        try:
+            con.execute(f"ATTACH '{quoted}' AS pg (TYPE postgres, READ_ONLY)")
+        except duckdb.Error:
+            # DuckDB puts the full connection string (password included) into its error,
+            # so re-raise a message that keeps the secret out of terminal and CI logs.
+            raise RuntimeError(
+                "load: cannot connect to Postgres (check DATABASE_URL and that Postgres is running)"
+            ) from None
         con.execute("CREATE SCHEMA IF NOT EXISTS raw")
         counts: dict[str, int] = {}
         con.execute("BEGIN")
