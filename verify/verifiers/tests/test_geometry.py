@@ -6,9 +6,12 @@ The tests that execute reference code need cadquery in the worker interpreter
 ($GAUGE_CAD_PYTHON, else the one running the tests) and are SKIPPED without it. The
 fallback tests run everywhere.
 """
+import json
+import subprocess
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 VERIFY_DIR = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(VERIFY_DIR))
@@ -357,6 +360,188 @@ class FallbackWithoutCadquery(unittest.TestCase):
         self.assertEqual(v["width"]["status"], "fail")
         self.assertIn("no box", v["width"]["detail"])
         self.assertEqual(v["volume"]["detail"], "needs cadquery")
+
+
+class _Caches:
+    """Gives a test empty cad_exec caches and puts the real ones back afterwards."""
+
+    def setUp(self):
+        for cache in (cad_exec._cache, cad_exec._has_cadquery, cad_exec._no_cadquery):
+            patch = mock.patch.dict(cache, clear=True)
+            patch.start()
+            self.addCleanup(patch.stop)
+
+
+def worker_run(reply=None, returncode=0):
+    """A stand-in for subprocess.run: the worker answers `reply` to whatever it is sent.
+    `reply` may be a function of the request. The requests are kept in `.requests`."""
+    requests = []
+
+    def run(argv, input=None, **kwargs):
+        request = json.loads(input.decode("utf-8"))
+        requests.append(request)
+        answer = reply(request) if callable(reply) else reply
+        if isinstance(answer, BaseException):
+            raise answer
+        line = "" if answer is None else request["nonce"] + " " + json.dumps(answer) + "\n"
+        return subprocess.CompletedProcess(argv, returncode, line.encode("utf-8"), b"")
+
+    run.requests = requests
+    return run
+
+
+class WorkerThatCannotBeStarted(_Caches, unittest.TestCase):
+    """Runs everywhere. A spawn failure is remembered only when it is definite."""
+
+    PLATE = "import cadquery as cq\nresult = cq.Workplane('XY').box(60, 40, 10)\n"
+    DENIED = PermissionError(13, "Permission denied")
+
+    def test_transient_spawn_failure_is_not_run_and_not_remembered(self):
+        python = sys.executable  # the file exists: the failure says nothing definite
+        with mock.patch("subprocess.run", worker_run(self.DENIED)) as run:
+            m = cad_exec.measure(self.PLATE, python=python)
+            self.assertEqual(m.kind, "not_run", m)
+            self.assertIn("could not be started this time (Permission denied)", m.detail)
+            self.assertNotIn(python, m.detail)
+            self.assertEqual(len(run.requests), 1)
+        self.assertEqual(cad_exec._no_cadquery, {})
+        self.assertEqual(cad_exec._has_cadquery, {})
+        self.assertEqual(cad_exec._cache, {})
+
+        # The next call asks again, and a worker that now starts is used.
+        ok = {"kind": "ok", "cadquery": "9.9", "name": "result",
+              "size": [60, 40, 10], "volume": 24000.0, "solids": 1, "valid": True}
+        with mock.patch("subprocess.run", worker_run(ok)) as run:
+            m = cad_exec.measure(self.PLATE, python=python)
+            self.assertEqual((m.kind, m.size), ("ok", (60.0, 40.0, 10.0)), m)
+            self.assertEqual(["source" in r for r in run.requests], [False, True])
+
+    def test_transient_spawn_failure_gives_not_run_verdicts_not_a_static_pass(self):
+        with mock.patch("subprocess.run", worker_run(self.DENIED)):
+            v = executed(reference("plate_ok.py"), python=sys.executable)
+        for item in DIMENSIONS + ["holes", "hole_d"]:
+            self.assertEqual(v[item]["status"], "not_run", v[item])
+            self.assertEqual(v[item]["check"], "geometry_cad")
+            self.assertIn("could not be started this time", v[item]["detail"])
+            self.assertNotIn("static fallback", v[item]["detail"])
+        self.assertEqual(v["volume"]["status"], "not_run")
+        self.assertNotEqual(v["volume"]["detail"], "needs cadquery")
+
+    def test_spawn_failure_after_the_preflight_is_not_run_and_not_remembered(self):
+        def reply(request):
+            return self.DENIED if "source" in request else {"kind": "ok", "cadquery": "9.9"}
+
+        with mock.patch("subprocess.run", worker_run(reply)):
+            m = cad_exec.measure(self.PLATE, python=sys.executable)
+        self.assertEqual(m.kind, "not_run", m)
+        self.assertEqual(cad_exec._no_cadquery, {})
+        self.assertEqual(cad_exec._cache, {})
+
+    def test_preflight_that_hangs_or_dies_is_not_run_and_not_remembered(self):
+        hang = subprocess.TimeoutExpired("python", 30)
+        for reply, code, reason in ((hang, 0, "did not start within"),
+                                    (None, 3, "died before any reference ran (exit code 3)"),
+                                    ({"kind": "error"}, 0, "no usable answer")):
+            with self.subTest(reason=reason):
+                with mock.patch("subprocess.run", worker_run(reply, code)) as run:
+                    m = cad_exec.measure(self.PLATE, python=sys.executable)
+                    self.assertEqual(m.kind, "not_run", m)
+                    self.assertIn(reason, m.detail)
+                    self.assertEqual(["source" in r for r in run.requests], [False])
+                self.assertEqual(cad_exec._no_cadquery, {})
+                self.assertEqual(cad_exec._has_cadquery, {})
+
+    def test_missing_interpreter_is_unavailable_and_remembered(self):
+        missing = FallbackWithoutCadquery.MISSING
+        m = cad_exec.measure(self.PLATE, python=missing)
+        self.assertEqual(m.kind, "unavailable", m)
+        self.assertIn("the worker interpreter could not be started", m.detail)
+        self.assertEqual(list(cad_exec._no_cadquery), [missing])
+        with mock.patch("subprocess.run", worker_run(self.DENIED)) as run:
+            self.assertEqual(cad_exec.measure(self.PLATE, python=missing), m)
+            self.assertEqual(run.requests, [])  # remembered: not asked again
+
+    def test_import_failure_reported_by_the_preflight_is_remembered(self):
+        no = {"kind": "unavailable",
+              "detail": "cadquery is not available to the worker (ModuleNotFoundError)"}
+        with mock.patch("subprocess.run", worker_run(no)) as run:
+            first = cad_exec.measure(self.PLATE, python=sys.executable)
+            second = cad_exec.measure("x = 1\n", python=sys.executable)
+            self.assertEqual(run.requests, [{"nonce": run.requests[0]["nonce"]}])
+        self.assertEqual((first.kind, second), ("unavailable", first))
+        self.assertIn("ModuleNotFoundError", first.detail)
+        v = executed(reference("plate_ok.py"), python=sys.executable)
+        self.assertEqual(v["width"]["check"], "static_cad")
+        self.assertIn("[static fallback: cadquery is not available", v["width"]["detail"])
+
+
+# The reference finds the worker's nonce in the frame that called it, answers in the
+# worker's place that there is no cadquery, and leaves before the worker can answer.
+FORGED_UNAVAILABLE = (
+    "import json, os, sys\n"
+    "nonce = sys._getframe(1).f_locals['nonce']\n"
+    "os.write(1, (nonce + ' ' + json.dumps({'kind': 'unavailable',"
+    " 'detail': 'cadquery is not available to the worker (forged)'}) + '\\n').encode())\n"
+    "os._exit(0)\n"
+)
+
+
+class ForgedUnavailableReply(_Caches, unittest.TestCase):
+    """`unavailable` opens the static fallback, which passes a box in dead code. A
+    reference must not be able to say it for the worker."""
+
+    def test_unavailable_from_a_run_given_the_reference_is_refused(self):
+        # Runs everywhere: the pre-flight sees cadquery, the reference run says otherwise.
+        def reply(request):
+            if "source" in request:
+                return {"kind": "unavailable", "detail": "forged"}
+            return {"kind": "ok", "cadquery": "9.9"}
+
+        with mock.patch("subprocess.run", worker_run(reply)) as run:
+            m = cad_exec.measure(IF_FALSE, python=sys.executable)
+            v = executed(IF_FALSE, python=sys.executable)
+            self.assertEqual(["source" in r for r in run.requests], [False, True, True])
+        self.assertEqual(m.kind, "not_run", m)
+        self.assertNotIn("forged", m.detail)
+        self.assertEqual(cad_exec._no_cadquery, {})
+        self.assertEqual(cad_exec._cache, {})
+        for item in DIMENSIONS + ["holes", "hole_d"]:
+            self.assertEqual(v[item]["status"], "not_run", v[item])
+            self.assertEqual(v[item]["check"], "geometry_cad")
+            self.assertNotIn("static fallback", v[item]["detail"])
+        self.assertNotEqual(v["volume"]["detail"], "needs cadquery")
+
+    def test_unknown_kind_from_a_reference_run_is_an_error(self):
+        def reply(request):
+            return {"kind": "skip" if "source" in request else "ok"}
+
+        with mock.patch("subprocess.run", worker_run(reply)):
+            self.assertEqual(cad_exec.measure("x = 1\n", python=sys.executable).kind, "error")
+
+    @needs_cadquery
+    def test_reference_that_forges_the_reply_for_real(self):
+        python = cad_exec.worker_python()
+        code = IF_FALSE + "\n" + FORGED_UNAVAILABLE
+        for item in DIMENSIONS:  # what the forgery is after: the static reading passes
+            self.assertEqual(static(code)[item]["status"], "pass")
+
+        m = cad_exec.measure(code)
+        self.assertEqual(m.kind, "not_run", m)
+        self.assertNotIn("forged", m.detail)
+        v = executed(code)
+        for item in DIMENSIONS + ["holes", "hole_d"]:
+            self.assertEqual(v[item]["status"], "not_run", v[item])
+            self.assertIs(v[item]["pass"], False)
+            self.assertEqual(v[item]["check"], "geometry_cad")
+            self.assertNotIn("static fallback", v[item]["detail"])
+        self.assertEqual(v["volume"]["status"], "not_run")
+        self.assertNotEqual(v["volume"]["detail"], "needs cadquery")
+
+        # The interpreter is not poisoned for the references that follow.
+        self.assertEqual(cad_exec._no_cadquery, {})
+        self.assertEqual(list(cad_exec._has_cadquery), [python])
+        self.assertEqual(cad_exec.measure(reference("plate_ok.py")).kind, "ok")
+        self.assertEqual(executed(reference("plate_ok.py"))["width"]["check"], "geometry_cad")
 
 
 if __name__ == "__main__":

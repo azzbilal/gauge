@@ -307,14 +307,16 @@ class VerifierPack:
 
         A reference that was executed and did not finish is never read statically, since
         the source then says what was written and not what was built: one that raised,
-        crashed or left no solid fails the item, and one that timed out is not_run."""
+        crashed or left no solid fails the item, and one that timed out, or whose worker
+        could not be run, is not_run."""
         if not expected:
             return STATIC_CAD, NOT_RUN, (
                 "no checkable dimension or hole count found in the requirement")
         if not _static_allowed(measured) and measured.kind != cad_exec.OK:
-            # Nothing was delivered, so nothing the source mentions is real. Only a
-            # timeout is left open: it depends on machine load, not on the code alone.
-            status = NOT_RUN if measured.kind == cad_exec.TIMEOUT else FAIL
+            # Nothing was delivered, so nothing the source mentions is real. A timeout
+            # and a worker that could not be run are left open: they depend on the
+            # machine, not on the code alone.
+            status = NOT_RUN if measured.kind in _LEFT_OPEN else FAIL
             return GEOMETRY_CAD, status, measured.detail
         results = [_check_one(model, e, axes, measured) for e in expected]
         statuses = [status for status, _, _ in results]
@@ -325,6 +327,10 @@ class VerifierPack:
         if measured.kind == cad_exec.OK:
             return GEOMETRY_CAD, status, detail
         return STATIC_CAD, status, f"{detail} [static fallback: {measured.detail}]"
+
+
+# Outcomes that say nothing about the reference: asking again may give another answer.
+_LEFT_OPEN = (cad_exec.TIMEOUT, cad_exec.NOT_RUN)
 
 
 def _static_allowed(measured) -> bool:
@@ -355,7 +361,7 @@ def _check_one(model: CadModel, e: Expected, axes: dict, measured=None) -> tuple
             status, detail = _check_box(model, e, axes[noun])
         elif measured.kind == cad_exec.OK:
             status, detail = _check_extent(measured, e, axes[noun])
-        elif measured.kind == cad_exec.TIMEOUT:
+        elif measured.kind in _LEFT_OPEN:
             status, detail = NOT_RUN, f"{e.label}: {measured.detail}"
         else:  # it raised, crashed or built no solid: never the static reading
             status, detail = FAIL, f"{e.label}: {measured.detail}"

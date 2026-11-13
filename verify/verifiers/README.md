@@ -54,11 +54,20 @@ function that is never called, a box that is cut in half afterwards.
 | ran cleanly, built no solid | `fail` | `fail` | `fail` |
 | raised or crashed | `fail` | `fail` | `not_run` |
 | timed out | `not_run` | `not_run` | `not_run` |
+| the worker could not be run this time | `not_run` | `not_run` | `not_run` |
 | cadquery missing, or execution switched off | static fallback (`static_cad`); when cadquery is missing the detail ends `[static fallback: <reason>]` | static | `not_run`, `needs cadquery` |
 
 The static fallback applies only when nothing was executed. Code that was executed and did
 not finish is never read statically: a box in dead code followed by a `raise` would
 otherwise pass.
+
+"cadquery missing" is decided by a pre-flight run of the worker that is given no reference
+code, once per interpreter. It is never taken from a run that executed a reference, so a
+reference cannot talk its way into the static fallback. It is remembered for the life of
+the process only when it is definite: the worker reported that the import failed, or the
+interpreter file does not exist. A worker that could not be started for any other reason
+(or a pre-flight that hung or died) is `not_run`, is not remembered, and is tried again on
+the next call.
 
 Tolerances: a measured size may be off by the requirement's tolerance plus 0.0001 mm. A
 volume may be off by the requirement's tolerance (`5%`, `10 mm3`), else 0.1 %, since a
