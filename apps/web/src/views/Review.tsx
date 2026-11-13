@@ -104,6 +104,7 @@ export function ReviewView({ user, taskId }: { user: AuthUser; taskId?: string }
     setCrit(0);
     setReason('');
     setError('');
+    pressed.current = null;
     if (selectedId) rows.current.get(selectedId)?.scrollIntoView({ block: 'nearest' });
   }, [selectedId]);
 
