@@ -7,6 +7,7 @@ select
     cast(status as varchar)         as status,
     "isGold"                        as is_gold,
     "goldSourceId" is not null      as is_gold_clone,
+    "goldSourceId"                  as gold_source_id,
     "goldExpectedAccept"            as gold_expected_accept,
     "createdAt"                     as created_at,
     "updatedAt"                     as updated_at

@@ -1,3 +1,7 @@
 duckdb>=1.1
 dbt-core~=1.12
 dbt-duckdb~=1.11
+dagster~=1.13
+dagster-webserver~=1.13   # for `dagster dev` (UI + schedule toggle)
+# dbt-common and dbt-adapters need protobuf<7; dagster alone would pull 7.x.
+protobuf>=6,<7

@@ -7,5 +7,9 @@ select
     "reviewerId"                    as reviewer_label,
     "reviewerExpertId" is null      as is_legacy,
     accepted,
+    -- JSON text keyed by criterion: scores -> 0..5, evidence -> the reviewer's note
+    -- (evidence is null on rows written before evidence was collected).
+    cast(scores as varchar)         as scores_json,
+    cast(evidence as varchar)       as evidence_json,
     "createdAt"                     as created_at
 from {{ source('raw', 'task_review') }}

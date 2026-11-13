@@ -21,3 +21,133 @@ models:
         description: >
           Share of multi-reviewed tasks where every identified reviewer gave the same
           accept/reject verdict; null when no task has two reviews.
+
+  - name: mart_task_quality
+    description: >
+      One row per rubric criterion (all five, always). Population: every peer review,
+      legacy rows included, of a non-gold task whose status is ACCEPTED or REJECTED.
+      Legacy reviews are kept because they carry real scores; leaving them out would
+      overstate the evidence share (they predate the evidence requirement).
+    columns:
+      - name: criterion
+        data_tests:
+          - unique
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [verifiable, unambiguous, correct_reference, complete_constraints, difficulty]
+      - name: acceptance_min
+        description: The per-criterion acceptance bar (every criterion >= 3, verifiable >= 4).
+      - name: n_tasks
+        description: Decided non-gold tasks with at least one score on this criterion.
+      - name: n_scores
+        description: Reviews that scored this criterion.
+      - name: n_legacy_scores
+        description: Of n_scores, those from legacy (pre-protocol, unidentified) reviews.
+      - name: n_with_evidence
+        description: Of n_scores, those with a non-blank evidence note for this criterion.
+      - name: avg_score
+        description: Mean score (0..5) over n_scores; null when nothing is scored.
+      - name: avg_score_accepted
+        description: Mean score over reviews of tasks that ended ACCEPTED.
+      - name: avg_score_rejected
+        description: Mean score over reviews of tasks that ended REJECTED.
+      - name: share_with_evidence
+        description: n_with_evidence / n_scores; null when nothing is scored.
+
+  - name: mart_reviewer_calibration
+    description: >
+      One row per identified reviewer (any expert with a non-legacy review), reviewers with
+      no gold reviews included. Gold rates compare the reviewer's verdict with the gold
+      task's known answer (a gold clone scores against the gold it copies); they are null,
+      not 0, when the denominator is empty. Rates are never computed against final task
+      status, because the reviewer's own vote helps set it.
+    columns:
+      - name: reviewer_expert_id
+        data_tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments:
+                to: source('raw', 'expert')
+                field: id
+      - name: n_reviews
+        description: Identified reviews by this reviewer (gold and non-gold).
+      - name: n_task_reviews
+        description: Of n_reviews, reviews of ordinary (non-gold) tasks.
+      - name: n_gold_reviews
+        description: Reviews of gold tasks (or clones) whose known answer resolves.
+      - name: n_gold_unscorable
+        description: Reviews of gold tasks with no resolvable answer; excluded from every rate.
+      - name: gold_accuracy
+        description: n_gold_correct / n_gold_reviews (docs/pipeline.md §3, "Reviewer accuracy").
+      - name: false_accept_rate
+        description: Gold-reject items the reviewer accepted / gold-reject items reviewed (n_gold_bad).
+      - name: false_reject_rate
+        description: Gold-accept items the reviewer rejected / gold-accept items reviewed (n_gold_good).
+      - name: flagged_for_recalibration
+        description: >
+          At least GOLD_MIN_REVIEWS (5) gold reviews and gold_accuracy below
+          GOLD_ACCURACY_MIN (0.8), as in review-protocol.ts; false below 5 gold reviews.
+
+unit_tests:
+  - name: task_quality_counts_decided_non_gold_reviews
+    description: >
+      Only decided, non-gold tasks count; legacy reviews count toward scores but carry no
+      evidence; a blank note is not evidence; an unscored criterion lowers n_scores.
+    model: mart_task_quality
+    given:
+      - input: ref('stg_tasks')
+        rows:
+          - {task_id: A, is_gold: false, status: ACCEPTED}
+          - {task_id: R, is_gold: false, status: REJECTED}
+          - {task_id: P, is_gold: false, status: IN_REVIEW}
+          - {task_id: G, is_gold: true,  status: REJECTED}
+      - input: ref('stg_reviews')
+        rows:
+          - {review_id: r1, task_id: A, is_legacy: false, scores_json: '{"verifiable": 5, "unambiguous": 4, "correct_reference": 4, "complete_constraints": 4, "difficulty": 2}', evidence_json: '{"verifiable": "sizes given", "unambiguous": "one reading", "correct_reference": "matches", "complete_constraints": "  ", "difficulty": "easy"}'}
+          - {review_id: r2, task_id: R, is_legacy: false, scores_json: '{"verifiable": 2, "unambiguous": 3, "correct_reference": 1, "complete_constraints": 2, "difficulty": 3}', evidence_json: '{"verifiable": "no tolerances", "unambiguous": "ok", "correct_reference": "wrong hole", "complete_constraints": "missing depth", "difficulty": "medium"}'}
+          - {review_id: r3, task_id: R, is_legacy: true,  scores_json: '{"verifiable": 3, "unambiguous": 3, "correct_reference": 3, "complete_constraints": 3}', evidence_json: null}
+          - {review_id: r4, task_id: P, is_legacy: false, scores_json: '{"verifiable": 0, "unambiguous": 0, "correct_reference": 0, "complete_constraints": 0, "difficulty": 0}', evidence_json: '{"verifiable": "x", "unambiguous": "x", "correct_reference": "x", "complete_constraints": "x", "difficulty": "x"}'}
+          - {review_id: r5, task_id: G, is_legacy: false, scores_json: '{"verifiable": 0, "unambiguous": 0, "correct_reference": 0, "complete_constraints": 0, "difficulty": 0}', evidence_json: '{"verifiable": "x", "unambiguous": "x", "correct_reference": "x", "complete_constraints": "x", "difficulty": "x"}'}
+    expect:
+      rows:
+        - {criterion: verifiable,           n_tasks: 2, n_scores: 3, n_legacy_scores: 1, n_with_evidence: 2, avg_score: 3.33, avg_score_accepted: 5.0, avg_score_rejected: 2.5, share_with_evidence: 0.667}
+        - {criterion: unambiguous,          n_tasks: 2, n_scores: 3, n_legacy_scores: 1, n_with_evidence: 2, avg_score: 3.33, avg_score_accepted: 4.0, avg_score_rejected: 3.0, share_with_evidence: 0.667}
+        - {criterion: correct_reference,    n_tasks: 2, n_scores: 3, n_legacy_scores: 1, n_with_evidence: 2, avg_score: 2.67, avg_score_accepted: 4.0, avg_score_rejected: 2.0, share_with_evidence: 0.667}
+        - {criterion: complete_constraints, n_tasks: 2, n_scores: 3, n_legacy_scores: 1, n_with_evidence: 1, avg_score: 3.0,  avg_score_accepted: 4.0, avg_score_rejected: 2.5, share_with_evidence: 0.333}
+        - {criterion: difficulty,           n_tasks: 2, n_scores: 2, n_legacy_scores: 0, n_with_evidence: 2, avg_score: 2.5,  avg_score_accepted: 2.0, avg_score_rejected: 3.0, share_with_evidence: 1.0}
+
+  - name: reviewer_calibration_scores_against_gold_answers
+    description: >
+      A correct gold verdict, a false accept on a clone (answer taken from its source), a
+      false reject, an unscorable gold, a legacy review (ignored) and a reviewer with no
+      gold at all (rates null, not 0).
+    model: mart_reviewer_calibration
+    given:
+      - input: ref('stg_tasks')
+        rows:
+          - {task_id: G_GOOD, is_gold: true,  gold_expected_accept: true,  gold_source_id: null}
+          - {task_id: G_BAD,  is_gold: true,  gold_expected_accept: false, gold_source_id: null}
+          - {task_id: CLONE,  is_gold: true,  gold_expected_accept: null,  gold_source_id: G_BAD}
+          - {task_id: G_NONE, is_gold: true,  gold_expected_accept: null,  gold_source_id: null}
+          - {task_id: T1,     is_gold: false, gold_expected_accept: null,  gold_source_id: null}
+      - input: ref('stg_reviews')
+        rows:
+          - {review_id: a1, task_id: G_GOOD, reviewer_expert_id: A, is_legacy: false, accepted: true}
+          - {review_id: a2, task_id: CLONE,  reviewer_expert_id: A, is_legacy: false, accepted: true}
+          - {review_id: a3, task_id: G_NONE, reviewer_expert_id: A, is_legacy: false, accepted: true}
+          - {review_id: b1, task_id: G_GOOD, reviewer_expert_id: B, is_legacy: false, accepted: false}
+          - {review_id: b2, task_id: T1,     reviewer_expert_id: B, is_legacy: false, accepted: true}
+          - {review_id: c1, task_id: T1,     reviewer_expert_id: C, is_legacy: false, accepted: false}
+          - {review_id: l1, task_id: G_BAD,  reviewer_expert_id: null, is_legacy: true, accepted: true}
+      - input: source('raw', 'expert')
+        rows:
+          - {id: A, name: Ada}
+          - {id: B, name: Ben}
+          - {id: C, name: Cy}
+    expect:
+      rows:
+        - {reviewer_expert_id: A, reviewer_name: Ada, n_reviews: 3, n_task_reviews: 0, n_gold_reviews: 2, n_gold_unscorable: 1, n_gold_correct: 1, n_gold_bad: 1, n_false_accepts: 1, n_gold_good: 1, n_false_rejects: 0, gold_accuracy: 0.5,  false_accept_rate: 1.0,  false_reject_rate: 0.0,  flagged_for_recalibration: false}
+        - {reviewer_expert_id: B, reviewer_name: Ben, n_reviews: 2, n_task_reviews: 1, n_gold_reviews: 1, n_gold_unscorable: 0, n_gold_correct: 0, n_gold_bad: 0, n_false_accepts: 0, n_gold_good: 1, n_false_rejects: 1, gold_accuracy: 0.0,  false_accept_rate: null, false_reject_rate: 1.0,  flagged_for_recalibration: false}
+        - {reviewer_expert_id: C, reviewer_name: Cy,  n_reviews: 1, n_task_reviews: 1, n_gold_reviews: 0, n_gold_unscorable: 0, n_gold_correct: 0, n_gold_bad: 0, n_false_accepts: 0, n_gold_good: 0, n_false_rejects: 0, gold_accuracy: null, false_accept_rate: null, false_reject_rate: null, flagged_for_recalibration: false}

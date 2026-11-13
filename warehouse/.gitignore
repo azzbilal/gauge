@@ -6,3 +6,6 @@ dbt/dbt_packages/
 dbt/.user.yml
 logs/
 __pycache__/
+dagster/.dagster_home/
+dashboard/snapshot.json
+dashboard/snapshot.js
