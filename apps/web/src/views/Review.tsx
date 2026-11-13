@@ -209,7 +209,8 @@ export function ReviewView({ user, taskId }: { user: AuthUser; taskId?: string }
                   <span className="rv-row-prompt">{t.prompt}</span>
                   <span className="rv-row-meta">
                     <span className="rv-row-who">
-                      {t.author.name} · {t.campaign.name}
+                      {t.author ? `${t.author.name} · ` : ''}
+                      {t.campaign.name}
                     </span>
                     <span className="rv-dots" role="img" aria-label={`${done} of ${REVIEWS_REQUIRED} reviews`}>
                       {Array.from({ length: REVIEWS_REQUIRED }, (_, i) => (

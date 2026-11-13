@@ -74,10 +74,22 @@ their own actions would leave it in. Before they review it, it is `SUBMITTED` wi
 After they review it, it is `IN_REVIEW` with their one review, like any task after a first
 review. Other reviewers' gold reviews are never shown. In the queue, the gold task is not
 pinned to the head: it sits somewhere in the first five rows and moves up as the reviewer
-works through their block of five. For reviewers, those first rows are in a per-reviewer order
-that is redrawn after each review, not by age, so an out-of-order `createdAt` does not single
-the gold task out. Task views omit `updatedAt`, because a review writes a normal task's row but
-never a gold one's.
+works through their block of five. Regular tasks are ordered by a hash of their id, not by age,
+and that order is the same for every reviewer and does not move between reviews. With only the
+first rows shuffled, the gold task was the one head row newer than the row after the head;
+hiding `createdAt` would not fix that, because task ids are cuids that carry their creation
+time. A per-reviewer order redrawn after each review was tried and dropped: the gold row, which
+climbs one place per review, became the one row that kept its place, and the two reviewers of a
+task were sent to different tasks, so second reviews stalled. The cost of the shared order is
+that the oldest work is no longer drained first. Task views omit `updatedAt`, because a review
+writes a normal task's row but never a gold one's.
+
+A reviewer sees a gold task only where their queue would show it: the one gold task due to
+them now, and gold they have already reviewed. The plain task list, the queue, a campaign
+filter and a single-task read all agree on it; any other gold task answers like a missing id.
+Authors and adjudicators see no gold at all; admins see all of it. Review is blind: reviewers
+and adjudicators do not see a task's author, since only an admin writes gold and an admin
+author would mark it.
 
 **Reviewer accuracy** = gold reviews whose verdict matches the known answer ÷ gold reviews.
 A reviewer is flagged below **0.8**, once they have at least **5** gold reviews. The flag is

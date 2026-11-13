@@ -94,7 +94,8 @@ export interface Task {
   reference: string | null;
   status: string;
   campaign: { id: string; name: string };
-  author: { id: string; name: string };
+  /** Null for reviewers and adjudicators: review is blind to who wrote the task. */
+  author: { id: string; name: string } | null;
   taskReviews: TaskReview[];
   reviewState: ReviewState;
   adjudication: Adjudication | null;

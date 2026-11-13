@@ -447,29 +447,100 @@ describe('goldSlot / buildQueue (gold is not always at the head of the queue)', 
     expect(regularOutOfOrder.length).toBeGreaterThan(0);
   });
 
-  it('does not leave an old task stuck in the head while newer ones pass it', () => {
-    // A head-taking reviewer works 150 reviews into a 200-task backlog. A fixed per-task
-    // order would keep the unluckiest tasks in the head for good; a redrawn one takes each
-    // head task with odds of about one in five per review.
+  /** A backlog with cuid-like ids: one per trial, so a test does not rest on one hash draw. */
+  function backlog(trial: number, n: number): Row[] {
+    let seed = trial * 2654435761 + 1;
+    const rnd = () => (seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) % 36;
+    return Array.from({ length: n }, (_, i) => ({
+      id: `c${(1_700_000_000_000 + i * 60_000).toString(36)}${i.toString(36).padStart(4, '0')}${Array.from({ length: 8 }, () => rnd().toString(36)).join('')}`,
+      createdAt: i,
+    }));
+  }
+
+  it('keeps regular rows in the same relative order from one review to the next', () => {
     for (const reviewer of ['alice', 'bob', 'carol']) {
-      const since = new Map<string, number>();
-      let longest = 0;
-      walk(reviewer, 150).forEach((s, step) => {
-        const head = s.queue.slice(0, 6).filter((t) => !t.gold);
-        for (const t of head) {
-          if (!since.has(t.id)) since.set(t.id, step);
-          longest = Math.max(longest, step - (since.get(t.id) as number));
-        }
-      });
-      expect(longest).toBeLessThan(60);
+      const steps = walk(reviewer, 40);
+      for (let i = 1; i < steps.length; i++) {
+        const before = steps[i - 1].queue.filter((t) => !t.gold).map((t) => t.id);
+        const after = steps[i].queue.filter((t) => !t.gold).map((t) => t.id);
+        expect(after).toEqual(before.filter((id) => after.includes(id)));
+      }
     }
   });
 
-  it('keeps the queue oldest first beyond the head', () => {
-    const regular: Row[] = Array.from({ length: 20 }, (_, i) => ({ id: `t${i}`, createdAt: i }));
-    const queue = buildQueue('alice', regular, [], 0, 0);
-    expect(queue.slice(5).map((t) => t.createdAt)).toEqual([...Array(15).keys()].map((i) => i + 5));
-    expect(queue.slice(0, 5).map((t) => t.createdAt).sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4]);
+  it('never leaves the gold task as the only row that kept its place in the head', () => {
+    // Redrawing the order after each review left exactly that tell: the gold row climbs one
+    // place per review, so it was the one row of the first six still there on the next fetch.
+    let pairs = 0;
+    for (const reviewer of Array.from({ length: 40 }, (_, i) => `r${i}`)) {
+      const steps = walk(reviewer, 40);
+      for (let i = 1; i < steps.length; i++) {
+        const before = steps[i - 1].queue.slice(0, 6);
+        const after = steps[i].queue.slice(0, 6);
+        if (!before.some((t) => t.gold) || !after.some((t) => t.gold)) continue;
+        pairs += 1;
+        const kept = after.filter((t) => before.some((b) => b.id === t.id));
+        expect(kept.filter((t) => !t.gold).length).toBeGreaterThan(0);
+      }
+    }
+    expect(pairs).toBeGreaterThan(100);
+  });
+
+  it('orders the queue the same for every reviewer, and not by age', () => {
+    // Task ids are cuids and carry their creation time, so withholding createdAt would not
+    // hide age: the order itself must not follow it.
+    for (let trial = 0; trial < 20; trial++) {
+      const regular = backlog(trial, 20);
+      const orders = ['alice', 'bob', 'carol'].map((r, i) => buildQueue(r, regular, [], i * 3, 99));
+      expect(orders[1]).toEqual(orders[0]);
+      expect(orders[2]).toEqual(orders[0]);
+      const ages = orders[0].map((t) => t.createdAt);
+      expect(ages).not.toEqual([...ages].sort((x, y) => x - y));
+      expect([...orders[0]].sort((x, y) => x.createdAt - y.createdAt)).toEqual(regular);
+    }
+  });
+
+  it('does not single out a gold task newer than the sixth-oldest regular task', () => {
+    // The attack from review: in the head (the gold row plus five regular ones), the gold
+    // row was the only one newer than the row at position 6, because the head held the five
+    // oldest regular tasks. Over many backlogs, reviewers and histories, that rule must do
+    // no better than guessing one row of six.
+    const gold: Row = { id: 'gold-task', createdAt: 10.5, gold: true }; // newer than the 6th oldest
+    let shown = 0;
+    let caught = 0;
+    for (let trial = 0; trial < 300; trial++) {
+      const regular = backlog(trial, 20);
+      for (let total = 0; total < 5; total++) {
+        const queue = buildQueue(`r${trial}`, regular, [gold], total, 0);
+        if (!queue.includes(gold)) continue;
+        shown += 1;
+        const pivot = queue[6].createdAt;
+        const newer = queue.slice(0, 6).filter((t) => t.createdAt > pivot);
+        if (newer.length === 1 && newer[0] === gold) caught += 1;
+      }
+    }
+    expect(shown).toBeGreaterThan(1000);
+    expect(caught / shown).toBeLessThan(1 / 6);
+  });
+
+  it('sends two reviewers to the same tasks, so tasks get their second review', () => {
+    // Two reviewers alternate, each taking the head of their own queue. A shared order has
+    // them finish nearly every task they start; per-reviewer orders scattered them (10 tasks
+    // finished of 100 started, on a backlog of 1000).
+    for (const [n, k] of [
+      [200, 50],
+      [1000, 100],
+    ]) {
+      const tasks = backlog(n, n).map((t) => ({ ...t, reviews: [] as string[] }));
+      const done: Record<string, number> = { ann: 0, bob: 0 };
+      for (let step = 0; step < 2 * k; step++) {
+        const r = step % 2 ? 'bob' : 'ann';
+        const open = tasks.filter((t) => t.reviews.length < 2 && !t.reviews.includes(r));
+        buildQueue(r, open, [], done[r], 99)[0].reviews.push(r);
+        done[r] += 1;
+      }
+      expect(tasks.filter((t) => t.reviews.length === 2).length).toBeGreaterThanOrEqual(0.9 * k);
+    }
   });
 
   it('serves no gold once the block has had its gold, and gold first when behind', () => {

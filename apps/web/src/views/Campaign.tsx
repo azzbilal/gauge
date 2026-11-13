@@ -106,7 +106,7 @@ export function CampaignView({ id }: { id: string }) {
                 <a className="cd-row" href={`#/review/${t.id}`}>
                   <span className="cd-row-prompt">{t.prompt}</span>
                   <span className="cd-row-meta">
-                    <span className="cd-row-who">{t.author.name}</span>
+                    {t.author && <span className="cd-row-who">{t.author.name}</span>}
                     <span className={`rv-status${word === 'split' ? ' split' : ''}`}>{word}</span>
                   </span>
                 </a>

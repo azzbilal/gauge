@@ -31,7 +31,7 @@ import {
   buildQueue,
   calibrationReport,
   consensus,
-  goldOrder,
+  dueGold,
   isAccepted,
 } from './review-protocol';
 
@@ -122,44 +122,55 @@ export class TaskService {
   ) {}
 
   /**
-   * All tasks, newest first, as `viewer` sees them. With `queue` it becomes the viewer's
-   * work queue: only tasks their role lets them act on, oldest first, with one gold task
-   * placed somewhere in the head of the queue in ~20% of their reviews (see buildQueue).
+   * All tasks the viewer may see, newest first. With `queue` it becomes the viewer's work
+   * queue: only tasks their role lets them act on. A reviewer's queue is in one shared order
+   * that ignores age, with one gold task in its first rows in ~20% of their reviews (see
+   * buildQueue); anyone else's is oldest first.
+   *
+   * Gold shows up only where the viewer would meet it in their queue: the one gold task due
+   * to them now, and gold they have already reviewed. The plain list, the queue, a campaign
+   * filter and a single task all agree on that, so diffing them points at nothing.
    */
   async list(viewer: AuthUser, campaignId?: string, queue = false) {
     const reviewerId = viewer.expertId;
-    const tasks = await this.prisma.task.findMany({
-      where: campaignId ? { campaignId } : undefined,
-      orderBy: { createdAt: queue ? 'asc' : 'desc' },
+    // Every campaign, not just the filtered one: which gold is due follows the reviewer's
+    // whole history, so it must not change with the filter.
+    const all = await this.prisma.task.findMany({
+      orderBy: { createdAt: 'asc' },
       include: TASK_INCLUDE,
     });
-    const adjudications = await this.adjudicationsFor(tasks.map((t) => t.id));
+    const adjudications = await this.adjudicationsFor(all.map((t) => t.id));
+    const gold = this.goldFor(viewer, all, adjudications);
+    const tasks = all.filter(
+      (t) => (!campaignId || t.campaignId === campaignId) && this.visible(t, viewer, gold.due),
+    );
     const view = (t: TaskRow) => this.toView(t, viewer, adjudications.get(t.id));
 
-    if (!queue) return tasks.map(view);
+    if (!queue) return [...tasks].reverse().map(view);
 
     const actionable = tasks.filter((t) => this.canAct(t, viewer, adjudications.get(t.id)));
     // Gold only reaches people who review; anyone else keeps a plain oldest-first queue.
-    if (viewer.role !== Role.REVIEWER && viewer.role !== Role.ADMIN) {
+    if (!this.reviews(viewer)) {
       return actionable.map(view);
     }
     const regular = actionable.filter((t) => !t.isGold);
-    const gold = goldOrder(
-      reviewerId,
-      actionable.filter((t) => t.isGold),
-    );
-
-    // Where the gold task goes is decided by this reviewer's own history (~20% of
-    // their reviews), not by a fixed position.
-    const mine = tasks.filter((t) => t.taskReviews.some((r) => r.reviewerExpertId === reviewerId));
-    const goldDone = mine.filter((t) => t.isGold).length;
-    return buildQueue(reviewerId, regular, gold, mine.length, goldDone).map(view);
+    // Only gold.due is ever served, even to an admin, who sees every gold task in the list.
+    const due = gold.due && actionable.some((t) => t.id === gold.due?.id) ? [gold.due] : [];
+    return buildQueue(reviewerId, regular, due, gold.total, gold.done).map(view);
   }
 
   async get(id: string, viewer: AuthUser) {
     const task = await this.prisma.task.findUnique({ where: { id }, include: TASK_INCLUDE });
     if (!task) {
       throw new NotFoundException(`Task "${id}" not found`);
+    }
+    if (task.isGold && !this.visible(task, viewer, null)) {
+      // Only the gold due to this viewer now may be read; the rest answer like a missing id.
+      const all = await this.prisma.task.findMany({ include: TASK_INCLUDE });
+      const due = this.goldFor(viewer, all, await this.adjudicationsFor(all.map((t) => t.id))).due;
+      if (due?.id !== id) {
+        throw new NotFoundException(`Task "${id}" not found`);
+      }
     }
     return this.toView(task, viewer, (await this.adjudicationsFor([id])).get(id));
   }
@@ -635,6 +646,40 @@ export class TaskService {
     return new Map(decisions.map((d) => [d.subjectId, d]));
   }
 
+  /** Does this user's role review tasks (and so get gold mixed into their queue)? */
+  private reviews(user: AuthUser): boolean {
+    return user.role === Role.REVIEWER || user.role === Role.ADMIN;
+  }
+
+  /**
+   * This reviewer's history and the one gold task due to them now (null when none is),
+   * decided from every task in every campaign. The single source for the queue, the plain
+   * list and a single read, so they cannot disagree.
+   */
+  private goldFor(
+    viewer: AuthUser,
+    all: TaskRow[],
+    adjudications: Map<string, ReviewDecision>,
+  ): { due: TaskRow | null; total: number; done: number } {
+    const reviewerId = viewer.expertId;
+    const mine = all.filter((t) => t.taskReviews.some((r) => r.reviewerExpertId === reviewerId));
+    const done = mine.filter((t) => t.isGold).length;
+    if (!this.reviews(viewer)) return { due: null, total: mine.length, done };
+    const candidates = all.filter((t) => t.isGold && this.canAct(t, viewer, adjudications.get(t.id)));
+    return { due: dueGold(reviewerId, candidates, mine.length, done), total: mine.length, done };
+  }
+
+  /**
+   * May this viewer see this task at all? Every normal task, yes. A gold task only if they
+   * are an admin, have reviewed it, or it is the one due to them now: a gold task that sits
+   * open with no reviews but never reaches their queue would give itself away.
+   */
+  private visible(task: TaskRow, viewer: AuthUser, due: TaskRow | null): boolean {
+    if (!task.isGold || viewer.role === Role.ADMIN) return true;
+    if (task.taskReviews.some((r) => r.reviewerExpertId === viewer.expertId)) return true;
+    return due?.id === task.id;
+  }
+
   /**
    * May this user act on this task right now? Reviewers see tasks open for a peer review
    * (gold included), adjudicators see split tasks, an admin sees both, an author neither.
@@ -665,13 +710,21 @@ export class TaskService {
    * actions would have left it: nobody has reviewed it yet, or — once the viewer has —
    * it has their one review and waits for a second, exactly like a normal task after its
    * first review. Other reviewers' gold reviews are never shown (there can be many).
+   *
+   * Review is blind: reviewers and adjudicators get `authorId` and `author` as null. Only an
+   * admin writes gold, so an admin author would otherwise mark every gold task. Admins and a
+   * task's own author still see who wrote it.
    */
   private toView(task: TaskRow, viewer: AuthUser, adjudication?: ReviewDecision) {
     // updatedAt is withheld for every task: a review writes a normal task's row but never
     // a gold one's, so the update time would tell them apart.
-    const { isGold, goldExpectedAccept, updatedAt, taskReviews, ...rest } = task;
+    const { isGold, goldExpectedAccept, updatedAt, taskReviews, ...row } = task;
     void goldExpectedAccept;
     void updatedAt;
+    const blind =
+      (viewer.role === Role.REVIEWER || viewer.role === Role.ADJUDICATOR) &&
+      task.authorId !== viewer.expertId;
+    const rest = blind ? { ...row, authorId: null, author: null } : row;
 
     if (isGold) {
       const own = taskReviews.find((r) => r.reviewerExpertId === viewer.expertId);

@@ -268,16 +268,25 @@ export function goldSlot(
 }
 
 /**
- * A reviewer's work queue: regular tasks oldest first, with at most one gold task.
+ * A reviewer's work queue: regular tasks in one shared order that ignores age, with at most
+ * one gold task.
  *
- * Moving the gold task off the head is not enough on its own: in a strictly
- * chronological list, the one row whose `createdAt` is out of order would still be the
- * gold one. So the head of the queue — the first GOLD_BLOCK regular tasks, the only
- * stretch the gold task can land in — is put in a per-reviewer order rather than by age,
- * and out-of-order rows there are normal. Beyond the head the queue stays oldest first,
- * so old work is still drained first.
+ * Moving the gold task off the head is not enough on its own. In any age-ordered queue the
+ * gold row, which can land in the head whatever its age, would be the one whose age does not
+ * fit its place: with only the head shuffled, it was the one head row newer than the row
+ * after the head. Withholding `createdAt` would not help, because task ids are cuids that
+ * carry their creation time, and the plain list is newest first anyway. So regular tasks are
+ * ordered by a hash of their id, and no row's place says anything about how old it is.
  *
- * `regular` must already be oldest first; `gold` is the candidates in serving order.
+ * The order is the same for every reviewer and does not move between reviews:
+ *  - Redrawing it after each review left the gold row, which climbs one place per review,
+ *    as the one row that kept its place in the head.
+ *  - A different order per reviewer sends the two reviewers of a task to different tasks,
+ *    so second reviews, and with them decisions, come far later.
+ * The cost is that old work is not drained first, and a task whose hash sorts late waits
+ * behind every task that sorts earlier for as long as new work keeps arriving.
+ *
+ * `gold` is the candidates in serving order; only the one `dueGold` picks is served.
  */
 export function buildQueue<T extends { id: string }>(
   reviewerId: string,
@@ -286,16 +295,28 @@ export function buildQueue<T extends { id: string }>(
   totalReviews: number,
   goldReviews: number,
 ): T[] {
-  // Salted with the review count: the order holds across refetches but is redrawn after
-  // every review, so no old task sits in the head forever behind luckier ones, and the
-  // gold row is not the only one that moves relative to its neighbours.
-  const key = (t: T) => stableHash(`${reviewerId}:${totalReviews}:${t.id}`);
-  const head = [...regular.slice(0, GOLD_BLOCK)].sort((a, b) => key(a) - key(b));
-  const queue = [...head, ...regular.slice(GOLD_BLOCK)];
-  const index = goldSlot(reviewerId, totalReviews, goldReviews);
-  if (gold.length === 0 || index === null) return queue;
-  queue.splice(Math.min(index, queue.length), 0, gold[0]);
+  const key = (t: T) => stableHash(t.id);
+  const queue = [...regular].sort((a, b) => key(a) - key(b) || (a.id < b.id ? -1 : 1));
+  const due = dueGold(reviewerId, gold, totalReviews, goldReviews);
+  if (!due) return queue;
+  const index = goldSlot(reviewerId, totalReviews, goldReviews) as number;
+  queue.splice(Math.min(index, queue.length), 0, due);
   return queue;
+}
+
+/**
+ * The one gold task this reviewer's queue serves right now, or null. Everything that shows
+ * a reviewer tasks (the queue, the plain list, a single task) must agree on it, or diffing
+ * two of them would point at the gold tasks that are not due.
+ */
+export function dueGold<T extends { id: string }>(
+  reviewerId: string,
+  gold: T[],
+  totalReviews: number,
+  goldReviews: number,
+): T | null {
+  if (gold.length === 0 || goldSlot(reviewerId, totalReviews, goldReviews) === null) return null;
+  return goldOrder(reviewerId, gold)[0];
 }
 
 /** Order gold candidates differently for each reviewer, but stably. */
@@ -305,13 +326,22 @@ export function goldOrder<T extends { id: string }>(reviewerId: string, gold: T[
   );
 }
 
-/** FNV-1a: a small, stable, non-cryptographic string hash. */
+/**
+ * FNV-1a, then the murmur3 finaliser: a small, stable, non-cryptographic string hash. FNV-1a
+ * alone mixes the last characters weakly, so ids that differ only at the end (`t1`, `t2`)
+ * would sort in runs; the finaliser spreads them.
+ */
 function stableHash(text: string): number {
   let h = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) {
     h ^= text.charCodeAt(i);
     h = Math.imul(h, 0x01000193);
   }
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
   return h >>> 0;
 }
 
