@@ -10,6 +10,8 @@ export interface RegisterDto extends LoginDto {
   name: string;
   /** Only an admin may set this; anyone else registers as an author. */
   role?: Role;
+  /** Only an admin may set this: the designated lead (docs/pipeline.md §2.1). */
+  lead?: boolean;
 }
 
 export const PASSWORD_MIN = 8;
@@ -52,5 +54,9 @@ export function parseRegisterDto(body: unknown): RegisterDto {
     }
     role = r as Role;
   }
-  return { name: b.name.trim(), email: email(b.email), password: b.password, role };
+  if (b.lead !== undefined && b.lead !== null && typeof b.lead !== 'boolean') {
+    throw new BadRequestException('lead must be true or false');
+  }
+  const lead = typeof b.lead === 'boolean' ? b.lead : undefined;
+  return { name: b.name.trim(), email: email(b.email), password: b.password, role, lead };
 }

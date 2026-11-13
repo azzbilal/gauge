@@ -48,7 +48,7 @@ export class JwtAuthGuard implements CanActivate {
     // Outside the try: a database that is down is a 5xx, not a reason to sign everyone out.
     const user: AuthUser | null = await this.prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { id: true, name: true, email: true, role: true, expertId: true },
+      select: { id: true, name: true, email: true, role: true, isLead: true, expertId: true },
     });
     // A bad token is refused even on a public route: the client believes it is signed in.
     if (!user) {

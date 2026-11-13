@@ -70,7 +70,10 @@ API will not start. `npm run prisma:seed` creates two logins: `admin@gauge.local
 `gauge-admin-dev` and `reviewer@gauge.local` / `gauge-reviewer-dev` (override with
 `SEED_ADMIN_PASSWORD` / `SEED_REVIEWER_PASSWORD`). Roles: an **author** creates tasks, a
 **reviewer** reviews them, an **adjudicator** resolves split reviews, an **admin** may do all
-three. Public registration creates authors; an admin's token may register any role:
+three. Public registration creates authors; an admin's token may register any role, and may
+designate the **lead** (`"lead": true`, any role). In a small team with no independent third
+expert, the lead or an admin may adjudicate a split they wrote or reviewed
+(`docs/pipeline.md` §2.1):
 
 ```bash
 curl -X POST http://localhost:3000/auth/register -H "Authorization: Bearer $ADMIN_TOKEN" \

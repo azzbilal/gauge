@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { describe, expect, it } from 'vitest';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { CheckMethod, Prisma, Role, TaskStatus, VerifySubjectType } from '@prisma/client';
 import { AuthUser } from '../auth/auth.decorators';
 import { CampaignService } from './campaign.service';
@@ -14,8 +14,8 @@ const created = new Date('2026-11-01T10:00:00Z');
 const reviewedAt = new Date('2026-11-02T09:30:00Z');
 const at = (minutes: number) => new Date(created.getTime() + minutes * 60_000);
 
-function user(expertId: string, role: Role = Role.REVIEWER): AuthUser {
-  return { id: `u-${expertId}`, name: expertId, email: `${expertId}@x`, role, expertId };
+function user(expertId: string, role: Role = Role.REVIEWER, isLead = false): AuthUser {
+  return { id: `u-${expertId}`, name: expertId, email: `${expertId}@x`, role, isLead, expertId };
 }
 
 /** New reviewers: a gold review is owed in their first block, so their first fetch clones. */
@@ -96,9 +96,25 @@ function matches(row: Record<string, unknown>, where?: Where): boolean {
   );
 }
 
-/** An in-memory Prisma: tasks with their reviews, Layer 2 rows, events. */
-function fakeDb(rows: Row[]) {
+/** A task's adjudication record, as the service reads and writes it. */
+type Decision = {
+  id: string;
+  subjectType: string;
+  subjectId: string;
+  verdict: string;
+  reason: string | null;
+  reviewerId: string;
+  createdAt: Date;
+};
+
+/**
+ * An in-memory Prisma: tasks with their reviews, Layer 2 rows, events, the users (logins)
+ * and the adjudication records.
+ */
+function fakeDb(rows: Row[], extra: { users?: AuthUser[]; decisions?: Decision[] } = {}) {
   let seq = 0;
+  const users = extra.users ?? [];
+  const decisions = (extra.decisions ?? []).map((d) => ({ ...d }));
   let clock = at(10_000).getTime();
   const tasks = rows.map((r) => ({ ...r, taskReviews: [...r.taskReviews] }));
   const layer2 = {
@@ -222,7 +238,24 @@ function fakeDb(rows: Row[]) {
     lintFinding: table('lintFinding'),
     verifierRun: table('verifierRun'),
     probeRun: table('probeRun'),
-    reviewDecision: { findMany: async () => [], findFirst: async () => null },
+    reviewDecision: {
+      findMany: async ({ where }: { where: { subjectId: { in: string[] } } }) =>
+        decisions.filter((d) => where.subjectId.in.includes(d.subjectId)).map((d) => ({ ...d })),
+      findFirst: async ({ where }: { where: Partial<Decision> }) =>
+        decisions.find((d) => matches(d, where as Where)) ?? null,
+      update: async ({ where, data }: { where: { id: string }; data: Partial<Decision> }) => {
+        const d = decisions.find((x) => x.id === where.id) as Decision;
+        Object.assign(d, data);
+        return { ...d };
+      },
+    },
+    // The one query the service makes: everyone who may adjudicate (role, or the lead flag).
+    user: {
+      findMany: async () =>
+        users
+          .filter((u) => u.role === Role.ADJUDICATOR || u.role === Role.ADMIN || u.isLead)
+          .map((u) => ({ expertId: u.expertId, role: u.role, isLead: u.isLead })),
+    },
     event: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
         events.push(data);
@@ -251,6 +284,7 @@ function fakeDb(rows: Row[]) {
     tasks,
     layer2,
     events,
+    decisions,
     service: new TaskService(prisma as never, {} as never),
     campaigns: new CampaignService(prisma as never),
   };
@@ -423,8 +457,10 @@ describe('gold clone: written for one reviewer when gold falls due', () => {
     expect(v.lintFindings).toHaveLength(1);
     expect(v.verifierRuns).toHaveLength(1);
     const text = JSON.stringify(v);
+    // Whole words only: a random cuid may hold "g0" inside it (e.g. "c…rg0al…"), which is not
+    // the gold's id. A leaked id stands alone: "g0" as a value, or "g0 is vague" in a detail.
     for (const leak of ['g0', 'req-src', 'ri-src', 'lf-src', 'vr-src']) {
-      expect(text).not.toContain(leak);
+      expect(text).not.toMatch(new RegExp(`\\b${leak}\\b`));
     }
     expect(v.verifierRuns[0]).toMatchObject({ taskId: cloneId, subjectId: cloneId });
     // Written with the clone, at its backdated time (the source's rows are at its createdAt),
@@ -599,10 +635,18 @@ describe('visibility: a hidden gold id answers like a missing one, on every endp
     await expect(db.service.verification(cloneId, owner)).resolves.toMatchObject({
       taskId: cloneId,
     });
-    // Not split, so not awaiting adjudication: the same answer as for a normal task.
-    await expect(
-      db.service.adjudicate(cloneId, { verdict: 'accept', reason: 'x' }, owner),
-    ).rejects.toBeInstanceOf(ConflictException);
+    // The same answer as for a normal task: a plain reviewer may not adjudicate (403), and
+    // to one who may, it is not split, so not awaiting adjudication (409).
+    for (const [as, err] of [
+      [owner, ForbiddenException],
+      [{ ...owner, isLead: true }, ConflictException],
+    ] as const) {
+      for (const id of [cloneId, 'n0']) {
+        await expect(
+          db.service.adjudicate(id, { verdict: 'accept', reason: 'x' }, as),
+        ).rejects.toBeInstanceOf(err);
+      }
+    }
   });
 
   it('keeps every campaign filter in agreement with the unfiltered list', async () => {
@@ -645,9 +689,15 @@ describe('campaign count: what the viewer can see, never the hidden gold', () =>
 });
 
 describe('task view: review is blind to the author', () => {
-  it('hides the author from reviewers and adjudicators, in the list, the queue and a task', async () => {
+  it('hides the author from reviewers, adjudicators and the lead, in the list, the queue and a task', async () => {
     const db = fakeDb(backlog());
-    for (const viewer of [user(dueNow(1)[0]), user('adj', Role.ADJUDICATOR)]) {
+    const viewers = [
+      user(dueNow(1)[0]),
+      user('adj', Role.ADJUDICATOR),
+      // The lead adjudicates whatever their role, so an author-role lead is blind too.
+      user('lee', Role.AUTHOR, true),
+    ];
+    for (const viewer of viewers) {
       const views = [
         ...(await db.service.list(viewer)),
         ...(await db.service.list(viewer, undefined, true)),
@@ -684,5 +734,139 @@ describe('task view: reviews stay hidden while the second is open', () => {
     expect(v.taskReviews).toEqual([
       { id: 'rn', taskId: 'n1', reviewerId: 'alice', createdAt: reviewedAt },
     ]);
+  });
+});
+
+describe('adjudication: a third expert, with a small-team escape for the lead or an admin', () => {
+  // A split: ann wrote it, rob accepted, rae rejected; the system opened an adjudication.
+  function splitDb(users: AuthUser[], authorId = 'ann') {
+    const reviews = [review('r1', 's1', 'rob', true), review('r2', 's1', 'rae', false)];
+    return fakeDb(
+      [task('s1', { gold: false, status: TaskStatus.IN_REVIEW, reviews, authorId })],
+      {
+        users,
+        decisions: [
+          {
+            id: 'd1',
+            subjectType: 'task',
+            subjectId: 's1',
+            verdict: 'NEEDS_REVIEW',
+            reason: null,
+            reviewerId: 'system',
+            createdAt: reviewedAt,
+          },
+        ],
+      },
+    );
+  }
+  const decide = (db: ReturnType<typeof splitDb>, by: AuthUser) =>
+    db.service.adjudicate('s1', { verdict: 'accept', reason: 'meets the spec' }, by);
+  const adjudicatedEvent = (db: ReturnType<typeof splitDb>) =>
+    db.events.find((e) => e.type === 'task.adjudicated')?.payload as Record<string, unknown>;
+  const queueOf = async (db: ReturnType<typeof splitDb>, u: AuthUser) =>
+    ids(await db.service.list(u, undefined, true));
+
+  const ann = user('ann', Role.AUTHOR);
+  const rob = user('rob');
+  const rae = user('rae');
+  const adj = user('adj', Role.ADJUDICATOR);
+
+  it('lets an independent adjudicator decide, and records no conflict', async () => {
+    const db = splitDb([ann, rob, rae, adj]);
+    await expect(decide(db, adj)).resolves.toMatchObject({ taskStatus: TaskStatus.ACCEPTED });
+    expect(db.tasks[0].status).toBe(TaskStatus.ACCEPTED);
+    expect(db.decisions[0]).toMatchObject({ verdict: 'APPROVE', reviewerId: 'adj' });
+    expect(adjudicatedEvent(db)).toMatchObject({ adjudicatorId: 'adj', conflict: null });
+  });
+
+  it('refuses a reviewer or the author who is not the lead, even with nobody else to decide', async () => {
+    const db = splitDb([ann, rob, rae]);
+    for (const u of [rob, rae, ann]) {
+      await expect(decide(db, u)).rejects.toBeInstanceOf(ForbiddenException);
+    }
+    // An adjudicator by role who wrote the task is still conflicted.
+    const own = splitDb([user('adj2', Role.ADJUDICATOR), rob, rae], 'adj2');
+    await expect(decide(own, user('adj2', Role.ADJUDICATOR))).rejects.toThrow(
+      'Authors cannot adjudicate their own task',
+    );
+    expect(db.tasks[0].status).toBe(TaskStatus.IN_REVIEW);
+  });
+
+  it('lets the lead decide a split they reviewed when nobody independent exists', async () => {
+    const lead = user('rae', Role.REVIEWER, true);
+    const db = splitDb([ann, rob, lead]);
+    await expect(decide(db, lead)).resolves.toMatchObject({ taskStatus: TaskStatus.ACCEPTED });
+    expect(adjudicatedEvent(db)).toMatchObject({ adjudicatorId: 'rae', conflict: 'reviewer' });
+  });
+
+  it('lets the lead decide a split they wrote when nobody independent exists', async () => {
+    const lead = user('ann', Role.AUTHOR, true);
+    const db = splitDb([lead, rob, rae]);
+    await expect(decide(db, lead)).resolves.toMatchObject({ taskStatus: TaskStatus.ACCEPTED });
+    expect(adjudicatedEvent(db)).toMatchObject({ conflict: 'author' });
+  });
+
+  it('refuses a conflicted lead while an independent adjudicator, admin or lead exists', async () => {
+    const lead = user('rae', Role.REVIEWER, true);
+    for (const other of [adj, user('boss', Role.ADMIN), user('lee', Role.AUTHOR, true)]) {
+      const db = splitDb([ann, rob, lead, other]);
+      await expect(decide(db, lead)).rejects.toThrow(
+        'A reviewer of this task cannot also adjudicate it while an independent adjudicator is available',
+      );
+      expect(db.tasks[0].status).toBe(TaskStatus.IN_REVIEW);
+      // The independent one can.
+      await expect(decide(db, other)).resolves.toMatchObject({ taskStatus: TaskStatus.ACCEPTED });
+    }
+  });
+
+  it('gives an admin the same escape: 2 people plus yourself', async () => {
+    // The admin reviewed it.
+    const me = user('rae', Role.ADMIN);
+    const db = splitDb([ann, rob, me]);
+    await expect(decide(db, me)).resolves.toMatchObject({ taskStatus: TaskStatus.ACCEPTED });
+    expect(adjudicatedEvent(db)).toMatchObject({ conflict: 'reviewer' });
+    // The admin wrote it.
+    const mine = user('ann', Role.ADMIN);
+    const db2 = splitDb([mine, rob, rae]);
+    await expect(decide(db2, mine)).resolves.toMatchObject({ taskStatus: TaskStatus.ACCEPTED });
+    expect(adjudicatedEvent(db2)).toMatchObject({ conflict: 'author' });
+    // Not while an independent adjudicator exists.
+    const db3 = splitDb([ann, rob, me, adj]);
+    await expect(decide(db3, me)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('refuses a user with no adjudicating role and no lead flag, before anything else', async () => {
+    const db = splitDb([ann, rob, rae]);
+    await expect(decide(db, user('zed'))).rejects.toThrow(
+      'This needs the adjudicator or admin role, or the lead designation',
+    );
+  });
+
+  it('puts the split in the lead\'s queue, and flags it, only when the escape applies', async () => {
+    const lead = user('rae', Role.REVIEWER, true);
+    const alone = splitDb([ann, rob, lead]);
+    expect(await queueOf(alone, lead)).toContain('s1');
+    expect(await alone.service.get('s1', lead)).toMatchObject({
+      reviewState: 'awaiting_adjudication',
+      canAdjudicate: true,
+    });
+    // The other, non-lead reviewer neither sees it to act on nor may decide it.
+    expect(await queueOf(alone, rob)).not.toContain('s1');
+    expect(await alone.service.get('s1', rob)).toMatchObject({ canAdjudicate: false });
+
+    const staffed = splitDb([ann, rob, lead, adj]);
+    expect(await queueOf(staffed, lead)).not.toContain('s1');
+    expect(await staffed.service.get('s1', lead)).toMatchObject({ canAdjudicate: false });
+    expect(await queueOf(staffed, adj)).toContain('s1');
+    expect(await staffed.service.get('s1', adj)).toMatchObject({ canAdjudicate: true });
+  });
+
+  it('still answers a hidden or missing id with 404 for the lead', async () => {
+    const db = fakeDb(backlog(), { users: [user('lee', Role.REVIEWER, true)] });
+    for (const id of [...goldIds, 'no-such-task']) {
+      await expect(
+        db.service.adjudicate(id, { verdict: 'accept', reason: 'x' }, user('lee', Role.REVIEWER, true)),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    }
   });
 });

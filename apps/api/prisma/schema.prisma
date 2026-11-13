@@ -63,6 +63,9 @@ model User {
   email        String   @unique
   passwordHash String
   role         Role     @default(AUTHOR)
+  // The designated lead (docs/pipeline.md §2.1): may adjudicate a split it is conflicted on
+  // (as author or reviewer) when nobody independent can. Admins always may.
+  isLead       Boolean  @default(false)
   expertId     String   @unique
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

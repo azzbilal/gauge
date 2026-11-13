@@ -25,9 +25,11 @@ import { VerifyUnreachableError } from '../verify/verify.errors';
 import { CreateTaskDto, PreviewTaskDto } from './dto/task.dto';
 import { AdjudicateTaskDto, CreateTaskReviewDto } from './dto/task-review.dto';
 import {
+  Adjudicator,
   REVIEWS_REQUIRED,
   ScorePair,
   Scores,
+  adjudicationRight,
   agreementReport,
   buildQueue,
   calibrationReport,
@@ -35,6 +37,7 @@ import {
   dueGold,
   goldPlace,
   isAccepted,
+  mayAdjudicate,
   placeInQueue,
 } from './review-protocol';
 import { isGoldClone, isGoldSource, visibleTo } from './task-visibility';
@@ -48,6 +51,22 @@ const VERIFIER_VERSION = 'm8-static-cad';
 
 function message(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/** The task as the adjudication rule reads it: who wrote it, who reviewed it. */
+function subjectOf(task: {
+  authorId: string;
+  taskReviews: Array<{ reviewerExpertId: string | null }>;
+}) {
+  return {
+    authorId: task.authorId,
+    reviewerExpertIds: task.taskReviews.map((r) => r.reviewerExpertId),
+  };
+}
+
+/** A split normal task whose adjudication is still open. Gold rows never split. */
+function awaitsAdjudication(task: { isGold: boolean }, adjudication?: ReviewDecision): boolean {
+  return !task.isGold && adjudication?.verdict === Verdict.NEEDS_REVIEW;
 }
 
 const TASK_INCLUDE = {
@@ -190,19 +209,22 @@ export class TaskService {
    * only, so nothing about them follows one reviewer's history.
    */
   async list(viewer: AuthUser, campaignId?: string, queue = false) {
+    const pool = await this.adjudicatorPool();
     let all = await this.loadAll();
-    if (this.reviews(viewer) && (await this.materialiseGold(viewer, all))) {
+    if (this.reviews(viewer) && (await this.materialiseGold(viewer, all, pool))) {
       all = await this.loadAll();
     }
     const tasks = all.filter(
       (t) => (!campaignId || t.campaignId === campaignId) && visibleTo(t, viewer),
     );
     const adjudications = await this.adjudicationsFor(tasks.map((t) => t.id));
-    const view = (t: TaskRow) => this.toView(t, viewer, adjudications.get(t.id));
+    const view = (t: TaskRow) => this.toView(t, viewer, adjudications.get(t.id), pool);
 
     if (!queue) return [...tasks].reverse().map(view);
 
-    const actionable = tasks.filter((t) => this.canAct(t, viewer, adjudications.get(t.id)));
+    const actionable = tasks.filter((t) =>
+      this.canAct(t, viewer, adjudications.get(t.id), pool),
+    );
     if (!this.reviews(viewer)) return actionable.map(view);
     return buildQueue(actionable).map(view);
   }
@@ -212,7 +234,8 @@ export class TaskService {
     if (!task || !visibleTo(task, viewer)) {
       throw new NotFoundException(`Task "${id}" not found`);
     }
-    return this.toView(task, viewer, (await this.adjudicationsFor([id])).get(id));
+    const adjudication = (await this.adjudicationsFor([id])).get(id);
+    return this.toView(task, viewer, adjudication, await this.adjudicatorPool());
   }
 
   async create(dto: CreateTaskDto, author: AuthUser) {
@@ -619,7 +642,9 @@ export class TaskService {
 
   /**
    * Resolve a split: a third expert, who is neither the author nor one of the two
-   * reviewers, gives the final verdict with a written reason.
+   * reviewers, gives the final verdict with a written reason. When nobody like that exists
+   * (a small team), the designated lead or an admin may adjudicate a task they wrote or
+   * reviewed; the event records which conflict the escape covered (see adjudicationRight).
    */
   async adjudicate(taskId: string, dto: AdjudicateTaskDto, adjudicator: AuthUser) {
     const adjudicatorId = adjudicator.expertId;
@@ -630,17 +655,29 @@ export class TaskService {
       if (!visibleTo(task, adjudicator)) {
         throw new NotFoundException(`Task "${taskId}" not found`);
       }
+      if (!mayAdjudicate(adjudicator)) {
+        throw new ForbiddenException(
+          'This needs the adjudicator or admin role, or the lead designation',
+        );
+      }
       const pending = await tx.reviewDecision.findFirst({
         where: { subjectType: TASK_SUBJECT, subjectId: taskId, verdict: Verdict.NEEDS_REVIEW },
       });
       if (!pending) {
         throw new ConflictException('Task is not awaiting adjudication');
       }
-      if (task.authorId === adjudicatorId) {
-        throw new ForbiddenException('Authors cannot adjudicate their own task');
-      }
-      if (task.taskReviews.some((r) => r.reviewerExpertId === adjudicatorId)) {
-        throw new ForbiddenException('A reviewer of this task cannot also adjudicate it');
+      const pool = await this.adjudicatorPool(tx);
+      const right = adjudicationRight(adjudicator, subjectOf(task), pool);
+      if (!right.allowed) {
+        const asAuthor = task.authorId === adjudicatorId;
+        const who = asAuthor
+          ? 'Authors cannot adjudicate their own task'
+          : 'A reviewer of this task cannot also adjudicate it';
+        throw new ForbiddenException(
+          right.why === 'independent_available'
+            ? `${who} while an independent adjudicator is available`
+            : who,
+        );
       }
 
       const accept = dto.verdict === 'accept';
@@ -664,6 +701,9 @@ export class TaskService {
             decisionId: decision.id,
             adjudicatorId: adjudicatorId,
             verdict: decision.verdict,
+            // Null for an independent adjudicator; 'author' or 'reviewer' when the lead or an
+            // admin used the small-team escape, so those decisions stay distinguishable.
+            conflict: right.conflict,
           } as Prisma.InputJsonValue,
         },
       });
@@ -765,6 +805,14 @@ export class TaskService {
     return new Map(decisions.map((d) => [d.subjectId, d]));
   }
 
+  /** Everyone who may adjudicate splits at all: the adjudicator and admin roles, and the lead. */
+  private adjudicatorPool(tx: Tx = this.prisma): Promise<Adjudicator[]> {
+    return tx.user.findMany({
+      where: { OR: [{ role: { in: [Role.ADJUDICATOR, Role.ADMIN] } }, { isLead: true }] },
+      select: { expertId: true, role: true, isLead: true },
+    });
+  }
+
   /** Does this user's role review tasks (and so get gold mixed into their queue)? */
   private reviews(user: AuthUser): boolean {
     return user.role === Role.REVIEWER || user.role === Role.ADMIN;
@@ -785,7 +833,11 @@ export class TaskService {
    * unreviewed clone per reviewer: the unique goldOpenFor index makes a concurrent second
    * write fail, and that request then reads the clone the first one wrote.
    */
-  private async materialiseGold(viewer: AuthUser, all: TaskRow[]): Promise<boolean> {
+  private async materialiseGold(
+    viewer: AuthUser,
+    all: TaskRow[],
+    pool: Adjudicator[],
+  ): Promise<boolean> {
     const me = viewer.expertId;
     const reviewedByMe = (t: TaskRow) => t.taskReviews.some((r) => r.reviewerExpertId === me);
     const myClones = all.filter((t) => isGoldClone(t) && t.goldForExpertId === me);
@@ -804,7 +856,7 @@ export class TaskService {
     const visible = all.filter((t) => visibleTo(t, viewer));
     const adjudications = await this.adjudicationsFor(visible.map((t) => t.id));
     const queue = buildQueue(
-      visible.filter((t) => this.canAct(t, viewer, adjudications.get(t.id))),
+      visible.filter((t) => this.canAct(t, viewer, adjudications.get(t.id), pool)),
     );
     try {
       await this.writeGoldClone(source, me, all, queue, place);
@@ -955,18 +1007,25 @@ export class TaskService {
   /**
    * May this user act on this task right now? Reviewers see tasks open for a peer review
    * (their own gold clone included), adjudicators see split tasks, an admin sees both, an
-   * author neither.
+   * author neither. A split the user wrote or reviewed shows up only for the lead or an admin,
+   * and only while nobody independent can adjudicate it (adjudicationRight).
    */
-  private canAct(task: TaskRow, user: AuthUser, adjudication?: ReviewDecision): boolean {
+  private canAct(
+    task: TaskRow,
+    user: AuthUser,
+    adjudication: ReviewDecision | undefined,
+    pool: Adjudicator[],
+  ): boolean {
     const expertId = user.expertId;
     const reviews = user.role === Role.REVIEWER || user.role === Role.ADMIN;
-    const adjudicates = user.role === Role.ADJUDICATOR || user.role === Role.ADMIN;
+    if (awaitsAdjudication(task, adjudication)) {
+      return adjudicationRight(user, subjectOf(task), pool).allowed;
+    }
     if (task.authorId === expertId) return false;
     if (task.taskReviews.some((r) => r.reviewerExpertId === expertId)) return false;
     if (isGoldClone(task)) return reviews && task.goldForExpertId === expertId;
     // A gold source is reviewed only through a clone.
     if (task.isGold) return false;
-    if (adjudication?.verdict === Verdict.NEEDS_REVIEW) return adjudicates;
     if (!reviews) return false;
     const open = task.status === TaskStatus.SUBMITTED || task.status === TaskStatus.IN_REVIEW;
     const peerReviews = task.taskReviews.filter((r) => r.reviewerExpertId !== null);
@@ -991,7 +1050,12 @@ export class TaskService {
    * admin writes gold, so an admin author would otherwise mark every gold task. Admins and a
    * task's own author still see who wrote it.
    */
-  private toView(task: TaskRow, viewer: AuthUser, adjudication?: ReviewDecision) {
+  private toView(
+    task: TaskRow,
+    viewer: AuthUser,
+    adjudication: ReviewDecision | undefined,
+    pool: Adjudicator[],
+  ) {
     // updatedAt is withheld for every task: a clone's is the real time it was written, which
     // would undo its backdated createdAt, and update times would tell gold rows apart.
     const {
@@ -1005,8 +1069,11 @@ export class TaskService {
       ...row
     } = task;
     void [goldExpectedAccept, goldSourceId, goldForExpertId, goldOpenFor, updatedAt];
+    // A lead adjudicates whatever their role, so a non-admin lead is blind like an adjudicator.
     const blind =
-      (viewer.role === Role.REVIEWER || viewer.role === Role.ADJUDICATOR) &&
+      (viewer.role === Role.REVIEWER ||
+        viewer.role === Role.ADJUDICATOR ||
+        (viewer.isLead && viewer.role !== Role.ADMIN)) &&
       task.authorId !== viewer.expertId;
     const rest = blind ? { ...row, authorId: null, author: null } : row;
 
@@ -1019,6 +1086,7 @@ export class TaskService {
           reviewState: 'awaiting_reviews' as ReviewState,
           taskReviews: [],
           adjudication: null,
+          canAdjudicate: false,
         };
       }
       return {
@@ -1027,11 +1095,12 @@ export class TaskService {
         reviewState: 'awaiting_reviews' as ReviewState,
         taskReviews: [redactedReview(own)],
         adjudication: null,
+        canAdjudicate: false,
       };
     }
 
     const decided = task.status === TaskStatus.ACCEPTED || task.status === TaskStatus.REJECTED;
-    const awaitingAdjudication = adjudication?.verdict === Verdict.NEEDS_REVIEW;
+    const awaitingAdjudication = awaitsAdjudication(task, adjudication);
     const reviewState: ReviewState = decided
       ? 'decided'
       : awaitingAdjudication
@@ -1053,6 +1122,10 @@ export class TaskService {
             reason: adjudication.reason,
           }
         : null,
+      // May this viewer resolve the split now? Server-side, because the client cannot know
+      // whether an independent adjudicator exists (adjudicationRight).
+      canAdjudicate:
+        awaitingAdjudication && adjudicationRight(viewer, subjectOf(task), pool).allowed,
     };
   }
 }

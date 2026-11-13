@@ -319,6 +319,62 @@ export function placeInQueue(
   return earlier ?? id;
 }
 
+/** A user as the adjudication rule reads them. `role` is the Prisma `Role` value. */
+export interface Adjudicator {
+  expertId: string;
+  role: string;
+  isLead: boolean;
+}
+
+/** The task as the adjudication rule reads it: who wrote it, who reviewed it. */
+export interface AdjudicationSubject {
+  authorId: string;
+  reviewerExpertIds: Array<string | null>;
+}
+
+export type AdjudicationConflict = 'author' | 'reviewer';
+
+export type AdjudicationRight =
+  | { allowed: true; conflict: AdjudicationConflict | null }
+  | { allowed: false; why: 'not_eligible' | 'conflicted' | 'independent_available' };
+
+/** May this user adjudicate splits at all: the adjudicator or admin role, or the lead. */
+export function mayAdjudicate(user: Pick<Adjudicator, 'role' | 'isLead'>): boolean {
+  return user.role === 'ADJUDICATOR' || user.role === 'ADMIN' || user.isLead;
+}
+
+/** Is this expert the task's author or one of its reviewers? */
+export function adjudicationConflict(
+  expertId: string,
+  task: AdjudicationSubject,
+): AdjudicationConflict | null {
+  if (task.authorId === expertId) return 'author';
+  if (task.reviewerExpertIds.some((id) => id !== null && id === expertId)) return 'reviewer';
+  return null;
+}
+
+/**
+ * Who may resolve a split (docs/pipeline.md §2.1). Normally a third expert, neither the
+ * author nor either reviewer. A small team may have nobody like that, which would leave the
+ * task IN_REVIEW for ever, so the designated lead or an admin may adjudicate a task they wrote
+ * or reviewed, but only while nobody in `pool` (everyone who may adjudicate) is independent
+ * of it. A conflicted adjudication is allowed for the escape alone, never as a shortcut.
+ */
+export function adjudicationRight(
+  user: Adjudicator,
+  task: AdjudicationSubject,
+  pool: Adjudicator[],
+): AdjudicationRight {
+  if (!mayAdjudicate(user)) return { allowed: false, why: 'not_eligible' };
+  const conflict = adjudicationConflict(user.expertId, task);
+  if (conflict === null) return { allowed: true, conflict: null };
+  if (user.role !== 'ADMIN' && !user.isLead) return { allowed: false, why: 'conflicted' };
+  const independent = pool.some(
+    (p) => mayAdjudicate(p) && adjudicationConflict(p.expertId, task) === null,
+  );
+  return independent ? { allowed: false, why: 'independent_available' } : { allowed: true, conflict };
+}
+
 /**
  * The gold task to clone for this reviewer now, or null when none is due or none is left.
  * `gold` is the gold tasks this reviewer may still review. Where the clone goes is goldPlace.

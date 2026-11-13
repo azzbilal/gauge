@@ -55,7 +55,17 @@ Rules:
 - **Exactly two.** A third peer review is refused; a decided task is closed to review.
 - **Adjudication.** A split is recorded as a `review_decisions` row (`subject_type = task`,
   verdict `NEEDS_REVIEW`). A third expert — not the author, not either reviewer — resolves
-  it to `APPROVE` or `REJECT` with a written reason.
+  it to `APPROVE` or `REJECT` with a written reason. Who may adjudicate at all: the
+  adjudicator and admin roles, and the designated lead (`users.isLead`, set by an admin at
+  registration), whatever the lead's role.
+- **Small-team escape.** With one author and two reviewers, or 2 people plus yourself (§6),
+  there may be no independent third expert, and a split would stay `IN_REVIEW` for ever. So
+  the designated lead or an admin may adjudicate a task they wrote or reviewed, but only
+  while nobody who may adjudicate is independent of it. Once an independent adjudicator
+  exists, the normal rule applies again. An escaped decision is marked in its
+  `task.adjudicated` event (`conflict: author | reviewer`; `null` for an independent one), so
+  the report can count and show it. The split appears in the lead's queue only when the
+  escape applies, and each task view carries `canAdjudicate` for the signed-in user.
 
 ## 3. Gold tasks
 

@@ -7,6 +7,8 @@ export interface AuthUser {
   name: string;
   email: string;
   role: Role;
+  /** The designated lead: may adjudicate a split nobody independent can (docs/pipeline.md §2.1). */
+  isLead: boolean;
   /** The Expert row this login acts as: tasks, reviews and events point here. */
   expertId: string;
 }

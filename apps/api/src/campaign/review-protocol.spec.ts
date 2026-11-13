@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  Adjudicator,
   CRITERIA,
   GOLD_MIN_REVIEWS,
   IAA_MIN_PAIRS,
+  adjudicationRight,
   agreementReport,
   agreementStat,
   buildQueue,
@@ -519,5 +521,67 @@ describe('buildQueue / dueGold (gold arrives as a fresh task at its own hash pla
     expect(dueGold('alice', gold, 10, 0)).not.toBeNull();
     // This block already had its gold.
     expect(dueGold('alice', gold, 7, 2)).toBeNull();
+  });
+});
+
+describe('adjudicationRight (pipeline.md §2.1: a third expert, with a small-team escape)', () => {
+  const who = (expertId: string, role: string, isLead = false): Adjudicator => ({
+    expertId,
+    role,
+    isLead,
+  });
+  // Written by ann, reviewed by rob and rae.
+  const split = { authorId: 'ann', reviewerExpertIds: ['rob', 'rae'] };
+  const adj = who('adj', 'ADJUDICATOR');
+
+  it('lets an independent adjudicator, admin or lead decide, with no conflict', () => {
+    for (const u of [adj, who('boss', 'ADMIN'), who('lee', 'REVIEWER', true)]) {
+      expect(adjudicationRight(u, split, [u])).toEqual({ allowed: true, conflict: null });
+    }
+  });
+
+  it('refuses anyone without the role or the lead flag, conflicted or not', () => {
+    for (const u of [who('rob', 'REVIEWER'), who('ann', 'AUTHOR'), who('zed', 'REVIEWER')]) {
+      expect(adjudicationRight(u, split, [])).toEqual({ allowed: false, why: 'not_eligible' });
+    }
+  });
+
+  it('refuses a conflicted adjudicator who is neither the lead nor an admin, even with nobody else', () => {
+    const author = who('ann', 'ADJUDICATOR');
+    expect(adjudicationRight(author, split, [author])).toEqual({
+      allowed: false,
+      why: 'conflicted',
+    });
+  });
+
+  it('lets a conflicted lead or admin decide only while nobody independent can', () => {
+    const cases: Array<[Adjudicator, 'author' | 'reviewer']> = [
+      [who('rae', 'REVIEWER', true), 'reviewer'],
+      [who('ann', 'AUTHOR', true), 'author'],
+      [who('rob', 'ADMIN'), 'reviewer'],
+      [who('ann', 'ADMIN'), 'author'],
+    ];
+    for (const [u, conflict] of cases) {
+      // The pool holds only conflicted people: the escape applies.
+      const conflicted = [u, who('rob', 'REVIEWER', true), who('ann', 'ADMIN')];
+      expect(adjudicationRight(u, split, conflicted)).toEqual({ allowed: true, conflict });
+      // Anyone independent who may adjudicate (by role or as a lead) closes the escape.
+      for (const other of [adj, who('boss', 'ADMIN'), who('lee', 'AUTHOR', true)]) {
+        expect(adjudicationRight(u, split, [...conflicted, other])).toEqual({
+          allowed: false,
+          why: 'independent_available',
+        });
+      }
+      // Someone independent who may not adjudicate does not count.
+      expect(adjudicationRight(u, split, [...conflicted, who('zed', 'REVIEWER')])).toEqual({
+        allowed: true,
+        conflict,
+      });
+    }
+  });
+
+  it('ignores reviews with no reviewer (a null reviewerExpertId is nobody)', () => {
+    const task = { authorId: 'ann', reviewerExpertIds: [null, 'rob'] };
+    expect(adjudicationRight(adj, task, [adj])).toEqual({ allowed: true, conflict: null });
   });
 });

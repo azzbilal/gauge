@@ -8,6 +8,8 @@ export interface AuthUser {
   name: string;
   email: string;
   role: Role;
+  /** The designated lead: may adjudicate a split nobody independent can, whatever the role. */
+  isLead: boolean;
   /** The expert this login acts as: task authors and reviewers are experts. */
   expertId: string;
 }
@@ -99,6 +101,11 @@ export interface Task {
   taskReviews: TaskReview[];
   reviewState: ReviewState;
   adjudication: Adjudication | null;
+  /**
+   * Whether the signed-in user may resolve this split now. Decided by the API, which alone
+   * knows whether an independent adjudicator exists (the small-team escape).
+   */
+  canAdjudicate: boolean;
   /** Only on the answer to a create: false when the linter could not be reached. */
   linted?: boolean;
 }

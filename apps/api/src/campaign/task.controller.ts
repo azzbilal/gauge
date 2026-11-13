@@ -67,8 +67,11 @@ export class TaskController {
     return this.tasks.review(id, parseCreateTaskReviewDto(body), user);
   }
 
+  /**
+   * No role gate here: besides the adjudicator and admin roles, the designated lead may
+   * adjudicate whatever their role, so the service checks who may (adjudicationRight).
+   */
   @Post(':id/adjudication')
-  @Roles(Role.ADJUDICATOR)
   adjudicate(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: unknown) {
     return this.tasks.adjudicate(id, parseAdjudicateTaskDto(body), user);
   }

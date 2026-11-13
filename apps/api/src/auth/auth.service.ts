@@ -37,12 +37,16 @@ export class AuthService {
 
   /**
    * Create a login and the Expert it acts as. Anyone may register as an author; only a
-   * signed-in admin may hand out another role.
+   * signed-in admin may hand out another role or designate the lead.
    */
   async register(dto: RegisterDto, caller?: AuthUser): Promise<Session> {
     const role = dto.role ?? Role.AUTHOR;
+    const isLead = dto.lead ?? false;
     if (role !== Role.AUTHOR && caller?.role !== Role.ADMIN) {
       throw new ForbiddenException('Only an admin can register a user with that role');
+    }
+    if (isLead && caller?.role !== Role.ADMIN) {
+      throw new ForbiddenException('Only an admin can designate the lead');
     }
     const passwordHash = await hashPassword(dto.password);
     try {
@@ -51,7 +55,14 @@ export class AuthService {
           data: { name: dto.name, domain: STAFF_DOMAIN, status: ExpertStatus.ACTIVE },
         });
         return tx.user.create({
-          data: { name: dto.name, email: dto.email, passwordHash, role, expertId: expert.id },
+          data: {
+            name: dto.name,
+            email: dto.email,
+            passwordHash,
+            role,
+            isLead,
+            expertId: expert.id,
+          },
         });
       });
       return this.session(user);
@@ -81,6 +92,7 @@ export class AuthService {
         name: user.name,
         email: user.email,
         role: user.role,
+        isLead: user.isLead,
         expertId: user.expertId,
       },
     };

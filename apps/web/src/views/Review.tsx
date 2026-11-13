@@ -30,11 +30,15 @@ type Mode = 'read' | 'decided' | 'review' | 'adjudicate';
 /** What the signed-in user may do with this task; the API enforces the same roles. */
 function modeOf(task: Task, user: AuthUser): Mode {
   if (task.reviewState === 'decided') return 'decided';
-  if (task.reviewState === 'awaiting_adjudication') return can(user, 'ADJUDICATOR') ? 'adjudicate' : 'read';
+  // The API decides: a conflicted lead or admin may adjudicate only when nobody independent can.
+  if (task.reviewState === 'awaiting_adjudication') return task.canAdjudicate ? 'adjudicate' : 'read';
   return can(user, 'REVIEWER') ? 'review' : 'read';
 }
 
-/** Reviewers, adjudicators and admins get a work queue; an author sees every task, read-only. */
+/**
+ * Reviewers, adjudicators and admins get a work queue; an author sees every task, read-only.
+ * An author who is the lead keeps the full list and adjudicates from it (task.canAdjudicate).
+ */
 const hasQueue = (user: AuthUser) => can(user, 'REVIEWER') || can(user, 'ADJUDICATOR');
 
 function isTyping(el: HTMLElement | null): boolean {
