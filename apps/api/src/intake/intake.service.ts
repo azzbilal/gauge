@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { LLM_PROVIDER, LlmScoringProvider, RubricCriterion } from './llm/types';
 import { RunIntakeDto } from './dto/run-intake.dto';
 import { SlackService } from '../slack/slack.service';
+import { AuthUser } from '../auth/auth.decorators';
 
 // Below this, the run is routed to a human for review.
 const LOW_CONFIDENCE_THRESHOLD = 0.7;
@@ -18,7 +19,8 @@ export class IntakeService {
     private readonly slack: SlackService,
   ) {}
 
-  async runIntake(dto: RunIntakeDto) {
+  /** `dto.expertId` is who is screened; `actor` (the signed-in user) is who ran it. */
+  async runIntake(dto: RunIntakeDto, actor: AuthUser) {
     const posting = await this.prisma.posting.findUnique({
       where: { id: dto.postingId },
       include: { rubric: true },
@@ -93,14 +95,16 @@ export class IntakeService {
       });
     }
 
-    // Append-only audit log.
+    // Append-only audit log. The actor is the signed-in user's Expert row (Event.actorId is
+    // an FK to Expert), never the body's expertId, which only names the screened expert.
     await this.prisma.event.create({
       data: {
-        actorId: expertId,
+        actorId: actor.expertId,
         type: 'intake.run',
         payload: {
           runId: run.id,
           postingId: posting.id,
+          subjectExpertId: expertId,
           needsReview,
           provider: this.llm.name,
           model: assessment.model,

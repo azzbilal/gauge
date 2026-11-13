@@ -12,6 +12,7 @@ export class ReviewController {
   constructor(private readonly reviewService: ReviewService) {}
 
   @Get('queue')
+  @Roles(Role.REVIEWER)
   queue() {
     return this.reviewService.listQueue();
   }
@@ -23,6 +24,7 @@ export class ReviewController {
   }
 
   @Get('export')
+  @Roles(Role.ADMIN)
   @Header('Content-Type', 'text/csv; charset=utf-8')
   @Header('Content-Disposition', 'attachment; filename="review-decisions.csv"')
   export() {
