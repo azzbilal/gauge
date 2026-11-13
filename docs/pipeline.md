@@ -66,30 +66,74 @@ is flagged, not fired — the gold set is a calibration instrument, not a test o
 
 Each gold task stores its known answer (`gold_expected_accept`). Reviewers cannot tell a gold
 task from a normal one: the marker and the answer are never returned by the task API. A gold
-review never changes the task's status, is not capped at two reviewers, and is left out of
+review never changes the gold task's status (only its reviewer's clone moves to `IN_REVIEW`,
+as a normal task would after one review), is not capped at two reviewers, and is left out of
 IAA. A gold task therefore never becomes `ACCEPTED` and never reaches the training set.
 
-To keep it that way, the API shows each reviewer a gold task as a normal task in the state
-their own actions would leave it in. Before they review it, it is `SUBMITTED` with no reviews.
-After they review it, it is `IN_REVIEW` with their one review, like any task after a first
-review. Other reviewers' gold reviews are never shown. In the queue, the gold task is not
-pinned to the head: it sits somewhere in the first five rows and moves up as the reviewer
-works through their block of five. Regular tasks are ordered by a hash of their id, not by age,
-and that order is the same for every reviewer and does not move between reviews. With only the
-first rows shuffled, the gold task was the one head row newer than the row after the head;
-hiding `createdAt` would not fix that, because task ids are cuids that carry their creation
-time. A per-reviewer order redrawn after each review was tried and dropped: the gold row, which
-climbs one place per review, became the one row that kept its place, and the two reviewers of a
-task were sent to different tasks, so second reviews stalled. The cost of the shared order is
-that the oldest work is no longer drained first. Task views omit `updatedAt`, because a review
-writes a normal task's row but never a gold one's.
+A gold task is never shown to a reviewer as itself. One long-lived row shared by every
+reviewer cannot pass for a normal task: its visibility and queue place would follow one
+reviewer's history while normal rows follow everyone's, so a reviewer could diff views over
+time and spot it. Instead, when a gold review falls due for a reviewer (one per block of five
+of their reviews, at a point inside the block derived from the reviewer and the block), the API
+writes a **clone** for that reviewer alone: a task row with its own id, status `SUBMITTED`, no
+reviews, and its own copy of the lint findings and verifier runs (with the requirement and
+rubric item ids drawn afresh). To that reviewer it is an ordinary task:
 
-A reviewer sees a gold task only where their queue would show it: the one gold task due to
-them now, and gold they have already reviewed. The plain task list, the queue, a campaign
-filter and a single-task read all agree on it; any other gold task answers like a missing id.
-Authors and adjudicators see no gold at all; admins see all of it. Review is blind: reviewers
-and adjudicators do not see a task's author, since only an admin writes gold and an admin
-author would mark it.
+- **Its time says nothing about the request.** Its `createdAt` is a random instant between two
+  consecutive real tasks of the gold's campaign, and its id is a cuid minted at that same time
+  (borrowing the fingerprint and counter of the real task written just before), so the id's
+  timestamp agrees with `createdAt`. The copied lint findings and verifier runs are dated and
+  id'd the same way, at the source's offsets from its own `createdAt`.
+- **It sits where its review is due.** Its id is drawn so that its hash places it in the
+  reviewer's queue exactly as many rows from the head as reviews remain before the block's gold
+  point (at the head if they are behind). A reviewer who works the queue from the head meets it
+  at that point, so one review in five is gold whatever the backlog. It never moves against
+  its neighbours afterwards.
+- **It stays after review.** The review is stored on the clone, which then reads as a task with
+  one review (`IN_REVIEW`, the reviewer's own redacted review): it stays in their list, leaves
+  their queue, and the campaign count does not change. Calibration scores the review against
+  the answer on the gold the clone copies.
+
+A reviewer holds at most one unreviewed clone at a time (a unique column set only while the
+clone is open), and is never given the same gold twice (unique gold-and-reviewer pair).
+
+Regular tasks and clones are ordered by a hash of their id, not by age. That order is the same
+for every reviewer and does not move between reviews. Hiding `createdAt` would not hide age,
+because task ids are cuids that carry their creation time. A per-reviewer order redrawn after
+each review was tried and dropped: it sent the two reviewers of a task to different tasks, so
+second reviews stalled. The cost of the shared order is that the oldest work is no longer
+drained first. Task views omit `updatedAt`.
+
+Visibility is decided from the row alone, never from anyone's history. Normal tasks are visible
+to everyone, gold tasks to admins only, and a clone only to the reviewer it was written for,
+not even to admins. The plain list, the queue, a campaign filter, a single-task read,
+`GET /tasks/:id/verification`, `POST /tasks/:id/reviews` and `POST /tasks/:id/adjudication` all
+apply that rule first, so a hidden id answers exactly like a missing one. A campaign's task
+count is what the viewer can see of it. Review is blind: reviewers and adjudicators do not see a
+task's author, since only an admin writes gold and an admin author would mark it.
+
+Known limits:
+
+- A clone is backdated, but it is written when the reviewer fetches their list, so it is absent
+  from any copy of the list they saved earlier: a row that appears with an old `createdAt` is a
+  signal to a reviewer who diffs snapshots.
+- A reviewed clone gets no second review and no decision; a normal task the reviewer reviewed
+  goes on to `ACCEPTED`, `REJECTED` or adjudication. A clone that stays `IN_REVIEW` for long is
+  a signal.
+- A clone always lands within the first five places of the queue. A normal task lands at a
+  uniformly random place, so on a large backlog a new row near the head is rare and points at
+  gold. The rate is exact only for a reviewer who works from the head; one who skips ahead
+  meets the clone later, falls behind, and the next clone goes to the head.
+- The gold share is capped by supply: a reviewer is never given the same gold twice, so once
+  they have seen every gold task no more clones are written.
+- The rate assumes the unfiltered queue (what the web UI fetches). A clone belongs to its
+  gold's campaign, so a reviewer who only works one campaign's queue may not meet it, and no
+  further clone is written until they review it.
+- Clones are written only when the list is fetched. A client that fetches once and then
+  reviews many tasks gets no gold in that stretch, then head-placed clones while it catches up.
+- A clone's id borrows the counter of the real task written before it, plus one to three, which
+  can repeat a counter used by that task's own lint and verifier rows: a reviewer comparing ids
+  closely could see a counter out of order.
 
 **Reviewer accuracy** = gold reviews whose verdict matches the known answer ÷ gold reviews.
 A reviewer is flagged below **0.8**, once they have at least **5** gold reviews. The flag is

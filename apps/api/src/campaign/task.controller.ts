@@ -40,8 +40,8 @@ export class TaskController {
 
   /** Layer 2 results stored when the task was created: lint findings and verifier runs. */
   @Get(':id/verification')
-  verification(@Param('id') id: string) {
-    return this.tasks.verification(id);
+  verification(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.tasks.verification(id, user);
   }
 
   @Post()

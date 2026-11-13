@@ -11,9 +11,11 @@ import {
   consensus,
   goldDue,
   goldOrder,
-  goldSlot,
+  goldPlace,
+  dueGold,
   isAccepted,
   krippendorffAlpha,
+  placeInQueue,
   Scores,
 } from './review-protocol';
 
@@ -298,15 +300,26 @@ describe('calibrationReport (pipeline.md §3: flag below 0.8 once 5 gold reviews
   });
 });
 
-describe('goldDue (pipeline.md §3: ~20% of the queue is gold)', () => {
-  /** Walk a reviewer through n reviews, taking gold whenever it is due. */
+describe('goldPlace / goldDue (pipeline.md §3: one review in five is gold)', () => {
+  /**
+   * Walk a reviewer through n reviews, working the queue from the head. When a gold review is
+   * due and none is open, a clone is placed goldPlace rows from the head; each review of a
+   * regular task moves it one row closer.
+   */
   function simulate(reviewerId: string, n: number): boolean[] {
     const taken: boolean[] = [];
     let gold = 0;
+    let ahead: number | null = null; // rows before the open clone, or null when none is open
     for (let total = 0; total < n; total++) {
-      const due = goldDue(reviewerId, total, gold);
-      if (due) gold += 1;
-      taken.push(due);
+      if (ahead === null) ahead = goldPlace(reviewerId, total, gold);
+      if (ahead === 0) {
+        taken.push(true);
+        gold += 1;
+        ahead = null;
+      } else {
+        taken.push(false);
+        if (ahead !== null) ahead -= 1;
+      }
     }
     return taken;
   }
@@ -332,15 +345,59 @@ describe('goldDue (pipeline.md §3: ~20% of the queue is gold)', () => {
     expect(patterns.size).toBeGreaterThan(1);
   });
 
-  it('catches up first when the reviewer is behind on gold', () => {
-    // Ten reviews done (two blocks) but no gold yet: due regardless of slot.
-    expect(goldDue('alice', 10, 0)).toBe(true);
-    expect(goldDue('alice', 10, 1)).toBe(true);
+  it('is owed from the start of the block, at a place inside it', () => {
+    for (const reviewer of ['alice', 'bob', 'carol', 'dave']) {
+      expect(goldDue(reviewer, 0, 0)).toBe(true);
+      const place = goldPlace(reviewer, 0, 0) as number;
+      expect(place).toBeGreaterThanOrEqual(0);
+      expect(place).toBeLessThan(5);
+      // Later in the block the place is that many reviews nearer, never negative.
+      expect(goldPlace(reviewer, 2, 0)).toBe(Math.max(0, place - 2));
+    }
+  });
+
+  it('places it at the head when the reviewer is behind on gold', () => {
+    // Ten reviews done (two blocks) but no gold yet, or one: due at once.
+    expect(goldPlace('alice', 10, 0)).toBe(0);
+    expect(goldPlace('alice', 10, 1)).toBe(0);
   });
 
   it('is not due once this block already had its gold review', () => {
+    expect(goldPlace('alice', 7, 2)).toBeNull();
     expect(goldDue('alice', 7, 2)).toBe(false);
     expect(goldDue('alice', 0, 1)).toBe(false);
+  });
+});
+
+describe('placeInQueue (a gold clone lands where its review is due)', () => {
+  /** cuid-like ids from a seeded generator. */
+  function minter(seed: number) {
+    let s = seed >>> 0 || 1;
+    const rnd = () => (s = (Math.imul(s, 1103515245) + 12345) >>> 0) % 36;
+    return () => `cmwd${Array.from({ length: 21 }, () => rnd().toString(36)).join('')}`;
+  }
+  const rows = (n: number, seed: number) => {
+    const mint = minter(seed);
+    return Array.from({ length: n }, () => ({ id: mint() }));
+  };
+
+  it('gives an id that buildQueue puts exactly at the requested place', () => {
+    for (const n of [0, 1, 20, 2000]) {
+      const queue = buildQueue(rows(n, n + 7));
+      for (const place of [0, 1, 2, 3, 4]) {
+        const id = placeInQueue(queue, place, minter(place * 31 + n));
+        const at = buildQueue([...queue, { id }]).findIndex((t) => t.id === id);
+        expect(at).toBe(Math.min(place, n));
+        // Nothing else moved.
+        expect(buildQueue([...queue, { id }]).filter((t) => t.id !== id)).toEqual(queue);
+      }
+    }
+  });
+
+  it('settles for an earlier place when the draws run out', () => {
+    const queue = buildQueue(rows(5000, 3));
+    const id = placeInQueue(queue, 2000, minter(9), 200);
+    expect(buildQueue([...queue, { id }]).findIndex((t) => t.id === id)).toBeLessThanOrEqual(2000);
   });
 });
 
@@ -362,165 +419,70 @@ describe('goldOrder', () => {
   });
 });
 
-describe('goldSlot / buildQueue (gold is not always at the head of the queue)', () => {
-  type Row = { id: string; createdAt: number; gold?: boolean };
-
-  /**
-   * A reviewer who always takes the head of the queue, against a backlog of regular
-   * tasks (oldest first) and a gold pool. Returns, per review, the gold task's index in
-   * the queue they were shown (-1 when there was none) and whether they took gold.
-   */
-  function walk(reviewerId: string, n: number) {
-    let regular: Row[] = Array.from({ length: 200 }, (_, i) => ({ id: `t${i}`, createdAt: i }));
-    let gold: Row[] = Array.from({ length: 50 }, (_, i) => ({
-      id: `g${i}`,
-      createdAt: -1000 + i, // gold is the oldest work in the system
-      gold: true,
-    }));
-    const steps: Array<{ goldIndex: number; tookGold: boolean; queue: Row[] }> = [];
-    let total = 0;
-    let goldDone = 0;
-    for (let step = 0; step < n; step++) {
-      const queue = buildQueue(reviewerId, regular, goldOrder(reviewerId, gold), total, goldDone);
-      // Same history, same queue: no jumping around on a refetch.
-      expect(buildQueue(reviewerId, regular, goldOrder(reviewerId, gold), total, goldDone)).toEqual(
-        queue,
-      );
-      const head = queue[0];
-      steps.push({ goldIndex: queue.findIndex((t) => t.gold), tookGold: !!head.gold, queue });
-      total += 1;
-      if (head.gold) {
-        goldDone += 1;
-        gold = gold.filter((t) => t.id !== head.id);
-      } else {
-        regular = regular.filter((t) => t.id !== head.id);
-      }
-    }
-    return steps;
-  }
-
-  it('keeps exactly one gold review in every block of five for a head-taking reviewer', () => {
-    for (const reviewer of ['alice', 'bob', 'carol', 'r-123', '']) {
-      const steps = walk(reviewer, 50);
-      for (let block = 0; block < 10; block++) {
-        const taken = steps.slice(block * 5, block * 5 + 5).filter((s) => s.tookGold);
-        expect(taken).toHaveLength(1);
-      }
-    }
-  });
-
-  it('takes gold at the same points goldDue does', () => {
-    for (const reviewer of ['alice', 'bob', 'carol']) {
-      let total = 0;
-      let gold = 0;
-      for (const s of walk(reviewer, 40)) {
-        expect(s.tookGold).toBe(goldDue(reviewer, total, gold));
-        total += 1;
-        if (s.tookGold) gold += 1;
-      }
-    }
-  });
-
-  it('does not always put the gold task at the head', () => {
-    const indexes = new Set(
-      ['alice', 'bob', 'carol', 'dave']
-        .flatMap((r) => walk(r, 40))
-        .map((s) => s.goldIndex)
-        .filter((i) => i >= 0),
-    );
-    expect(indexes.has(0)).toBe(true);
-    expect([...indexes].some((i) => i > 0)).toBe(true);
-    // It only ever sits in the head of the queue, so it is reached within the block.
-    expect(Math.max(...indexes)).toBeLessThan(5);
-  });
-
-  it('makes the gold task not the only row out of age order', () => {
-    // When gold is shown away from the head, regular rows around it are out of order too.
-    const shown = ['alice', 'bob', 'carol', 'dave']
-      .flatMap((r) => walk(r, 40))
-      .filter((s) => s.goldIndex > 0);
-    expect(shown.length).toBeGreaterThan(0);
-    const regularOutOfOrder = shown.filter((s) => {
-      const regular = s.queue.filter((t) => !t.gold);
-      return regular.some((t, i) => i > 0 && t.createdAt < regular[i - 1].createdAt);
-    });
-    expect(regularOutOfOrder.length).toBeGreaterThan(0);
-  });
+describe('buildQueue / dueGold (gold arrives as a fresh task at its own hash place)', () => {
+  type Row = { id: string; createdAt: number };
 
   /** A backlog with cuid-like ids: one per trial, so a test does not rest on one hash draw. */
-  function backlog(trial: number, n: number): Row[] {
+  function backlog(trial: number, n: number, prefix = 'c'): Row[] {
     let seed = trial * 2654435761 + 1;
     const rnd = () => (seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) % 36;
     return Array.from({ length: n }, (_, i) => ({
-      id: `c${(1_700_000_000_000 + i * 60_000).toString(36)}${i.toString(36).padStart(4, '0')}${Array.from({ length: 8 }, () => rnd().toString(36)).join('')}`,
+      id: `${prefix}${(1_700_000_000_000 + i * 60_000).toString(36)}${i.toString(36).padStart(4, '0')}${Array.from({ length: 8 }, () => rnd().toString(36)).join('')}`,
       createdAt: i,
     }));
   }
 
-  it('keeps regular rows in the same relative order from one review to the next', () => {
-    for (const reviewer of ['alice', 'bob', 'carol']) {
-      const steps = walk(reviewer, 40);
-      for (let i = 1; i < steps.length; i++) {
-        const before = steps[i - 1].queue.filter((t) => !t.gold).map((t) => t.id);
-        const after = steps[i].queue.filter((t) => !t.gold).map((t) => t.id);
-        expect(after).toEqual(before.filter((id) => after.includes(id)));
-      }
+  it('slots a newly added task in without moving any other row against its neighbours', () => {
+    // A gold clone is a new row with a fresh id, like a newly written task: adding it must
+    // leave every other row in the same relative order, and its place follows its own hash.
+    for (let trial = 0; trial < 50; trial++) {
+      const regular = backlog(trial, 20);
+      const [fresh] = backlog(trial + 1000, 1, 'z');
+      const before = buildQueue(regular).map((t) => t.id);
+      const after = buildQueue([...regular, fresh]).map((t) => t.id);
+      expect(after.filter((id) => id !== fresh.id)).toEqual(before);
+      // Where it was added does not matter, only the ids.
+      expect(buildQueue([fresh, ...regular]).map((t) => t.id)).toEqual(after);
+      // Reviewing the rows before it leaves it behind the same rows as before.
+      const i = after.indexOf(fresh.id);
+      const rest = buildQueue([...regular, fresh].filter((t) => !after.slice(0, i).includes(t.id)));
+      expect(rest.map((t) => t.id)).toEqual(after.slice(i));
     }
   });
 
-  it('never leaves the gold task as the only row that kept its place in the head', () => {
-    // Redrawing the order after each review left exactly that tell: the gold row climbs one
-    // place per review, so it was the one row of the first six still there on the next fetch.
-    let pairs = 0;
-    for (const reviewer of Array.from({ length: 40 }, (_, i) => `r${i}`)) {
-      const steps = walk(reviewer, 40);
-      for (let i = 1; i < steps.length; i++) {
-        const before = steps[i - 1].queue.slice(0, 6);
-        const after = steps[i].queue.slice(0, 6);
-        if (!before.some((t) => t.gold) || !after.some((t) => t.gold)) continue;
-        pairs += 1;
-        const kept = after.filter((t) => before.some((b) => b.id === t.id));
-        expect(kept.filter((t) => !t.gold).length).toBeGreaterThan(0);
-      }
+  it('keeps rows in the same relative order from one review to the next', () => {
+    let open = backlog(7, 40);
+    let previous = buildQueue(open).map((t) => t.id);
+    for (let step = 0; step < 20; step++) {
+      open = open.filter((t) => t.id !== previous[0]); // the head is reviewed
+      const next = buildQueue(open).map((t) => t.id);
+      expect(next).toEqual(previous.slice(1));
+      previous = next;
     }
-    expect(pairs).toBeGreaterThan(100);
   });
 
-  it('orders the queue the same for every reviewer, and not by age', () => {
+  it('orders the queue the same for every input order, and not by age', () => {
     // Task ids are cuids and carry their creation time, so withholding createdAt would not
     // hide age: the order itself must not follow it.
     for (let trial = 0; trial < 20; trial++) {
       const regular = backlog(trial, 20);
-      const orders = ['alice', 'bob', 'carol'].map((r, i) => buildQueue(r, regular, [], i * 3, 99));
-      expect(orders[1]).toEqual(orders[0]);
-      expect(orders[2]).toEqual(orders[0]);
-      const ages = orders[0].map((t) => t.createdAt);
+      const order = buildQueue(regular);
+      expect(buildQueue([...regular].reverse())).toEqual(order);
+      const ages = order.map((t) => t.createdAt);
       expect(ages).not.toEqual([...ages].sort((x, y) => x - y));
-      expect([...orders[0]].sort((x, y) => x.createdAt - y.createdAt)).toEqual(regular);
+      expect([...order].sort((x, y) => x.createdAt - y.createdAt)).toEqual(regular);
     }
   });
 
-  it('does not single out a gold task newer than the sixth-oldest regular task', () => {
-    // The attack from review: in the head (the gold row plus five regular ones), the gold
-    // row was the only one newer than the row at position 6, because the head held the five
-    // oldest regular tasks. Over many backlogs, reviewers and histories, that rule must do
-    // no better than guessing one row of six.
-    const gold: Row = { id: 'gold-task', createdAt: 10.5, gold: true }; // newer than the 6th oldest
-    let shown = 0;
-    let caught = 0;
+  it('does not single out a new row by where it lands', () => {
+    // Over many backlogs, a fresh row lands anywhere in the queue, not in a fixed region.
+    const places = new Set<number>();
     for (let trial = 0; trial < 300; trial++) {
       const regular = backlog(trial, 20);
-      for (let total = 0; total < 5; total++) {
-        const queue = buildQueue(`r${trial}`, regular, [gold], total, 0);
-        if (!queue.includes(gold)) continue;
-        shown += 1;
-        const pivot = queue[6].createdAt;
-        const newer = queue.slice(0, 6).filter((t) => t.createdAt > pivot);
-        if (newer.length === 1 && newer[0] === gold) caught += 1;
-      }
+      const [fresh] = backlog(trial + 5000, 1, 'z');
+      places.add(Math.floor((buildQueue([...regular, fresh]).indexOf(fresh) / 21) * 4));
     }
-    expect(shown).toBeGreaterThan(1000);
-    expect(caught / shown).toBeLessThan(1 / 6);
+    expect([...places].sort()).toEqual([0, 1, 2, 3]);
   });
 
   it('sends two reviewers to the same tasks, so tasks get their second review', () => {
@@ -532,25 +494,30 @@ describe('goldSlot / buildQueue (gold is not always at the head of the queue)', 
       [1000, 100],
     ]) {
       const tasks = backlog(n, n).map((t) => ({ ...t, reviews: [] as string[] }));
-      const done: Record<string, number> = { ann: 0, bob: 0 };
       for (let step = 0; step < 2 * k; step++) {
         const r = step % 2 ? 'bob' : 'ann';
         const open = tasks.filter((t) => t.reviews.length < 2 && !t.reviews.includes(r));
-        buildQueue(r, open, [], done[r], 99)[0].reviews.push(r);
-        done[r] += 1;
+        buildQueue(open)[0].reviews.push(r);
       }
       expect(tasks.filter((t) => t.reviews.length === 2).length).toBeGreaterThanOrEqual(0.9 * k);
     }
   });
 
-  it('serves no gold once the block has had its gold, and gold first when behind', () => {
-    expect(goldSlot('alice', 7, 2)).toBeNull();
-    expect(goldSlot('alice', 10, 0)).toBe(0);
-    const regular: Row[] = [{ id: 't0', createdAt: 0 }];
-    const g: Row = { id: 'g0', createdAt: -1, gold: true };
-    expect(buildQueue('alice', regular, [g], 7, 2)).toEqual(regular);
-    expect(buildQueue('alice', regular, [g], 10, 0)[0]).toBe(g);
-    // A short queue still gets the gold task, at its end at worst.
-    expect(buildQueue('alice', [], [g], 0, 0)).toEqual([g]);
+  it('picks gold only when goldDue says so, and the same pick on every call', () => {
+    const gold = ['g1', 'g2', 'g3'].map((id) => ({ id }));
+    for (const reviewer of ['alice', 'bob', 'carol']) {
+      for (let total = 0; total < 15; total++) {
+        for (let done = 0; done < 4; done++) {
+          const pick = dueGold(reviewer, gold, total, done);
+          expect(pick !== null).toBe(goldDue(reviewer, total, done));
+          if (pick) expect(pick).toBe(goldOrder(reviewer, gold)[0]);
+        }
+      }
+    }
+    expect(dueGold('alice', [], 10, 0)).toBeNull();
+    // Behind on gold: due at once.
+    expect(dueGold('alice', gold, 10, 0)).not.toBeNull();
+    // This block already had its gold.
+    expect(dueGold('alice', gold, 7, 2)).toBeNull();
   });
 });

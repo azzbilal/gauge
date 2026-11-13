@@ -232,30 +232,20 @@ export function calibrationReport(reviews: CalibrationInput[]): ReviewerCalibrat
 // -------------------------------------------------------------------- queue
 
 /**
- * Should this reviewer's next task be a gold one?
+ * Where in this reviewer's queue a gold review is due (pipeline.md §3), or null when none is.
  *
- * The queue is rebuilt after every review, so a fixed position in a list would
- * never be reached. The decision is driven by the reviewer's own history instead:
- * their reviews are counted in blocks of 1 / GOLD_QUEUE_SHARE (five), each block
- * owes one gold review, and the slot inside the block is derived from the reviewer
- * and the block number, so it differs between reviewers and from block to block.
- * A reviewer who is behind (no gold was available earlier) catches up first.
- */
-export function goldDue(reviewerId: string, totalReviews: number, goldReviews: number): boolean {
-  return goldSlot(reviewerId, totalReviews, goldReviews) === 0;
-}
-
-/**
- * Where in this reviewer's queue the current block's gold task sits, or null when the
- * block's gold review is already done.
+ * The reviewer's reviews are counted in blocks of 1 / GOLD_QUEUE_SHARE (five), and each block
+ * owes one gold review. The point inside the block where it falls is derived from the reviewer
+ * and the block number, so it differs between reviewers and from block to block. The answer
+ * is how many queue rows should come before the gold one: the reviews left until that point,
+ * or 0 when the point has passed or the reviewer is behind (no gold was available earlier, or
+ * an earlier gold was not reviewed in its block).
  *
- * The index counts down as the reviewer works through the block: it starts at the
- * block's slot and reaches 0 exactly when `goldDue` says gold is due, so a reviewer who
- * always takes the head of the queue still reviews one gold task per five. A reviewer
- * who is behind gets it at the head. Being derived from the reviewer's history, not a
- * dice roll, the position is the same on every refetch until they review something.
+ * The gold clone is written with an id whose hash lands at that place (see placeInQueue), so a
+ * reviewer who works the queue from the head meets it at the due point whatever the backlog,
+ * and the realised gold share is one in five.
  */
-export function goldSlot(
+export function goldPlace(
   reviewerId: string,
   totalReviews: number,
   goldReviews: number,
@@ -267,47 +257,71 @@ export function goldSlot(
   return Math.max(0, slot - (totalReviews % GOLD_BLOCK));
 }
 
+/** Is a gold review owed in this reviewer's current block? See goldPlace. */
+export function goldDue(reviewerId: string, totalReviews: number, goldReviews: number): boolean {
+  return goldPlace(reviewerId, totalReviews, goldReviews) !== null;
+}
+
 /**
- * A reviewer's work queue: regular tasks in one shared order that ignores age, with at most
- * one gold task.
+ * A reviewer's work queue: every task they may act on in one shared order, a hash of the
+ * task id, that ignores age.
  *
- * Moving the gold task off the head is not enough on its own. In any age-ordered queue the
- * gold row, which can land in the head whatever its age, would be the one whose age does not
- * fit its place: with only the head shuffled, it was the one head row newer than the row
- * after the head. Withholding `createdAt` would not help, because task ids are cuids that
- * carry their creation time, and the plain list is newest first anyway. So regular tasks are
- * ordered by a hash of their id, and no row's place says anything about how old it is.
+ * Task ids are cuids that carry their creation time, and the plain list is newest first, so
+ * an age-ordered queue would let a row that does not fit its place stand out. Ordered by id
+ * hash, no row's place says anything about how old it is, and a task added later (a newly
+ * written one, or a gold clone, which is the same thing to the reader) slots in at its own
+ * hash without moving any other row against its neighbours. A gold clone's id is drawn so its
+ * hash lands where the gold review is due (goldPlace, placeInQueue).
  *
  * The order is the same for every reviewer and does not move between reviews:
- *  - Redrawing it after each review left the gold row, which climbs one place per review,
- *    as the one row that kept its place in the head.
+ *  - Redrawing it after each review leaves any row that keeps its place standing out.
  *  - A different order per reviewer sends the two reviewers of a task to different tasks,
  *    so second reviews, and with them decisions, come far later.
  * The cost is that old work is not drained first, and a task whose hash sorts late waits
  * behind every task that sorts earlier for as long as new work keeps arriving.
- *
- * `gold` is the candidates in serving order; only the one `dueGold` picks is served.
  */
-export function buildQueue<T extends { id: string }>(
-  reviewerId: string,
-  regular: T[],
-  gold: T[],
-  totalReviews: number,
-  goldReviews: number,
-): T[] {
+export function buildQueue<T extends { id: string }>(tasks: T[]): T[] {
   const key = (t: T) => stableHash(t.id);
-  const queue = [...regular].sort((a, b) => key(a) - key(b) || (a.id < b.id ? -1 : 1));
-  const due = dueGold(reviewerId, gold, totalReviews, goldReviews);
-  if (!due) return queue;
-  const index = goldSlot(reviewerId, totalReviews, goldReviews) as number;
-  queue.splice(Math.min(index, queue.length), 0, due);
-  return queue;
+  return [...tasks].sort((a, b) => key(a) - key(b) || (a.id < b.id ? -1 : 1));
+}
+
+/** Ids drawn per placement before settling for an earlier place (see placeInQueue). */
+export const PLACE_TRIES = 200_000;
+
+/**
+ * An id for a new row that buildQueue puts at `place` in `queue` (a list already in buildQueue
+ * order): `mint` draws candidate ids, and the first whose hash falls between the rows at
+ * place - 1 and place is taken. Nothing else moves; the new row just has that hash, like any
+ * newly written task whose id happened to land there.
+ *
+ * The chance of a hit per draw is about 1 / queue length, so a large backlog needs many draws.
+ * After `tries` misses it settles for the first draw that landed earlier than `place`, and
+ * failing that the last draw: earlier is still inside the reviewer's block.
+ */
+export function placeInQueue(
+  queue: Array<{ id: string }>,
+  place: number,
+  mint: () => string,
+  tries = PLACE_TRIES,
+): string {
+  const at = Math.max(0, Math.min(place, queue.length));
+  const before = at > 0 ? queue[at - 1].id : null;
+  const after = at < queue.length ? queue[at].id : null;
+  const lo = before === null ? -1 : stableHash(before);
+  const hi = after === null ? 2 ** 32 : stableHash(after);
+  let earlier: string | null = null;
+  let id = mint();
+  for (let i = 0; i < tries; i++, id = mint()) {
+    const h = stableHash(id);
+    if (h > lo && h < hi) return id;
+    if (earlier === null && h < hi) earlier = id;
+  }
+  return earlier ?? id;
 }
 
 /**
- * The one gold task this reviewer's queue serves right now, or null. Everything that shows
- * a reviewer tasks (the queue, the plain list, a single task) must agree on it, or diffing
- * two of them would point at the gold tasks that are not due.
+ * The gold task to clone for this reviewer now, or null when none is due or none is left.
+ * `gold` is the gold tasks this reviewer may still review. Where the clone goes is goldPlace.
  */
 export function dueGold<T extends { id: string }>(
   reviewerId: string,
@@ -315,7 +329,7 @@ export function dueGold<T extends { id: string }>(
   totalReviews: number,
   goldReviews: number,
 ): T | null {
-  if (gold.length === 0 || goldSlot(reviewerId, totalReviews, goldReviews) === null) return null;
+  if (gold.length === 0 || !goldDue(reviewerId, totalReviews, goldReviews)) return null;
   return goldOrder(reviewerId, gold)[0];
 }
 

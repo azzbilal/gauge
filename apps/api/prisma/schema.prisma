@@ -148,11 +148,25 @@ model Task {
   // Gold tasks only: the known answer (true = a reviewer should accept it,
   // false = deliberately broken). Null on every normal task.
   goldExpectedAccept Boolean?
+  // Gold clones only (docs/pipeline.md §3). When a gold task falls due for a reviewer, a
+  // copy is written for that reviewer alone, so it reads as an ordinary task: its own id,
+  // a createdAt (and id timestamp) drawn from the campaign's real task times, and a queue
+  // place where the gold review is due. goldSourceId names the gold it copies (whose answer
+  // scores the review); goldForExpertId is the one reviewer who may see it. A clone is
+  // isGold with no answer of its own. The review is stored on the clone, which stays in the
+  // reviewer's list like any task they reviewed. goldOpenFor is goldForExpertId until that
+  // review and null after: unique, so a reviewer holds at most one unreviewed clone even
+  // under concurrent requests. Null on every other task.
+  goldSourceId    String?
+  goldForExpertId String?
+  goldOpenFor     String?   @unique
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
 
   campaign Campaign @relation(fields: [campaignId], references: [id])
   author   Expert   @relation("TaskAuthor", fields: [authorId], references: [id])
+  goldSource Task?  @relation("GoldClone", fields: [goldSourceId], references: [id], onDelete: Restrict)
+  goldClones Task[] @relation("GoldClone")
 
   taskReviews TaskReview[]
 
@@ -165,6 +179,10 @@ model Task {
 
   @@index([campaignId])
   @@index([authorId])
+  @@index([goldSourceId])
+  @@index([goldForExpertId])
+  // A reviewer is never given the same gold twice.
+  @@unique([goldSourceId, goldForExpertId])
 }
 
 model TaskReview {

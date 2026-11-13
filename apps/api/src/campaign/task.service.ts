@@ -16,6 +16,7 @@ import {
   Verdict,
   VerifySubjectType,
 } from '@prisma/client';
+import { randomBytes, randomInt, randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/auth.decorators';
 import { BuiltPacket, buildPacket, rubricItemIdOf } from '../verify/packet-builder';
@@ -32,8 +33,11 @@ import {
   calibrationReport,
   consensus,
   dueGold,
+  goldPlace,
   isAccepted,
+  placeInQueue,
 } from './review-protocol';
+import { isGoldClone, isGoldSource, visibleTo } from './task-visibility';
 
 // ReviewDecision is polymorphic; for a task it is the adjudication record.
 const TASK_SUBJECT = 'task';
@@ -107,6 +111,59 @@ function packetLabels(built: BuiltPacket) {
   };
 }
 
+// ------------------------------------------------- gold clone ids and times
+
+/** A Prisma cuid: c, 8 timestamp, 4 counter, 4 fingerprint, 8 random (all base 36). */
+const CUID = /^c[0-9a-z]{24}$/;
+
+function base36(n: number, width: number): string {
+  return n.toString(36).padStart(width, '0').slice(-width);
+}
+
+function randomBase36(width: number): string {
+  // 48 random bits cover 36^8; the slight modulo bias does not matter for an id.
+  return base36(randomBytes(6).readUIntBE(0, 6) % 36 ** width, width);
+}
+
+/**
+ * Mints cuid-shaped ids for a gold clone and its Layer 2 rows, at a time of our choosing, so
+ * the id carries the same (backdated) time as the row's createdAt. The fingerprint and counter
+ * are borrowed from a real id written near that time, so the clone's id looks like it came from
+ * the same server process as its neighbours. The counter advances once per row.
+ */
+function cuidMinter(neighbour: string | null) {
+  const real = neighbour !== null && CUID.test(neighbour) ? neighbour : null;
+  const fingerprint = real ? real.slice(13, 17) : randomBase36(4);
+  let counter = (real ? parseInt(real.slice(9, 13), 36) : randomInt(36 ** 3)) + 1 + randomInt(3);
+  return {
+    /** Advance to the next row's counter. */
+    next: () => counter++,
+    /** A candidate id at `time` with this row's counter; only the random block varies. */
+    at: (time: Date, n: number) =>
+      `c${base36(time.getTime(), 8)}${base36(n, 4)}${fingerprint}${randomBase36(8)}`,
+  };
+}
+
+/**
+ * A creation time for a gold clone that says nothing about when it was written: a random
+ * instant between two consecutive real (non-gold) tasks of the gold's campaign, so the clone
+ * sits among real arrivals. It never keys off the request time or the reviewer's history.
+ * With fewer than two real tasks there is no gap to hide in; it then falls within a minute
+ * after the one real task, or after the gold source, never later than now.
+ */
+function plausibleCreatedAt(source: TaskRow, all: TaskRow[], now: number): Date {
+  const times = all
+    .filter((t) => !t.isGold && t.campaignId === source.campaignId)
+    .map((t) => t.createdAt.getTime())
+    .sort((a, b) => a - b);
+  if (times.length >= 2) {
+    const i = randomInt(times.length - 1);
+    return new Date(Math.floor(times[i] + Math.random() * (times[i + 1] - times[i])));
+  }
+  const base = times[0] ?? source.createdAt.getTime();
+  return new Date(Math.min(now, base + randomInt(1, 60_000)));
+}
+
 /** A review while the second review is still open: who and when, never the scores. */
 function redactedReview(r: TaskRow['taskReviews'][number]) {
   return { id: r.id, taskId: r.taskId, reviewerId: r.reviewerId, createdAt: r.createdAt };
@@ -124,53 +181,36 @@ export class TaskService {
   /**
    * All tasks the viewer may see, newest first. With `queue` it becomes the viewer's work
    * queue: only tasks their role lets them act on. A reviewer's queue is in one shared order
-   * that ignores age, with one gold task in its first rows in ~20% of their reviews (see
-   * buildQueue); anyone else's is oldest first.
+   * that ignores age (see buildQueue); anyone else's is oldest first.
    *
-   * Gold shows up only where the viewer would meet it in their queue: the one gold task due
-   * to them now, and gold they have already reviewed. The plain list, the queue, a campaign
-   * filter and a single task all agree on that, so diffing them points at nothing.
+   * Gold reaches a reviewer only as a clone written for them alone when a gold review falls
+   * due (see materialiseGold): a row with its own id, dated among the campaign's real tasks,
+   * whose id hash puts it where the gold review is due in the queue. Once reviewed it stays in
+   * their list like any task they reviewed. The gold rows themselves are shown to admins
+   * only, so nothing about them follows one reviewer's history.
    */
   async list(viewer: AuthUser, campaignId?: string, queue = false) {
-    const reviewerId = viewer.expertId;
-    // Every campaign, not just the filtered one: which gold is due follows the reviewer's
-    // whole history, so it must not change with the filter.
-    const all = await this.prisma.task.findMany({
-      orderBy: { createdAt: 'asc' },
-      include: TASK_INCLUDE,
-    });
-    const adjudications = await this.adjudicationsFor(all.map((t) => t.id));
-    const gold = this.goldFor(viewer, all, adjudications);
+    let all = await this.loadAll();
+    if (this.reviews(viewer) && (await this.materialiseGold(viewer, all))) {
+      all = await this.loadAll();
+    }
     const tasks = all.filter(
-      (t) => (!campaignId || t.campaignId === campaignId) && this.visible(t, viewer, gold.due),
+      (t) => (!campaignId || t.campaignId === campaignId) && visibleTo(t, viewer),
     );
+    const adjudications = await this.adjudicationsFor(tasks.map((t) => t.id));
     const view = (t: TaskRow) => this.toView(t, viewer, adjudications.get(t.id));
 
     if (!queue) return [...tasks].reverse().map(view);
 
     const actionable = tasks.filter((t) => this.canAct(t, viewer, adjudications.get(t.id)));
-    // Gold only reaches people who review; anyone else keeps a plain oldest-first queue.
-    if (!this.reviews(viewer)) {
-      return actionable.map(view);
-    }
-    const regular = actionable.filter((t) => !t.isGold);
-    // Only gold.due is ever served, even to an admin, who sees every gold task in the list.
-    const due = gold.due && actionable.some((t) => t.id === gold.due?.id) ? [gold.due] : [];
-    return buildQueue(reviewerId, regular, due, gold.total, gold.done).map(view);
+    if (!this.reviews(viewer)) return actionable.map(view);
+    return buildQueue(actionable).map(view);
   }
 
   async get(id: string, viewer: AuthUser) {
     const task = await this.prisma.task.findUnique({ where: { id }, include: TASK_INCLUDE });
-    if (!task) {
+    if (!task || !visibleTo(task, viewer)) {
       throw new NotFoundException(`Task "${id}" not found`);
-    }
-    if (task.isGold && !this.visible(task, viewer, null)) {
-      // Only the gold due to this viewer now may be read; the rest answer like a missing id.
-      const all = await this.prisma.task.findMany({ include: TASK_INCLUDE });
-      const due = this.goldFor(viewer, all, await this.adjudicationsFor(all.map((t) => t.id))).due;
-      if (due?.id !== id) {
-        throw new NotFoundException(`Task "${id}" not found`);
-      }
     }
     return this.toView(task, viewer, (await this.adjudicationsFor([id])).get(id));
   }
@@ -257,9 +297,15 @@ export class TaskService {
     await this.runVerification(task, built, lint);
 
     // The gold marker and answer never leave the API, not even in the create response.
-    const { isGold: _isGold, goldExpectedAccept: _goldExpectedAccept, ...created } = task;
-    void _isGold;
-    void _goldExpectedAccept;
+    const {
+      isGold: _isGold,
+      goldExpectedAccept: _goldExpectedAccept,
+      goldSourceId: _goldSourceId,
+      goldForExpertId: _goldForExpertId,
+      goldOpenFor: _goldOpenFor,
+      ...created
+    } = task;
+    void [_isGold, _goldExpectedAccept, _goldSourceId, _goldForExpertId, _goldOpenFor];
     return { ...created, linted };
   }
 
@@ -313,10 +359,16 @@ export class TaskService {
     };
   }
 
-  /** The stored Layer 2 results for a task: lint findings and verifier runs. */
-  async verification(taskId: string) {
-    const task = await this.prisma.task.findUnique({ where: { id: taskId }, select: { id: true } });
-    if (!task) {
+  /**
+   * The stored Layer 2 results for a task: lint findings and verifier runs. A task the viewer
+   * may not see answers like a missing one; a gold clone has its own copy (materialiseGold).
+   */
+  async verification(taskId: string, viewer: AuthUser) {
+    const task = await this.prisma.task.findUnique({
+      where: { id: taskId },
+      select: { id: true, isGold: true, goldSourceId: true, goldForExpertId: true },
+    });
+    if (!task || !visibleTo(task, viewer)) {
       throw new NotFoundException(`Task "${taskId}" not found`);
     }
     const [lintFindings, verifierRuns] = await Promise.all([
@@ -425,7 +477,9 @@ export class TaskService {
    *   first review  -> IN_REVIEW
    *   second review -> ACCEPTED / REJECTED if the two verdicts agree,
    *                    otherwise stays IN_REVIEW and an adjudication is opened.
-   * Gold tasks are calibration only: any number of reviewers, never a status change.
+   * A gold clone is calibration only: the review is stored on the clone, which calibration
+   * scores against the answer on the gold it copies, and the clone stays in the reviewer's
+   * list as a task they reviewed. A gold source is never reviewed directly.
    */
   async review(taskId: string, dto: CreateTaskReviewDto, reviewer: AuthUser) {
     const reviewerId = reviewer.expertId;
@@ -437,23 +491,32 @@ export class TaskService {
       // Serialise reviews of the same task, so two concurrent requests cannot both
       // see "one review so far" and write a third.
       const task = await this.lockTask(tx, taskId);
-      const peerReviews = task.taskReviews.filter((r) => r.reviewerExpertId !== null);
-
+      // Before any other check: a hidden task must answer exactly like a missing id.
+      if (!visibleTo(task, reviewer)) {
+        throw new NotFoundException(`Task "${taskId}" not found`);
+      }
       if (task.authorId === reviewerId) {
         throw new ForbiddenException('Authors cannot review their own task');
       }
+      if (isGoldClone(task)) {
+        return this.reviewGoldClone(tx, task, dto, accepted, reviewerId);
+      }
+      if (isGoldSource(task)) {
+        // Only an admin gets here; gold is reviewed through a clone or not at all.
+        throw new ConflictException('Task is not open for review');
+      }
+
+      const peerReviews = task.taskReviews.filter((r) => r.reviewerExpertId !== null);
       if (peerReviews.some((r) => r.reviewerExpertId === reviewerId)) {
         throw new ConflictException('This reviewer has already reviewed this task');
       }
-      if (!task.isGold) {
-        if (task.status !== TaskStatus.SUBMITTED && task.status !== TaskStatus.IN_REVIEW) {
-          throw new ConflictException(`Task is ${task.status} and is not open for review`);
-        }
-        if (peerReviews.length >= REVIEWS_REQUIRED) {
-          throw new ConflictException(
-            `Task already has ${REVIEWS_REQUIRED} reviews and is awaiting adjudication`,
-          );
-        }
+      if (task.status !== TaskStatus.SUBMITTED && task.status !== TaskStatus.IN_REVIEW) {
+        throw new ConflictException(`Task is ${task.status} and is not open for review`);
+      }
+      if (peerReviews.length >= REVIEWS_REQUIRED) {
+        throw new ConflictException(
+          `Task already has ${REVIEWS_REQUIRED} reviews and is awaiting adjudication`,
+        );
       }
 
       const review = await tx.taskReview.create({
@@ -466,33 +529,29 @@ export class TaskService {
         },
       });
 
-      let status: TaskStatus = task.status;
-      let outcome: string = 'calibration';
-      if (!task.isGold) {
-        outcome = consensus([...peerReviews.map((r) => r.accepted), accepted]);
-        if (outcome === 'accepted') status = TaskStatus.ACCEPTED;
-        else if (outcome === 'rejected') status = TaskStatus.REJECTED;
-        else status = TaskStatus.IN_REVIEW;
-        await tx.task.update({ where: { id: taskId }, data: { status } });
+      const outcome = consensus([...peerReviews.map((r) => r.accepted), accepted]);
+      let status: TaskStatus = TaskStatus.IN_REVIEW;
+      if (outcome === 'accepted') status = TaskStatus.ACCEPTED;
+      else if (outcome === 'rejected') status = TaskStatus.REJECTED;
+      await tx.task.update({ where: { id: taskId }, data: { status } });
 
-        if (outcome === 'split') {
-          const decision = await tx.reviewDecision.create({
-            data: {
-              subjectType: TASK_SUBJECT,
-              subjectId: taskId,
-              reviewerId: SYSTEM_REVIEWER,
-              verdict: Verdict.NEEDS_REVIEW,
-              reason: 'Peer reviewers disagree on the verdict',
-            },
-          });
-          await tx.event.create({
-            data: {
-              actorId: null,
-              type: 'task.adjudication_opened',
-              payload: { taskId, decisionId: decision.id } as Prisma.InputJsonValue,
-            },
-          });
-        }
+      if (outcome === 'split') {
+        const decision = await tx.reviewDecision.create({
+          data: {
+            subjectType: TASK_SUBJECT,
+            subjectId: taskId,
+            reviewerId: SYSTEM_REVIEWER,
+            verdict: Verdict.NEEDS_REVIEW,
+            reason: 'Peer reviewers disagree on the verdict',
+          },
+        });
+        await tx.event.create({
+          data: {
+            actorId: null,
+            type: 'task.adjudication_opened',
+            payload: { taskId, decisionId: decision.id } as Prisma.InputJsonValue,
+          },
+        });
       }
 
       await tx.event.create({
@@ -509,9 +568,53 @@ export class TaskService {
         },
       });
 
-      // A gold task must look like any other task to the reviewer.
-      return { ...review, taskStatus: task.isGold ? TaskStatus.IN_REVIEW : status };
+      return { ...review, taskStatus: status };
     });
+  }
+
+  /**
+   * The review of a gold clone, inside review()'s transaction with the clone locked. The
+   * review row goes on the clone, which then reads as a task with one review: IN_REVIEW, in
+   * the reviewer's list, out of their queue. Calibration finds the answer through the clone's
+   * gold source. Clearing goldOpenFor lets the next clone be written when one falls due.
+   */
+  private async reviewGoldClone(
+    tx: Tx,
+    clone: TaskRow,
+    dto: CreateTaskReviewDto,
+    accepted: boolean,
+    reviewerId: string,
+  ) {
+    if (clone.taskReviews.some((r) => r.reviewerExpertId === reviewerId)) {
+      throw new ConflictException('This reviewer has already reviewed this task');
+    }
+    const review = await tx.taskReview.create({
+      data: {
+        taskId: clone.id,
+        reviewerId: reviewerId,
+        reviewerExpertId: reviewerId,
+        scores: dto.scores as Prisma.InputJsonValue,
+        accepted,
+      },
+    });
+    // What a normal task's row says after its first review.
+    const taskStatus = TaskStatus.IN_REVIEW;
+    await tx.task.update({ where: { id: clone.id }, data: { status: taskStatus, goldOpenFor: null } });
+    await tx.event.create({
+      data: {
+        actorId: reviewerId,
+        type: 'task.reviewed',
+        payload: {
+          taskId: clone.id,
+          goldSourceId: clone.goldSourceId,
+          reviewId: review.id,
+          reviewerId: reviewerId,
+          accepted,
+          outcome: 'calibration',
+        } as Prisma.InputJsonValue,
+      },
+    });
+    return { ...review, taskStatus };
   }
 
   /**
@@ -523,6 +626,10 @@ export class TaskService {
 
     return this.prisma.$transaction(async (tx) => {
       const task = await this.lockTask(tx, taskId);
+      // Before any other check: a hidden task must answer exactly like a missing id.
+      if (!visibleTo(task, adjudicator)) {
+        throw new NotFoundException(`Task "${taskId}" not found`);
+      }
       const pending = await tx.reviewDecision.findFirst({
         where: { subjectType: TASK_SUBJECT, subjectId: taskId, verdict: Verdict.NEEDS_REVIEW },
       });
@@ -599,7 +706,11 @@ export class TaskService {
     };
   }
 
-  /** Reviewer accuracy against the gold answers. A flag is a prompt to recalibrate. */
+  /**
+   * Reviewer accuracy against the gold answers. A flag is a prompt to recalibrate. A gold
+   * review sits on the reviewer's clone, which holds no answer: the answer is its source's.
+   * (A review on a gold source itself predates clones and is scored against it directly.)
+   */
   async calibration(campaignId?: string) {
     const reviews = await this.prisma.taskReview.findMany({
       where: {
@@ -610,7 +721,13 @@ export class TaskService {
         reviewerExpertId: true,
         accepted: true,
         reviewer: { select: { name: true } },
-        task: { select: { isGold: true, goldExpectedAccept: true } },
+        task: {
+          select: {
+            isGold: true,
+            goldExpectedAccept: true,
+            goldSource: { select: { goldExpectedAccept: true } },
+          },
+        },
       },
     });
     const names = new Map(reviews.map((r) => [r.reviewerExpertId as string, r.reviewer?.name]));
@@ -618,7 +735,9 @@ export class TaskService {
       reviews.map((r) => ({
         reviewerId: r.reviewerExpertId as string,
         accepted: r.accepted,
-        goldExpectedAccept: r.task.isGold ? r.task.goldExpectedAccept : null,
+        goldExpectedAccept: r.task.isGold
+          ? (r.task.goldSource?.goldExpectedAccept ?? r.task.goldExpectedAccept)
+          : null,
       })),
     ).map((row) => ({ ...row, reviewerName: names.get(row.reviewerId) ?? null }));
   }
@@ -651,38 +770,192 @@ export class TaskService {
     return user.role === Role.REVIEWER || user.role === Role.ADMIN;
   }
 
-  /**
-   * This reviewer's history and the one gold task due to them now (null when none is),
-   * decided from every task in every campaign. The single source for the queue, the plain
-   * list and a single read, so they cannot disagree.
-   */
-  private goldFor(
-    viewer: AuthUser,
-    all: TaskRow[],
-    adjudications: Map<string, ReviewDecision>,
-  ): { due: TaskRow | null; total: number; done: number } {
-    const reviewerId = viewer.expertId;
-    const mine = all.filter((t) => t.taskReviews.some((r) => r.reviewerExpertId === reviewerId));
-    const done = mine.filter((t) => t.isGold).length;
-    if (!this.reviews(viewer)) return { due: null, total: mine.length, done };
-    const candidates = all.filter((t) => t.isGold && this.canAct(t, viewer, adjudications.get(t.id)));
-    return { due: dueGold(reviewerId, candidates, mine.length, done), total: mine.length, done };
+  /** Every task in every campaign, oldest first. */
+  private loadAll(): Promise<TaskRow[]> {
+    return this.prisma.task.findMany({ orderBy: { createdAt: 'asc' }, include: TASK_INCLUDE });
   }
 
   /**
-   * May this viewer see this task at all? Every normal task, yes. A gold task only if they
-   * are an admin, have reviewed it, or it is the one due to them now: a gold task that sits
-   * open with no reviews but never reaches their queue would give itself away.
+   * Write a gold clone for this reviewer if a gold review is due to them (goldPlace) and they
+   * hold no unreviewed clone. Decided from their history over every campaign, so a campaign
+   * filter does not change it. Returns whether the task set changed.
+   *
+   * The clone goes where the gold review is due in the reviewer's whole queue (every campaign;
+   * a campaign-filtered queue only drops rows, so it never puts the clone later). At most one
+   * unreviewed clone per reviewer: the unique goldOpenFor index makes a concurrent second
+   * write fail, and that request then reads the clone the first one wrote.
    */
-  private visible(task: TaskRow, viewer: AuthUser, due: TaskRow | null): boolean {
-    if (!task.isGold || viewer.role === Role.ADMIN) return true;
-    if (task.taskReviews.some((r) => r.reviewerExpertId === viewer.expertId)) return true;
-    return due?.id === task.id;
+  private async materialiseGold(viewer: AuthUser, all: TaskRow[]): Promise<boolean> {
+    const me = viewer.expertId;
+    const reviewedByMe = (t: TaskRow) => t.taskReviews.some((r) => r.reviewerExpertId === me);
+    const myClones = all.filter((t) => isGoldClone(t) && t.goldForExpertId === me);
+    if (myClones.some((t) => t.goldOpenFor === me)) return false;
+    const mine = all.filter(reviewedByMe);
+    const done = mine.filter((t) => t.isGold).length;
+    const place = goldPlace(me, mine.length, done);
+    if (place === null) return false;
+    const given = new Set(myClones.map((t) => t.goldSourceId));
+    const candidates = all.filter(
+      (t) => isGoldSource(t) && t.authorId !== me && !given.has(t.id) && !reviewedByMe(t),
+    );
+    const source = dueGold(me, candidates, mine.length, done);
+    if (!source) return false;
+
+    const visible = all.filter((t) => visibleTo(t, viewer));
+    const adjudications = await this.adjudicationsFor(visible.map((t) => t.id));
+    const queue = buildQueue(
+      visible.filter((t) => this.canAct(t, viewer, adjudications.get(t.id))),
+    );
+    try {
+      await this.writeGoldClone(source, me, all, queue, place);
+    } catch (err) {
+      if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) {
+        throw err;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * A task row for one reviewer, copied from a gold source, that reads as an ordinary task:
+   *  - createdAt is drawn from the campaign's real task times (plausibleCreatedAt), never the
+   *    request time, and the id is a cuid minted at that same time;
+   *  - the id's hash puts it at `place` in the reviewer's queue (placeInQueue), so a reviewer
+   *    working from the head meets it where the gold review is due;
+   *  - status SUBMITTED, and its own copy of the Layer 2 rows, so GET /verification answers
+   *    for it as for any task. Those rows keep the source's offsets from its createdAt, their
+   *    ids are minted at their own backdated times, and the requirement and rubric item ids
+   *    are drawn afresh with every lint finding and verifier verdict that quotes them
+   *    rewritten, so nothing in the copy points back at the source.
+   */
+  private async writeGoldClone(
+    source: TaskRow,
+    reviewerId: string,
+    all: TaskRow[],
+    queue: TaskRow[],
+    place: number,
+  ): Promise<void> {
+    const createdAt = plausibleCreatedAt(source, all, Date.now());
+    // The real task written last before that time lends its fingerprint and counter.
+    const neighbour = all
+      .filter((t) => !t.isGold && t.createdAt.getTime() <= createdAt.getTime())
+      .at(-1);
+    const mint = cuidMinter(neighbour?.id ?? null);
+    const cloneCounter = mint.next();
+    const id = placeInQueue(queue, place, () => mint.at(createdAt, cloneCounter));
+    const shifted = (t: Date) =>
+      new Date(createdAt.getTime() + Math.max(0, t.getTime() - source.createdAt.getTime()));
+
+    await this.prisma.$transaction(async (tx) => {
+      const clone = await tx.task.create({
+        data: {
+          id,
+          createdAt,
+          campaignId: source.campaignId,
+          authorId: source.authorId,
+          prompt: source.prompt,
+          spec: source.spec,
+          reference: source.reference,
+          status: TaskStatus.SUBMITTED,
+          isGold: true,
+          goldExpectedAccept: null,
+          goldSourceId: source.id,
+          goldForExpertId: reviewerId,
+          goldOpenFor: reviewerId,
+        },
+      });
+      const where = { taskId: source.id };
+      const orderBy = { createdAt: 'asc' } as const;
+      const [requirements, rubricItems, lintFindings, verifierRuns] = await Promise.all([
+        tx.requirement.findMany({ where, orderBy }),
+        tx.rubricItem.findMany({ where, orderBy }),
+        tx.lintFinding.findMany({ where, orderBy }),
+        tx.verifierRun.findMany({ where, orderBy }),
+      ]);
+      const ids = new Map<string, string>(
+        [...requirements, ...rubricItems].map((r) => [r.id, randomUUID()]),
+      );
+      const rekey = (text: string) =>
+        [...ids].reduce((out, [from, to]) => out.split(from).join(to), text);
+
+      if (requirements.length > 0) {
+        await tx.requirement.createMany({
+          data: requirements.map((r) => ({
+            id: ids.get(r.id) as string,
+            taskId: clone.id,
+            text: r.text,
+            kind: r.kind,
+            value: r.value,
+            tolerance: r.tolerance,
+            createdAt: shifted(r.createdAt),
+          })),
+        });
+      }
+      if (rubricItems.length > 0) {
+        await tx.rubricItem.createMany({
+          data: rubricItems.map((i) => ({
+            id: ids.get(i.id) as string,
+            taskId: clone.id,
+            requirementId: i.requirementId === null ? null : (ids.get(i.requirementId) ?? null),
+            text: i.text,
+            checkMethod: i.checkMethod,
+            weight: i.weight,
+            createdAt: shifted(i.createdAt),
+          })),
+        });
+      }
+      if (lintFindings.length > 0) {
+        await tx.lintFinding.createMany({
+          data: lintFindings.map((f) => {
+            const at = shifted(f.createdAt);
+            return {
+              id: mint.at(at, mint.next()),
+              taskId: clone.id,
+              rule: f.rule,
+              severity: f.severity,
+              detail: f.detail === null ? null : rekey(f.detail),
+              resolved: f.resolved,
+              createdAt: at,
+            };
+          }),
+        });
+      }
+      for (const run of verifierRuns) {
+        const at = shifted(run.createdAt);
+        await tx.verifierRun.create({
+          data: {
+            id: mint.at(at, mint.next()),
+            taskId: clone.id,
+            subjectType: run.subjectType,
+            // The reference lives on the task row, so its subject is the task itself.
+            subjectId: run.subjectId === source.id ? clone.id : run.subjectId,
+            verifierVersion: run.verifierVersion,
+            results: JSON.parse(rekey(JSON.stringify(run.results))) as Prisma.InputJsonValue,
+            passed: run.passed,
+            createdAt: at,
+          },
+        });
+      }
+      // Admin-side audit trail: the event keeps the real time it was written.
+      await tx.event.create({
+        data: {
+          actorId: null,
+          type: 'task.gold_cloned',
+          payload: {
+            taskId: clone.id,
+            goldSourceId: source.id,
+            reviewerId,
+            queuePlace: place,
+          } as Prisma.InputJsonValue,
+        },
+      });
+    });
   }
 
   /**
    * May this user act on this task right now? Reviewers see tasks open for a peer review
-   * (gold included), adjudicators see split tasks, an admin sees both, an author neither.
+   * (their own gold clone included), adjudicators see split tasks, an admin sees both, an
+   * author neither.
    */
   private canAct(task: TaskRow, user: AuthUser, adjudication?: ReviewDecision): boolean {
     const expertId = user.expertId;
@@ -690,7 +963,9 @@ export class TaskService {
     const adjudicates = user.role === Role.ADJUDICATOR || user.role === Role.ADMIN;
     if (task.authorId === expertId) return false;
     if (task.taskReviews.some((r) => r.reviewerExpertId === expertId)) return false;
-    if (task.isGold) return reviews;
+    if (isGoldClone(task)) return reviews && task.goldForExpertId === expertId;
+    // A gold source is reviewed only through a clone.
+    if (task.isGold) return false;
     if (adjudication?.verdict === Verdict.NEEDS_REVIEW) return adjudicates;
     if (!reviews) return false;
     const open = task.status === TaskStatus.SUBMITTED || task.status === TaskStatus.IN_REVIEW;
@@ -706,21 +981,30 @@ export class TaskService {
    *    review (and the agreement statistic built on it) stays independent. Scores
    *    release once the two reviewers are done — at adjudication and after the
    *    decision — so the adjudicator can see the dispute.
-   * A gold task is presented, to each viewer, as an ordinary task in the state their own
-   * actions would have left it: nobody has reviewed it yet, or — once the viewer has —
-   * it has their one review and waits for a second, exactly like a normal task after its
-   * first review. Other reviewers' gold reviews are never shown (there can be many).
+   * A gold row (a clone to its one reviewer, a source to an admin) is presented as an
+   * ordinary task in the state the viewer's own actions would have left it: nobody has
+   * reviewed it yet, or it has their one review and waits for a second (a clone they
+   * reviewed, or a source an admin reviewed before clones existed). Other reviewers' gold
+   * reviews are never shown.
    *
    * Review is blind: reviewers and adjudicators get `authorId` and `author` as null. Only an
    * admin writes gold, so an admin author would otherwise mark every gold task. Admins and a
    * task's own author still see who wrote it.
    */
   private toView(task: TaskRow, viewer: AuthUser, adjudication?: ReviewDecision) {
-    // updatedAt is withheld for every task: a review writes a normal task's row but never
-    // a gold one's, so the update time would tell them apart.
-    const { isGold, goldExpectedAccept, updatedAt, taskReviews, ...row } = task;
-    void goldExpectedAccept;
-    void updatedAt;
+    // updatedAt is withheld for every task: a clone's is the real time it was written, which
+    // would undo its backdated createdAt, and update times would tell gold rows apart.
+    const {
+      isGold,
+      goldExpectedAccept,
+      goldSourceId,
+      goldForExpertId,
+      goldOpenFor,
+      updatedAt,
+      taskReviews,
+      ...row
+    } = task;
+    void [goldExpectedAccept, goldSourceId, goldForExpertId, goldOpenFor, updatedAt];
     const blind =
       (viewer.role === Role.REVIEWER || viewer.role === Role.ADJUDICATOR) &&
       task.authorId !== viewer.expertId;

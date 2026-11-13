@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { CampaignService } from './campaign.service';
-import { Roles } from '../auth/auth.decorators';
+import { AuthUser, CurrentUser, Roles } from '../auth/auth.decorators';
 import { parseCampaignDto } from './dto/campaign.dto';
 
 /**
@@ -12,8 +12,8 @@ export class CampaignController {
   constructor(private readonly campaigns: CampaignService) {}
 
   @Get()
-  list() {
-    return this.campaigns.list();
+  list(@CurrentUser() user: AuthUser) {
+    return this.campaigns.list(user);
   }
 
   @Post()
