@@ -8,6 +8,7 @@
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --dir src",
     "prebuild": "prisma generate",
     "pretypecheck": "prisma generate",
     "prisma:generate": "prisma generate",
@@ -35,6 +36,7 @@
     "@types/node": "^22.9.0",
     "prisma": "^6.19.3",
     "ts-node": "^10.9.2",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "vitest": "^3.2.7"
   }
 }

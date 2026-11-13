@@ -31,8 +31,32 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Test API
+        run: npm test
+
       - name: Build web
         run: npm run build:web
 
       - name: Build API
         run: npm run build:api
+
+  verify-python:
+    # The verify service is standard library only. This job uses the runner's own Python
+    # and installs nothing: without cadquery the geometry tests skip, the rest must pass.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show interpreter
+        run: |
+          python3 --version
+          python3 -c "import importlib.util as u; print('cadquery:', 'present' if u.find_spec('cadquery') else 'absent (geometry tests skip)')"
+
+      - name: Test verify/lint
+        run: python3 -m unittest discover -s verify/lint/tests -v
+
+      - name: Test verify/verifiers
+        run: python3 -m unittest discover -s verify/verifiers/tests -v
+
+      - name: Test verify/probe
+        run: python3 -m unittest discover -s verify/probe/tests -v

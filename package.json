@@ -17,6 +17,8 @@
     "typecheck": "npm run typecheck:web && npm run typecheck:api",
     "typecheck:web": "cd apps/web && npm run typecheck",
     "typecheck:api": "cd apps/api && npm run typecheck",
+    "test": "npm run test:api",
+    "test:api": "cd apps/api && npm test",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down"
   }
