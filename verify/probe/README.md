@@ -39,5 +39,5 @@ live Ollama:
 python -m unittest discover -s verify/probe/tests -v
 ```
 
-Not yet built: the API calling the probe (the `probe_runs` table exists but nothing writes to
+Not yet built: the API calling the probe (the `ProbeRun` table exists but nothing writes to
 it), running two models per task, and writing the tier back to the task record.

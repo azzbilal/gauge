@@ -71,7 +71,7 @@ before the number means much. Full output: `docs/results/`.
 One PostgreSQL database is the **source of truth**. The API (NestJS, JWT) writes to it; the web
 app (React) talks only to the API. The API reaches the verification layer (`verify/`, Python
 standard library, port 4000) over HTTP only: `/extract`, `/lint`, `/verify`, `/probe`.
-Verification stores its results in its own five tables keyed by `task_id`. Later, Dagster copies
+Verification stores its results in its own five tables keyed by `taskId`. Later, Dagster copies
 the database into a dbt warehouse on a schedule, and the model loop consumes only reviewed,
 accepted tasks. Data flows one way, so downstream failure can never corrupt the campaign.
 
@@ -86,7 +86,7 @@ version, pipeline spec). Hold out before training. Publish failures.
   splits from stalling; report the small sample.
 - **Golden labels and rubric disagree.** This has already happened: re-label or re-anchor,
   and version the change.
-- **Verification breaks Layer 1.** Keep Layer 2 additive: new tables keyed by `task_id`,
+- **Verification breaks Layer 1.** Keep Layer 2 additive: new tables keyed by `taskId`,
   one HTTP seam, no edits to Layer 1 tables.
 - **Flat training result.** Publish it; a clear failure analysis is still a full loop.
 

@@ -63,7 +63,7 @@ Rules:
   the two reviewers once they have split. A gold clone never leaves the redacted form (§3).
   The admin-only agreement and calibration reports read verdicts directly.
 - **Exactly two.** A third peer review is refused; a decided task is closed to review.
-- **Adjudication.** A split is recorded as a `review_decisions` row (`subject_type = task`,
+- **Adjudication.** A split is recorded as a `ReviewDecision` row (`subjectType = task`,
   verdict `NEEDS_REVIEW`). A third expert — not the author, not either reviewer — resolves
   it to `APPROVE` or `REJECT` with a written reason. Who may adjudicate at all: the
   adjudicator and admin roles, and the designated lead (`users.isLead`, set by an admin at

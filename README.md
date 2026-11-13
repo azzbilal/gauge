@@ -93,8 +93,8 @@ prompt) and re-run, keeping the prompt version in the result. Until then Gate 1'
   `package.json` and lockfile; there are no workspaces and no symlinks. The root
   `package.json` only holds scripts that `cd` into each app, and CI installs each with
   `npm ci` in its own directory.
-- **Layer 2 is additive.** It has its own tables keyed by `task_id` (`requirements`,
-  `rubric_items`, `lint_findings`, `verifier_runs`, `probe_runs`), its migration only creates,
+- **Layer 2 is additive.** It has its own tables keyed by `taskId` (`Requirement`,
+  `RubricItem`, `LintFinding`, `VerifierRun`, `ProbeRun`), its migration only creates,
   and the API reaches it only over HTTP. See [verify/README.md](./verify/README.md).
 - **Data flows one way.** Nothing downstream writes back into the app database.
 
@@ -122,7 +122,7 @@ designate the **lead** (`"lead": true`, any role), who may also adjudicate.
 `POST /intake/runs` (admin) scores a CV against a posting's rubric (CAD depth, geometric
 reasoning, scripting, communication; 0–5 each) with an evidence quote and a confidence per
 criterion. Below 0.7 confidence, overall or on any criterion, the run goes to the human review
-queue (`review_decisions`), and a Slack alert fires when a webhook is set. Every run stores
+queue (`ReviewDecision`), and a Slack alert fires when a webhook is set. Every run stores
 its `promptVersion` (provider and model). Backends: local Ollama (default,
 `qwen3.5:9b-q4_K_M`, four few-shot worked examples in `src/intake/llm/examples.json`) or
 Anthropic (`LLM_PROVIDER=anthropic`).

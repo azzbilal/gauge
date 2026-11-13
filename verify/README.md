@@ -1,7 +1,7 @@
 # Layer 2 — Verification
 
 The verification layer checks every task automatically before and during the Layer 1
-review loop. It is **purely additive**: it has its own tables keyed by `task_id`, it changes
+review loop. It is **purely additive**: it has its own tables keyed by `taskId`, it changes
 no Layer 1 table, and the API reaches it only over HTTP (`service/`), so it deploys
 separately. Python 3, standard library only; executing CadQuery references additionally
 needs an interpreter with `cadquery` (see `verifiers/`).
@@ -28,9 +28,9 @@ The API parses nothing itself (`apps/api/src/verify/packet-builder.ts` only arra
 
 ## Tables
 
-`requirements`, `rubric_items`, `lint_findings`, `verifier_runs`, `probe_runs`
+`Requirement`, `RubricItem`, `LintFinding`, `VerifierRun`, `ProbeRun`
 (`apps/api/prisma/schema.prisma`, migration `0003_verification`: `CREATE` only, no `ALTER` on a
-Layer 1 table). `probe_runs` exists but nothing writes to it yet.
+Layer 1 table). `ProbeRun` exists but nothing writes to it yet.
 
 ## Tests
 
