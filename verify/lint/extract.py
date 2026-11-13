@@ -27,7 +27,7 @@ import re
 import uuid
 from collections import namedtuple
 
-VERSION = "extract-2"
+VERSION = "extract-3"
 
 MACHINE = "machine"
 VISUAL = "visual"
@@ -120,14 +120,44 @@ SIZE_NOUNS = ("width", "length", "height", "depth", "thickness", "diameter", "ra
 # the part itself, so it must not be named width/depth/height and compared with the part.
 _FEATURE_NOUNS = frozenset({
     "pocket", "slot", "groove", "cutout", "notch", "recess", "cavity", "channel",
-    "keyway", "bore", "hole", "counterbore", "countersink", "cut",
+    "keyway", "bore", "hole", "counterbore", "countersink",
 })
 
-# Words that are not the noun a triple describes: articles, prepositions, connectors.
-_NON_NOUNS = frozenset({
-    "a", "an", "the", "with", "of", "and", "or", "is", "are", "has", "have", "in",
-    "on", "at", "to", "for", "by", "into", "about", "approximately", "roughly", "x",
+# Words between a subject and the triple that state its size: "the plate is 80 x 50 x 6",
+# "a pocket of 20 x 10 x 3", "plate sized to 80 x 50 x 6", "a pocket measuring ...".
+_TRIPLE_LINKS = frozenset({
+    "is", "are", "was", "were", "be", "of", "to", "at", "measuring", "measures", "measure",
+    "sized", "size", "sizes", "dimension", "dimensions", "dimensioned", "overall",
+    "nominal", "nominally", "exactly", "about", "around", "approximately", "approx",
+    "roughly",
 })
+
+# Verbs that put a triple in front of what is made: "cut 80 x 50 x 6 mm plate", "mill a
+# 20 x 10 x 3 mm pocket". Neither the verb nor the triple names anything by itself.
+_TRIPLE_VERBS = frozenset({
+    "cut", "mill", "milled", "machine", "machined", "make", "made", "add", "create",
+    "include", "model", "form", "formed", "use",
+})
+
+# Words between a triple and the noun it sizes: "a 20 x 10 x 3 mm rectangular pocket".
+# Only these are read past; any other word after the triple is taken as its noun.
+_TRIPLE_MODIFIERS = frozenset({
+    "rectangular", "square", "round", "circular", "rounded", "oblong", "deep", "shallow",
+    "blind", "through", "open", "closed", "flat", "central", "centre", "center",
+    "centred", "centered", "small", "large", "wide", "narrow", "long", "short",
+})
+
+# Words that are not the noun a triple describes: articles, determiners, number words,
+# prepositions and connectors.
+_NON_NOUNS = frozenset({
+    "a", "an", "the", "with", "and", "or", "has", "have", "having", "in", "on", "for",
+    "by", "into", "from", "each", "every", "both", "all", "its", "their", "this", "that",
+    "these", "those", "x", *_NUMBER_WORDS,
+})
+
+# Where the words around a triple stop being about it: a sentence end or a comma. A
+# full stop counts only before whitespace or the end of the text, so "6.5" is not one.
+_CLAUSE_BREAK = re.compile(r"[,;!?\n]|\.(?=\s|$)")
 
 # Sizes of the part as a whole, as opposed to the size of a feature on it.
 _BOX_NOUNS = {"width", "length", "depth", "height", "thickness"}
@@ -313,16 +343,53 @@ def mentions_uncounted_hole(text: str) -> bool:
     return False
 
 
+def _feature_or_word(word: str) -> str:
+    """A feature noun in its singular form ("pockets" -> "pocket", "notches" -> "notch",
+    "cavities" -> "cavity"); any other word as it is."""
+    for stem in (word, word[:-1] if word.endswith("s") else None,
+                 word[:-2] if word.endswith("es") else None,
+                 word[:-3] + "y" if word.endswith("ies") else None):
+        if stem in _FEATURE_NOUNS:
+            return stem
+    return word
+
+
 def _triple_noun(text, start, end):
-    """The noun a triple describes: the word before it, unless that is an article or
-    preposition, in which case the word after it (as in 'a 20 x 10 x 3 mm pocket')."""
-    before = re.findall(r"[A-Za-z]+", text[:start])
-    after = re.findall(r"[A-Za-z]+", text[end:])
-    before_word = before[-1].lower() if before else ""
-    after_word = after[0].lower() if after else ""
-    if before_word and before_word not in _NON_NOUNS:
-        return before_word
-    return after_word
+    """The noun a triple describes, singular and lower case, or "" when the clause names
+    none. Only the clause the triple is in is read, never past a sentence end or a comma.
+
+        "Plate 80 x 50 x 6 mm", "two pockets 20 x 10 x 3 mm"     the word before
+        "The plate is ...", "a pocket of ...", "... measuring"   the subject before the link
+        "a 20 x 10 x 3 mm rectangular pocket", "cut 80 x 50 x 6 mm aluminium plate"
+                                                                 the noun phrase after
+    """
+    breaks = list(_CLAUSE_BREAK.finditer(text, 0, start))
+    before = [w.lower() for w in
+              re.findall(r"[A-Za-z]+", text[breaks[-1].end() if breaks else 0:start])]
+    stop = _CLAUSE_BREAK.search(text, end)
+    after = [w.lower() for w in re.findall(r"[A-Za-z]+", text[end:stop.start() if stop
+                                                             else len(text)])]
+
+    nearest = before[-1] if before else ""
+    if nearest and nearest not in _NON_NOUNS | _TRIPLE_LINKS | _TRIPLE_VERBS:
+        return _feature_or_word(nearest)
+    if nearest in _TRIPLE_LINKS:
+        # The subject precedes the triple: it is what is sized, whatever follows.
+        for word in reversed(before):
+            if word in _TRIPLE_LINKS or word in _TRIPLE_VERBS:
+                continue
+            if word not in _NON_NOUNS:
+                return _feature_or_word(word)
+            break
+    # The triple sizes the noun after it, read past known modifiers only, so a feature
+    # named later ("plate including slots", "plate (slot ...)") is not taken for it.
+    for word in after:
+        if word in _TRIPLE_MODIFIERS or word in _TRIPLE_VERBS:
+            continue
+        if word in _NON_NOUNS or word in _TRIPLE_LINKS:
+            break
+        return _feature_or_word(word)
+    return ""
 
 
 def scan(text: str) -> list:
@@ -461,9 +528,11 @@ def _read(prompt, spec) -> list:
 
 
 def _triple_axis(f, names):
-    """The axis name for a triple, or None when the triple is a feature so it does not
-    compete with the part's own width/depth/height."""
-    return None if f.label in _FEATURE_NOUNS else names[f.axis]
+    """The axis name for a triple, or None when the triple is a feature (a pocket, slots)
+    so it does not compete with the part's own width/depth/height."""
+    if f.label and _feature_or_word(f.label) in _FEATURE_NOUNS:
+        return None
+    return names[f.axis]
 
 
 def stated_quantities(prompt, spec) -> dict:

@@ -160,6 +160,47 @@ class Triples(unittest.TestCase):
             ["width of 60 mm", "depth of 40 mm", "height of 5 mm",
              "20 mm", "10 mm", "3 mm"])
 
+    PART = ["width of 80 mm", "depth of 50 mm", "height of 6 mm"]
+    PART_SPEC = "width of 60 mm, depth of 40 mm, height of 5 mm"
+
+    def test_part_triples_stay_named(self):
+        # Each phrasing alone, then with a feature noun just past a sentence or comma
+        # boundary: the look-around must stop at the boundary.
+        for phrase in ("The plate is 80 x 50 x 6 mm",
+                       "Plate sized to 80 x 50 x 6 mm",
+                       "Cut 80 x 50 x 6 mm aluminium plate"):
+            for tail in (".", ". Pocket near the edge.", ", slot along the centre."):
+                with self.subTest(text=phrase + tail):
+                    self.assertEqual(texts(phrase + tail)[:3], self.PART)
+
+    def test_part_triple_followed_by_a_feature_in_the_same_clause(self):
+        for text in ("a 80 x 50 x 6 mm plate with a pocket",
+                     "Plate 80 x 50 x 6 mm with a slot",
+                     "a 80 x 50 x 6 mm plate including slots",
+                     "an 80 x 50 x 6 mm plate (slot along the centre)",
+                     "Cut 80 x 50 x 6 mm plate - slot down the middle",
+                     "Cut 80 x 50 x 6 mm plate then pocket the centre"):
+            with self.subTest(text=text):
+                self.assertEqual(texts(text)[:3], self.PART)
+
+    def test_feature_triples_are_not_named_as_the_part(self):
+        # "two pockets" carries no triple of its own, so it is tested with one both ways.
+        for phrase in ("a pocket of 20 x 10 x 3 mm",
+                       "a 20 x 10 x 3 mm rectangular pocket",
+                       "20 x 10 x 3 mm deep pocket",
+                       "two pockets 20 x 10 x 3 mm",
+                       "two 20 x 10 x 3 mm pockets",
+                       "a pocket measuring 20 x 10 x 3 mm",
+                       "Cut 20 x 10 x 3 mm pocket",
+                       "Cut a 20 x 10 x 3 mm pocket",
+                       "three notches 20 x 10 x 3 mm",
+                       "two 20 x 10 x 3 mm cavities"):
+            with self.subTest(prompt=phrase):
+                self.assertEqual(
+                    texts(self.PART_SPEC, prompt=phrase),
+                    ["width of 60 mm", "depth of 40 mm", "height of 5 mm",
+                     "20 mm", "10 mm", "3 mm"])
+
     def test_a_number_in_a_triple_is_read_once(self):
         self.assertEqual(
             texts("Rectangular plate 60 x 40 x 5 mm thick with four mounting holes of "
