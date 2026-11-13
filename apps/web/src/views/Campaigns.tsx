@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api, Campaign, Task } from '../api';
+import { api, AuthUser, can, Campaign, Task } from '../api';
 import { notify } from '../toast';
 import { EmptyState } from '../components/EmptyState';
 import { PrimaryButton } from '../components/PrimaryButton';
@@ -18,7 +18,10 @@ interface Tally {
 
 const clampTarget = (n: number) => Math.min(MAX_TARGET, Math.max(0, Math.round(n) || 0));
 
-export function CampaignsView() {
+export function CampaignsView({ user }: { user: AuthUser }) {
+  // Only admins may create campaigns (the API enforces the same rule), so authors are
+  // not shown a form that can only fail.
+  const canCreate = can(user, 'ADMIN');
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   // null until /api/tasks answers; stays null if it fails, so cards fall back gracefully
   const [tasks, setTasks] = useState<Task[] | null>(null);
@@ -99,17 +102,19 @@ export function CampaignsView() {
     <section className="cp">
       <header className="cp-head">
         <h2>Campaigns</h2>
-        <PrimaryButton
-          ref={openerRef}
-          type="button"
-          label="New campaign"
-          aria-expanded={open}
-          aria-controls="campaign-form"
-          onClick={() => (open ? nameRef.current?.focus() : setOpen(true))}
-        />
+        {canCreate && (
+          <PrimaryButton
+            ref={openerRef}
+            type="button"
+            label="New campaign"
+            aria-expanded={open}
+            aria-controls="campaign-form"
+            onClick={() => (open ? nameRef.current?.focus() : setOpen(true))}
+          />
+        )}
       </header>
 
-      {open && (
+      {canCreate && open && (
         <form
           id="campaign-form"
           className="cp-form"
@@ -185,7 +190,10 @@ export function CampaignsView() {
       {loadError && <p className="error">{loadError}</p>}
 
       {campaigns.length === 0 ? (
-        <EmptyState title="No campaigns yet" body="Create one to open a task campaign." />
+        <EmptyState
+          title="No campaigns yet"
+          body={canCreate ? 'Create one to open a task campaign.' : 'An admin has to create one first.'}
+        />
       ) : (
         <ul className="cp-grid stagger">
           {campaigns.map((c, i) => {

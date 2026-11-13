@@ -90,7 +90,7 @@ export default function App() {
         {user === null && <LoginView onSignedIn={setUser} />}
         {user && (
           <>
-            {activePath === '/campaigns' && (path === '/campaigns' && param ? <CampaignView key={param} id={param} /> : <CampaignsView />)}
+            {activePath === '/campaigns' && (path === '/campaigns' && param ? <CampaignView key={param} id={param} /> : <CampaignsView user={user} />)}
             {activePath === '/author' && <AuthorView user={user} />}
             {activePath === '/review' && <ReviewView key={user.id} user={user} taskId={param} />}
           </>
