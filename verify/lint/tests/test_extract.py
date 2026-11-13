@@ -201,6 +201,91 @@ class Triples(unittest.TestCase):
                     ["width of 60 mm", "depth of 40 mm", "height of 5 mm",
                      "20 mm", "10 mm", "3 mm"])
 
+    FEATURE = ["width of 60 mm", "depth of 40 mm", "height of 5 mm", "20 mm", "10 mm",
+               "3 mm"]
+
+    def assertFeature(self, prompt):
+        with self.subTest(prompt=prompt):
+            self.assertEqual(texts(self.PART_SPEC, prompt=prompt), self.FEATURE)
+
+    def assertPart(self, text):
+        with self.subTest(text=text):
+            self.assertEqual(texts(text)[:3], self.PART)
+
+    def test_a_feature_noun_before_a_clause_break_still_names_the_triple(self):
+        for prompt in ("Pocket, 20 x 10 x 3 mm",
+                       "Pocket; 20 x 10 x 3 mm",
+                       "Pocket. 20 x 10 x 3 mm",
+                       "Pocket\n20 x 10 x 3 mm",
+                       "Pocket.\n20 x 10 x 3 mm",
+                       "Pocket,\n20 x 10 x 3 mm",
+                       "Two pockets, 20 x 10 x 3 mm",
+                       "Pocket, about 20 x 10 x 3 mm",
+                       "Pocket; the size is 20 x 10 x 3 mm"):
+            self.assertFeature(prompt)
+
+    def test_a_part_noun_before_a_clause_break_does_not_name_the_triple(self):
+        # Only a feature noun is read back past a break; the triple stays the part's.
+        for text in ("Plate, 80 x 50 x 6 mm",
+                     "Plate; 80 x 50 x 6 mm",
+                     "A pocket. 80 x 50 x 6 mm plate",
+                     # "overall" sizes the part whatever was named before the break.
+                     "A plate with a pocket. Overall dimensions 80 x 50 x 6 mm",
+                     "Plate with a slot, 80 x 50 x 6 mm overall"):
+            self.assertPart(text)
+        self.assertEqual(texts("Four mounting holes, 80 x 50 x 6 mm plate"),
+                         ["4 mounting holes", *self.PART])
+
+    def test_a_feature_named_last_before_a_break_wins_over_the_part(self):
+        # Known limit: the look-back takes the last word before the break, so the plate
+        # here is read as the pocket. That fails safe: the sizes go to the reviewer.
+        self.assertEqual(texts("Plate with a pocket, 80 x 50 x 6 mm"),
+                         ["80 mm", "50 mm", "6 mm"])
+
+    def test_an_abbreviation_does_not_end_the_clause(self):
+        for abbreviation in ("approx.", "Approx.", "ca.", "e.g.", "i.e.", "eg.", "ie.",
+                             "viz."):
+            self.assertFeature(f"A pocket {abbreviation} 20 x 10 x 3 mm")
+            self.assertPart(f"Plate {abbreviation} 80 x 50 x 6 mm")
+        self.assertFeature("Pocket, approx. 20 x 10 x 3 mm")
+        # A word that only ends like one still ends the sentence, so the triple is not
+        # read as part of "Made of mica" and takes the noun after it.
+        self.assertFeature("Made of mica. 20 x 10 x 3 mm pocket")
+
+    def test_the_head_of_the_subject_is_what_is_sized(self):
+        for prompt in ("The pocket in the plate is 20 x 10 x 3 mm",
+                       "The pocket on the top face is 20 x 10 x 3 mm",
+                       "On the top face the pocket is 20 x 10 x 3 mm",
+                       "The size of the pocket is 20 x 10 x 3 mm",
+                       "The footprint of the pocket is 20 x 10 x 3 mm",
+                       "The outline of the pocket is 20 x 10 x 3 mm",
+                       "The pocket must be 20 x 10 x 3 mm",
+                       "The pocket in the plate shall be 20 x 10 x 3 mm",
+                       "The pocket in the plate measures 20 x 10 x 3 mm",
+                       "The pocket needs to be 20 x 10 x 3 mm",
+                       "A plate with a pocket that is 20 x 10 x 3 mm",
+                       "A plate with a pocket which is 20 x 10 x 3 mm",
+                       "The pockets in the plate are 20 x 10 x 3 mm"):
+            self.assertFeature(prompt)
+        for text in ("The plate with a pocket is 80 x 50 x 6 mm",
+                     "The plate with two slots is 80 x 50 x 6 mm",
+                     "The dimensions of the plate are 80 x 50 x 6 mm",
+                     "The plate with a pocket must be 80 x 50 x 6 mm",
+                     "The plate with a pocket measures 80 x 50 x 6 mm"):
+            self.assertPart(text)
+
+    def test_without_a_copula_the_word_before_the_link_is_sized(self):
+        for prompt in ("A bracket with a pocket of 20 x 10 x 3 mm",
+                       "A plate with a pocket measuring 20 x 10 x 3 mm",
+                       "A plate with a pocket sized to 20 x 10 x 3 mm"):
+            self.assertFeature(prompt)
+
+    def test_a_cut_is_read_as_the_verb(self):
+        # Known limit: "cut" reads as the verb ("cut 80 x 50 x 6 mm plate"), so a
+        # rectangular cut with no noun after it is taken for the part.
+        self.assertEqual(texts("rectangular cut 20 x 10 x 3 mm"),
+                         ["width of 20 mm", "depth of 10 mm", "height of 3 mm"])
+
     def test_a_number_in_a_triple_is_read_once(self):
         self.assertEqual(
             texts("Rectangular plate 60 x 40 x 5 mm thick with four mounting holes of "

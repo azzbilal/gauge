@@ -27,7 +27,7 @@ import re
 import uuid
 from collections import namedtuple
 
-VERSION = "extract-3"
+VERSION = "extract-4"
 
 MACHINE = "machine"
 VISUAL = "visual"
@@ -129,7 +129,25 @@ _TRIPLE_LINKS = frozenset({
     "is", "are", "was", "were", "be", "of", "to", "at", "measuring", "measures", "measure",
     "sized", "size", "sizes", "dimension", "dimensions", "dimensioned", "overall",
     "nominal", "nominally", "exactly", "about", "around", "approximately", "approx",
-    "roughly",
+    "appr", "ca", "circa", "nom", "roughly", "e.g", "eg", "i.e", "ie", "viz",
+})
+
+# The links that make the subject before them what is sized: "the pocket in the plate is
+# 20 x 10 x 3 mm" sizes the pocket, the head of "the pocket in the plate".
+_COPULAS = frozenset({"is", "are", "was", "were", "be", "measures", "measure"})
+# Read past between the subject and its link: "the pocket must be ...".
+_MODALS = frozenset({"must", "shall", "should", "will", "would", "can", "may", "to",
+                     "need", "needs"})
+# A relative pronoun before the link points at the noun just before it: "a plate with a
+# pocket that is 20 x 10 x 3 mm" sizes the pocket.
+_RELATIVES = frozenset({"that", "which"})
+
+# Prepositions that end the head of a subject: "the pocket [in the plate]", "the plate
+# [with a pocket]". Not "of": in "the footprint of the pocket" the pocket is sized.
+_PREPOSITIONS = frozenset({
+    "in", "on", "with", "for", "by", "into", "from", "at", "inside", "within",
+    "near", "along", "across", "under", "below", "above", "beside", "behind", "between",
+    "beneath", "onto", "over",
 })
 
 # Verbs that put a triple in front of what is made: "cut 80 x 50 x 6 mm plate", "mill a
@@ -156,8 +174,17 @@ _NON_NOUNS = frozenset({
 })
 
 # Where the words around a triple stop being about it: a sentence end or a comma. A
-# full stop counts only before whitespace or the end of the text, so "6.5" is not one.
-_CLAUSE_BREAK = re.compile(r"[,;!?\n]|\.(?=\s|$)")
+# full stop counts only before whitespace or the end of the text, so "6.5" is not one,
+# and not after a common abbreviation, so "approx. 20 x 10 x 3 mm" is one clause.
+# Each is also a link word (_TRIPLE_LINKS), so it is read past like "about".
+_ABBREVIATIONS = ("approx", "appr", "ca", "nom", "e.g", "i.e", "eg", "ie", "viz")
+_CLAUSE_BREAK = re.compile(
+    r"[,;!?\n]|"
+    + "".join(rf"(?<!\b(?i:{re.escape(a)}))" for a in _ABBREVIATIONS)
+    + r"\.(?=\s|$)")
+
+# A word of the text: "e.g" and "i.e" are one word each, not "e" and "g".
+_WORD = re.compile(r"[A-Za-z](?:\.[A-Za-z])+(?![A-Za-z])|[A-Za-z]+")
 
 # Sizes of the part as a whole, as opposed to the size of a feature on it.
 _BOX_NOUNS = {"width", "length", "depth", "height", "thickness"}
@@ -354,33 +381,86 @@ def _feature_or_word(word: str) -> str:
     return word
 
 
+def _words(text) -> list:
+    return [w.lower() for w in _WORD.findall(text)]
+
+
+def _subject_head(subject) -> str:
+    """The head noun of the subject of "... is": the last word before the first
+    preposition that follows a word naming something. "the pocket in the plate" ->
+    "pocket", "the plate with a pocket" -> "plate", "on the top face the pocket" ->
+    "pocket". "of" does not end it: "the footprint of the pocket" -> "pocket"."""
+    head = ""
+    for word in subject:
+        if word in _PREPOSITIONS:
+            if head:
+                return head
+            continue
+        if word not in _NON_NOUNS | _TRIPLE_LINKS | _TRIPLE_VERBS:
+            head = word
+    return head
+
+
 def _triple_noun(text, start, end):
-    """The noun a triple describes, singular and lower case, or "" when the clause names
-    none. Only the clause the triple is in is read, never past a sentence end or a comma.
+    """The noun a triple describes, singular and lower case, or "" when nothing names
+    it. The clause the triple is in is read first, never past a sentence end or a comma:
 
         "Plate 80 x 50 x 6 mm", "two pockets 20 x 10 x 3 mm"     the word before
         "The plate is ...", "a pocket of ...", "... measuring"   the subject before the link
+        "The pocket in the plate is ..."                         the head of that subject
         "a 20 x 10 x 3 mm rectangular pocket", "cut 80 x 50 x 6 mm aluminium plate"
                                                                  the noun phrase after
+
+    When that clause names nothing, a feature noun just before the previous break is
+    taken ("Pocket, 20 x 10 x 3 mm", "Pocket; 20 x 10 x 3 mm"). Only a feature noun:
+    reading a part noun there gains nothing, and taking a part for a feature only leaves
+    its sizes to the reviewer, while the reverse checks a feature as the part.
     """
     breaks = list(_CLAUSE_BREAK.finditer(text, 0, start))
-    before = [w.lower() for w in
-              re.findall(r"[A-Za-z]+", text[breaks[-1].end() if breaks else 0:start])]
+    before = _words(text[breaks[-1].end() if breaks else 0:start])
     stop = _CLAUSE_BREAK.search(text, end)
-    after = [w.lower() for w in re.findall(r"[A-Za-z]+", text[end:stop.start() if stop
-                                                             else len(text)])]
+    after = _words(text[end:stop.start() if stop else len(text)])
 
+    noun = _clause_noun(before, after)
+    if noun or not breaks or "overall" in before or "overall" in after:
+        # "Overall dimensions 80 x 50 x 6 mm" sizes the part whatever came before.
+        return noun
+    # The nearest word before the break, past any run of breaks ("Pocket.\n20 x ...").
+    for i in range(len(breaks) - 1, -1, -1):
+        previous = _words(text[breaks[i - 1].end() if i else 0:breaks[i].start()])
+        if previous:
+            word = _feature_or_word(previous[-1])
+            return word if word in _FEATURE_NOUNS else ""
+    return ""
+
+
+def _clause_noun(before, after) -> str:
+    """The noun a triple's own clause gives it: `before` and `after` are the clause's
+    words on either side of the triple."""
     nearest = before[-1] if before else ""
     if nearest and nearest not in _NON_NOUNS | _TRIPLE_LINKS | _TRIPLE_VERBS:
         return _feature_or_word(nearest)
     if nearest in _TRIPLE_LINKS:
         # The subject precedes the triple: it is what is sized, whatever follows.
-        for word in reversed(before):
-            if word in _TRIPLE_LINKS or word in _TRIPLE_VERBS:
-                continue
-            if word not in _NON_NOUNS:
+        links = len(before)
+        while links and (before[links - 1] in _TRIPLE_LINKS
+                         or before[links - 1] in _TRIPLE_VERBS
+                         or before[links - 1] in _MODALS):
+            links -= 1
+        if _COPULAS & set(before[links:]):
+            subject = before[:links]
+            if subject and subject[-1] in _RELATIVES:
+                # "... a pocket that is ...": the noun the pronoun points at.
+                subject = [w for w in subject[:-1] if w not in _NON_NOUNS][-1:]
+            # "The pocket in the plate is ...": the head of the subject, not its last word.
+            head = _subject_head(subject)
+            if head:
+                return _feature_or_word(head)
+        else:
+            # "a pocket of ...", "a plate with a pocket measuring ...": the word before.
+            word = before[links - 1] if links else ""
+            if word and word not in _NON_NOUNS:
                 return _feature_or_word(word)
-            break
     # The triple sizes the noun after it, read past known modifiers only, so a feature
     # named later ("plate including slots", "plate (slot ...)") is not taken for it.
     for word in after:
