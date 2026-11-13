@@ -1,4 +1,5 @@
 import { CRITERIA } from '../campaign/review-protocol';
+import { VerifyContractError } from './verify.errors';
 
 /**
  * Turns a task (prompt, spec, reference) into the packet the verify service reads
@@ -89,9 +90,10 @@ export function rubricItemIdOf(packetItemId: string): string {
 }
 
 /**
- * Ask the verify service what the task requires and build its packet. Rejects when the
- * service cannot be reached or its answer cannot be used: there is no local fallback, so
- * the caller has no packet and must record that nothing was linted or verified.
+ * Ask the verify service what the task requires and build its packet. There is no local
+ * fallback, so a rejection leaves the caller without a packet. It rejects with whatever
+ * the extractor threw, or with a VerifyContractError when the extraction is not the
+ * rubric this API stores: that is a service this API does not match, not an outage.
  */
 export async function buildPacket(
   task: PacketSource,
@@ -105,7 +107,7 @@ export async function buildPacket(
   // exactly that is from a service this API does not match.
   const criteria = extraction.rubricItems.map((i) => i.criterion);
   if (criteria.length !== CRITERIA.length || CRITERIA.some((c, i) => criteria[i] !== c)) {
-    throw new Error(
+    throw new VerifyContractError(
       `verify service /extract returned rubric items for [${criteria.join(', ')}], ` +
         `expected [${CRITERIA.join(', ')}]`,
     );
@@ -115,7 +117,7 @@ export async function buildPacket(
     if (item.checkMethod !== 'machine') return [];
     const linked = item.requirementIds.map((id) => known.get(id));
     if (linked.length === 0 || linked.some((r) => r === undefined)) {
-      throw new Error(
+      throw new VerifyContractError(
         `verify service /extract returned machine rubric item "${item.criterion}" ` +
           'without requirements it can be checked against',
       );

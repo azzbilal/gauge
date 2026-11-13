@@ -27,6 +27,8 @@ from verifiers.verifiers import _expected  # noqa: E402
 
 PLATE = (VERIFY_DIR / "verifiers" / "tests" / "fixtures" / "plate_ok.py").read_text(
     encoding="utf-8")
+# The same plate with a fifth hole through its centre.
+FIVE_HOLES = PLATE + "\nresult = result.faces('>Z').workplane().hole(12)\n"
 
 
 def counter():
@@ -177,10 +179,68 @@ class HoleCounts(unittest.TestCase):
         self.assertEqual(texts("one hole"), ["1 hole"])
 
     def test_kind_and_value(self):
+        (req,) = extract("", "4 holes", counter())["requirements"]
+        self.assertEqual(
+            (req["kind"], req["value"], req["label"], req["check_method"]),
+            ("hole", "4", "hole count", "machine"))
+
+    def test_a_qualified_count_is_not_the_total(self):
+        # "4 mounting holes" does not say there are no other holes.
         (req,) = extract("", "4 mounting holes", counter())["requirements"]
         self.assertEqual(
             (req["kind"], req["value"], req["label"], req["check_method"]),
-            ("hole", "4", "mounting hole count", "machine"))
+            ("hole", "4", "mounting hole count", "manual"))
+
+    def test_a_count_beside_an_uncounted_hole_is_not_the_total(self):
+        for spec in ("Plate 60 x 40 x 10 mm with 4 mounting holes plus a central bore.",
+                     "Plate 60 x 40 x 10 mm with 4 holes plus a central bore.",
+                     "Plate 60 x 40 x 10 mm with 4 holes and an additional hole in the "
+                     "middle.",
+                     "Plate 60 x 40 x 10 mm with 4 holes and a 12 mm centre hole",
+                     "Plate 60 x 40 x 10 mm with 4 holes. The centre hole is larger."):
+            with self.subTest(spec=spec):
+                result = extract("", spec, counter())
+                (count,) = [r for r in result["requirements"] if r["kind"] == "hole"]
+                self.assertEqual(count["check_method"], "manual")
+                with mock.patch.dict(os.environ, {"GAUGE_CAD_EXEC": "0"}):
+                    verdicts = verify(packet("", spec, FIVE_HOLES))
+                self.assertEqual([v["status"] for v in verdicts], ["pass"] * 3)
+
+    def test_the_counted_holes_mentioned_again_are_not_more_holes(self):
+        for spec in ("Plate with 4 holes, hole diameter 5 mm. Each hole is 10 mm from "
+                     "the edge and the holes are round.",
+                     "4 holes of 5 mm diameter; all holes on a 40 mm hole pattern"):
+            with self.subTest(spec=spec):
+                (count,) = [r for r in extract("", spec, counter())["requirements"]
+                            if r["kind"] == "hole"]
+                self.assertEqual((count["text"], count["check_method"]),
+                                 ("4 holes", "machine"))
+
+    def test_the_same_count_stated_twice_is_two_sets_of_holes(self):
+        result = extract("", "1 hole of 5 mm diameter plus 1 hole of 6 mm diameter",
+                         counter())
+        self.assertEqual(
+            [(r["text"], r["check_method"]) for r in result["requirements"]
+             if r["kind"] == "hole"],
+            [("1 hole", "manual"), ("1 hole", "manual")])
+        # In the prompt too, and whatever the spec says.
+        result = extract("1 hole of 5 mm plus 1 hole of 6 mm", "2 holes", counter())
+        self.assertEqual(
+            [(r["text"], r["check_method"]) for r in result["requirements"]
+             if r["kind"] == "hole"],
+            [("2 holes", "manual"), ("1 hole", "manual"), ("1 hole", "manual")])
+
+    def test_a_count_that_points_back_is_the_same_count(self):
+        for spec in ("4 holes. Each of the 4 holes is round.",
+                     "All four holes are round. Plate with 4 holes.",
+                     "4 holes, and these 4 holes are equally spaced"):
+            with self.subTest(spec=spec):
+                result = extract("", spec, counter())
+                self.assertEqual(
+                    [(r["text"], r["check_method"]) for r in result["requirements"]],
+                    [("4 holes", "machine")])
+        # A different number is not the same count.
+        self.assertEqual(texts("4 holes; the 2 holes on the left"), ["4 holes", "2 holes"])
 
     def test_a_size_is_not_a_count(self):
         self.assertEqual(texts("5 mm holes"), ["5 mm"])
@@ -251,6 +311,76 @@ class PromptAndSpec(unittest.TestCase):
             ["width of 50 mm", "width of 60 mm"])
         findings = lint(packet("width of 60 mm", "width of 50 mm"))
         self.assertIn("value_contradiction", [f["rule"] for f in findings])
+
+
+def contradictions(prompt, spec):
+    return [(f["severity"], f["detail"]) for f in lint(packet(prompt, spec))
+            if f["rule"] == "value_contradiction"]
+
+
+class Contradictions(unittest.TestCase):
+    """value_contradiction groups quantities the way extraction does."""
+
+    def test_a_qualified_box_size_is_the_box_size(self):
+        self.assertEqual(
+            contradictions("A plate 60 mm wide", "width of 50 mm"),
+            [("critical", "width: prompt says 60 mm but spec says 50 mm")])
+        self.assertEqual(
+            len(contradictions("a mounting plate 60 mm wide", "plate width of 50 mm")), 1)
+
+    def test_a_triple_is_compared_by_axis(self):
+        self.assertEqual(
+            contradictions("Plate 60 x 40 x 5 mm", "Plate 60 x 45 x 5 mm"),
+            [("critical", "depth: prompt says 40 mm but spec says 45 mm")])
+        self.assertEqual(
+            contradictions("Plate 60 x 40 x 5 mm", "width of 50 mm, depth of 40 mm"),
+            [("critical", "width: prompt says 60 mm but spec says 50 mm")])
+        self.assertEqual(
+            contradictions("A plate 55 mm wide", "Plate 60 x 40 x 5 mm"),
+            [("critical", "width: prompt says 55 mm but spec says 60 mm")])
+        # The axis names follow what the task calls its sizes.
+        self.assertEqual(
+            contradictions("Plate 80 x 50 x 6 mm", "length of 80 mm, width of 60 mm"),
+            [("critical", "width: prompt says 50 mm but spec says 60 mm")])
+
+    def test_added_qualifiers_are_the_same_size(self):
+        self.assertEqual(
+            contradictions("four mounting holes of 6 mm diameter",
+                           "4 holes, hole diameter 5 mm"),
+            [("critical", "mounting hole diameter: prompt says 6 mm but spec says 5 mm")])
+
+    def test_agreement_is_not_flagged(self):
+        for prompt, spec in (
+                ("A plate 60 mm wide", "width of 60 mm"),
+                ("A plate 6 cm wide", "Plate 60 x 40 x 5 mm"),
+                ("Plate 60 x 40 x 5 mm", "Plate 60 mm x 40 mm x 5 mm"),
+                ("mounting hole diameter 5 mm",
+                 "hole diameter 5 mm, counterbore hole diameter 9 mm"),
+        ):
+            with self.subTest(prompt=prompt, spec=spec):
+                self.assertEqual(contradictions(prompt, spec), [])
+
+    def test_a_feature_size_is_not_the_part_size(self):
+        for prompt, spec in (
+                ("slot length 20 mm", "length of 80 mm"),
+                ("Plate 80 x 50 x 6 mm with a slot", "slot length 20 mm, slot width 6 mm"),
+                ("shaft diameter 10 mm", "hole diameter 5 mm"),
+                ("wall thickness 2 mm", "thickness of 5 mm"),
+        ):
+            with self.subTest(prompt=prompt, spec=spec):
+                self.assertEqual(contradictions(prompt, spec), [])
+
+    def test_counts(self):
+        self.assertEqual(
+            contradictions("4 holes", "5 holes"),
+            [("critical", "hole count: prompt says 4 but spec says 5")])
+        for prompt, spec in (
+                ("1 hole of 5 mm plus 1 hole of 6 mm", "2 holes"),
+                ("4 mounting holes", "5 holes"),
+                ("4 holes. Each of the 4 holes is round.", "4 holes"),
+        ):
+            with self.subTest(prompt=prompt, spec=spec):
+                self.assertEqual(contradictions(prompt, spec), [])
 
 
 class Rubric(unittest.TestCase):

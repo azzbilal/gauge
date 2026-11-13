@@ -11,11 +11,11 @@ import re
 # The names below are re-exported because the Verifier Pack imports them from here.
 try:
     from .extract import (MACHINE, MANUAL, VISUAL, Quantity, _UNITS,  # noqa: F401
-                          extract_quantities)
+                          extract_quantities, label_parts, stated_quantities)
     from .packet import TaskPacket
 except ImportError:  # imported from inside verify/lint rather than as a package
     from extract import (MACHINE, MANUAL, VISUAL, Quantity, _UNITS,  # noqa: F401
-                         extract_quantities)
+                         extract_quantities, label_parts, stated_quantities)
     from packet import TaskPacket
 
 INFO = "info"
@@ -78,18 +78,46 @@ def _shown(quantities) -> str:
     return " / ".join(dict.fromkeys(q.shown for q in quantities))
 
 
+def _same_size(a: str, b: str) -> bool:
+    """True when two labels name the same size: the same label, or the same noun where
+    one only adds to the other's qualifiers ("mounting hole diameter", "hole diameter").
+    A bare noun is never a qualified one: "length" is not "slot length"."""
+    if a == b:
+        return True
+    (a_quals, a_noun), (b_quals, b_noun) = label_parts(a), label_parts(b)
+    return a_noun == b_noun and bool(a_quals and b_quals) and (
+        a_quals <= b_quals or b_quals <= a_quals)
+
+
 def value_contradiction(packet: TaskPacket) -> list:
     """Flag a quantity that the prompt and the spec both state, with different values.
 
-    A quantity is flagged only when no value the prompt gives for it agrees with any
-    value the spec gives, so a label that legitimately carries several values (two hole
-    sizes, say) is not reported as long as the two texts overlap."""
-    in_prompt = _by_label(extract_quantities(packet.prompt))
-    in_spec = _by_label(extract_quantities(packet.spec))
+    Quantities are grouped the way extraction groups them into requirements
+    (`stated_quantities`): "a plate 60 mm wide" and "width of 50 mm" are the same size,
+    and so is the first number of "60 x 40 x 5 mm".
+
+    A size is flagged only when no value the prompt gives for it agrees with any value
+    the spec gives, so a label that legitimately carries several values (two hole sizes,
+    say) is not reported as long as the two texts overlap.
+
+    A count is compared only with the same count, never a qualified one with a total
+    ("4 mounting holes" of "5 holes"), and only when each text states it once: "1 hole
+    of 5 mm and 1 hole of 6 mm" does not contradict "2 holes"."""
+    stated = stated_quantities(packet.prompt, packet.spec)
+    in_prompt = _by_label(stated["prompt"])
+    in_spec = _by_label(stated["spec"])
 
     findings = []
     for label, prompt_values in in_prompt.items():
-        spec_values = in_spec.get(label)
+        if label.endswith(" count"):
+            spec_values = in_spec.get(label, [])
+            if len(prompt_values) != 1 or len(spec_values) != 1:
+                continue
+        else:
+            spec_values = [q for other, qs in in_spec.items() if _same_size(label, other)
+                           for q in qs]
+            prompt_values = [q for other, qs in in_prompt.items()
+                             if _same_size(label, other) for q in qs]
         if not spec_values:
             continue
         if any(_compatible(p, s) for p in prompt_values for s in spec_values):

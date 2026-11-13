@@ -15,6 +15,9 @@ Three things are read:
     triples      "60 x 40 x 5 mm", named by axis the way the verifier maps names to axes
     hole counts  "4 holes", "four mounting holes"
 
+Two statements are one quantity when they have the same key (`quantity_key`). The
+requirements and the value_contradiction lint rule both group on it (`stated_quantities`).
+
 A length with no name ("60 mm") is also kept as a requirement, but nothing can check it.
 
 Bump VERSION whenever a change here can alter what is extracted from the same text.
@@ -24,7 +27,7 @@ import re
 import uuid
 from collections import namedtuple
 
-VERSION = "extract-1"
+VERSION = "extract-2"
 
 MACHINE = "machine"
 VISUAL = "visual"
@@ -110,7 +113,7 @@ _COUNT_FILLER = {
 }
 
 # The nouns that name a size the Verifier Pack has a check for. A requirement is tagged
-# machine only when it is one of these, or the task's one hole count.
+# machine only when it is one of these, or a hole count that is certainly the total.
 SIZE_NOUNS = ("width", "length", "height", "depth", "thickness", "diameter", "radius")
 
 # Sizes of the part as a whole, as opposed to the size of a feature on it.
@@ -120,11 +123,27 @@ _BOX_QUALIFIERS = {"plate", "base", "body", "board", "outer"}
 
 def box_noun(label: str):
     """The noun of a label that names an overall size of the part ("plate width" ->
-    "width"), or None when the label names something else ("slot length")."""
+    "width", "mounting plate width" -> "width"), or None when the label names something
+    else ("slot length")."""
     *qualifiers, noun = label.split()
-    if noun in _BOX_NOUNS and set(qualifiers) <= _BOX_QUALIFIERS:
+    part = set(qualifiers) - {"mounting"}  # a "mounting plate" is still the plate
+    if noun in _BOX_NOUNS and part <= _BOX_QUALIFIERS and (part or not qualifiers):
         return noun
     return None
+
+
+def quantity_key(label: str) -> str:
+    """The name two statements must share to be the same quantity: "plate width" and
+    "width" are the same size of the same part, "slot length" and "length" are not."""
+    return box_noun(label) or label
+
+
+def label_parts(label: str) -> tuple:
+    """(qualifiers, noun) of a label: "mounting hole diameter" -> ({"mounting", "hole"},
+    "diameter"), "mounting hole count" -> ({"mounting"}, "hole count")."""
+    words = label.split()
+    cut = -2 if words[-1] == "count" else -1
+    return frozenset(words[:cut]), " ".join(words[cut:])
 
 
 def uses_length(labels) -> bool:
@@ -195,6 +214,20 @@ _COUNT = re.compile(
     rf"(?i:(?P<noun>(?:{_alt(_COUNT_NOUNS)})(?:es|s)?|teeth))\b"
 )
 
+# Words right before a count that point back at holes already stated: "each of the 4
+# holes", "all four holes".
+_BACK_REFERENCE = re.compile(r"\b(?:the|these|those|all|both|same)\s+$", re.IGNORECASE)
+
+# A hole named outside a count: "a central bore", "a 12 mm centre hole", "slotted holes".
+# Not "hole diameter 5 mm", which is a size, nor "each hole" and "the holes", which point
+# back at the ones counted.
+_HOLE_MENTION = re.compile(
+    r"\bbores?\b|(?:\b(?P<before>[a-z]+)[\s-]+)?\b(?P<hole>holes?)\b"
+    r"(?![\s-]+(?:diameter|dia|radius|depth|size|spacing|pitch|pattern|count|cent(?:er|re)s?"
+    r"|positions?|locations?)\b)",
+    re.IGNORECASE)
+_HOLES_ALREADY_COUNTED = {"the", "these", "those", "all", "both", "each", "every", "per"}
+
 # "60 mm" with nothing saying what it measures
 _BARE = re.compile(rf"(?P<num>{_NUM}){_TOL}\s*(?P<unit>{_LENGTH_UNIT}){_TOL_AFTER}")
 
@@ -242,11 +275,40 @@ def _tolerance(m, unit):
     return None
 
 
+def _count_words(m):
+    """The words between a count and its noun, or None when the match is not a count:
+    "5 mm holes" and "2 mm thick ribs" are sizes."""
+    mods = [w for w in re.split(r"[\s-]+", m.group("mods").strip()) if w]
+    if any(w in _UNITS or w.lower() in _ADJECTIVES for w in mods):
+        return None
+    return mods
+
+
+def mentions_uncounted_hole(text: str) -> bool:
+    """True when the text names a hole that no count covers ("4 holes and a 12 mm centre
+    hole", "a central bore"), so that no count it states is certainly the total. It errs
+    towards True: that only leaves a count to the reviewer."""
+    text = text or ""
+    counted = [m.span() for m in _COUNT.finditer(text) if _count_words(m) is not None]
+    for m in _HOLE_MENTION.finditer(text):
+        if m.group("hole") is None:
+            return True  # a bore
+        if (m.group("before") or "").lower() in _HOLES_ALREADY_COUNTED:
+            continue
+        if not any(start <= m.start("hole") < end for start, end in counted):
+            return True
+    return False
+
+
 def scan(text: str) -> list:
     """Every number the text states, most specific reading first: a later pattern never
     re-reads a number an earlier one claimed. Finds come back in pattern order (triples,
     labelled sizes, counts, bare lengths); sort on `at` for reading order. A triple's
-    label is left None here, since its axis names depend on the rest of the task."""
+    label is left None here, since its axis names depend on the rest of the task.
+
+    A count is one find per statement: "4 holes ... 4 holes" is two, because they may be
+    two sets of holes. A count that points back at one stated elsewhere ("4 holes. Each
+    of the 4 holes is round.") is that statement again and is not a find."""
     text = text or ""
     found = []
     spans = []  # whole matches of triples and labelled quantities
@@ -290,12 +352,12 @@ def scan(text: str) -> list:
         used.add(m.start("num"))
         spans.append((m.start("num"), m.end()))
 
+    counts = []  # (find, it points back at something already stated)
     for m in _COUNT.finditer(text):
         if claimed(m.start("n")):
             continue
-        mods = [w for w in re.split(r"[\s-]+", m.group("mods").strip()) if w]
-        # "5 mm holes" and "2 mm thick ribs" are sizes, not counts.
-        if any(w in _UNITS or w.lower() in _ADJECTIVES for w in mods):
+        mods = _count_words(m)
+        if mods is None:
             continue
         kept = [
             w.lower() for w in mods
@@ -303,9 +365,26 @@ def scan(text: str) -> list:
         ]
         n = m.group("n").lower()
         label = " ".join(kept + [_singular(m.group("noun")), "count"])
-        found.append(Found(
-            (m.start("n"), 0), COUNT, label, str(_NUMBER_WORDS.get(n, n)), None, None))
+        counts.append((
+            Found((m.start("n"), 0), COUNT, label, str(_NUMBER_WORDS.get(n, n)), None, None),
+            bool(_BACK_REFERENCE.search(text, 0, m.start("n")))))
         used.add(m.start("n"))
+
+    def restated(i: int) -> bool:
+        """A back-reference to the same number of the same thing, stated elsewhere."""
+        find, points_back = counts[i]
+        if not points_back:
+            return False
+        quals, noun = label_parts(find.label)
+        for j, (other, other_points_back) in enumerate(counts):
+            if j == i or other.number != find.number or (other_points_back and j > i):
+                continue
+            other_quals, other_noun = label_parts(other.label)
+            if noun == other_noun and (quals <= other_quals or other_quals <= quals):
+                return True
+        return False
+
+    found.extend(find for i, (find, _) in enumerate(counts) if not restated(i))
 
     for m in _BARE.finditer(text):
         if claimed(m.start("num")):
@@ -342,28 +421,50 @@ def _is_length(unit) -> bool:
     return unit in _UNITS and _UNITS[unit][0] == "length"
 
 
-def _requirement(found: Found, names: tuple):
+def _read(prompt, spec) -> list:
+    """Both texts, the spec first: [(source, [(label, find), ...])], each in reading
+    order. A triple gets its axis names here, from what the whole task calls its sizes."""
+    scans = [("spec", scan(spec)), ("prompt", scan(prompt))]
+    names = axis_names(uses_length(
+        f.label for _, finds in scans for f in finds if f.origin == LABELLED))
+    return [
+        (source, [(names[f.axis] if f.origin == TRIPLE else f.label, f)
+                  for f in sorted(finds, key=lambda f: f.at)])
+        for source, finds in scans
+    ]
+
+
+def stated_quantities(prompt, spec) -> dict:
+    """{"spec": [...], "prompt": [...]}: every named quantity each text states, as a
+    Quantity labelled with its `quantity_key`, the name the requirements are grouped by.
+    Unlike `extract_quantities` this reads triples, which only have names within a task."""
+    return {
+        source: [_quantity(quantity_key(label), f.number, f.unit)
+                 for label, f in finds if label is not None]
+        for source, finds in _read(prompt, spec)
+    }
+
+
+def _requirement(found: Found, label):
     """(dedupe key, requirement fields without id and source), or None when the find is
     not a requirement: a voltage, a rib count, a size with no unit."""
     if found.origin == COUNT:
-        *mods, noun, _ = found.label.split()
+        *mods, noun, _ = label.split()
         if noun != "hole":
             return None
         n = int(found.number)
         text = " ".join([found.number, *mods, "hole" if n == 1 else "holes"])
-        return (found.label, float(n)), {
+        return (label, float(n)), {
             "text": text, "kind": "hole", "value": found.number, "tolerance": None,
-            "label": found.label, "check_method": MACHINE,
+            "label": label, "check_method": MACHINE,
         }
 
     if not _is_length(found.unit):
         return None
-    label = names[found.axis] if found.origin == TRIPLE else found.label
     value = f"{found.number} {found.unit}"
     tolerance = f"±{found.tolerance[0]} {found.tolerance[1]}" if found.tolerance else None
     machine = label is not None and label.split()[-1] in SIZE_NOUNS
-    # "plate width" and "width" are the same size of the same part.
-    key = (label and (box_noun(label) or label),
+    key = (label and quantity_key(label),
            round(float(found.number) * _UNITS[found.unit][1], 9))
     return key, {
         "text": f"{label} of {value}" if label else value,
@@ -384,14 +485,17 @@ def extract_requirements(prompt, spec, new_id=None) -> list:
     the spec's requirement said again, whatever qualifiers the prompt puts on it, and so
     is a length the prompt gives no name for when the spec states that value.
 
+    A hole count one text states twice is two requirements: "1 hole of 5 mm and 1 hole of
+    6 mm" is two holes, not one hole said twice. Only a count that points back at another
+    ("each of the 4 holes") is that count again, and `scan` has already dropped it.
+
     The verifier counts every hole the reference makes, so a hole count is tagged machine
-    only when it is the one hole count the task states: with several ("4 mounting holes
-    and 1 centre hole", "the two holes on the short side") none of them is the total for
-    certain, and all are left to the reviewer."""
+    only when it is certainly that total: the one hole count the task states, with no
+    qualifier, in a task that mentions no hole besides. "4 mounting holes" says nothing
+    about other holes, "4 holes and a central bore" has a fifth, and with several counts
+    ("4 mounting holes and 1 centre hole", "the two holes on the short side") none of
+    them is the total for certain. All of those are left to the reviewer."""
     new_id = new_id or (lambda: str(uuid.uuid4()))
-    scans = [("spec", scan(spec)), ("prompt", scan(prompt))]
-    names = axis_names(uses_length(
-        f.label for _, finds in scans for f in finds if f.origin == LABELLED))
 
     def loose(key):  # the noun without its qualifiers: "hole diameter" -> "diameter"
         label, value = key
@@ -400,12 +504,20 @@ def extract_requirements(prompt, spec, new_id=None) -> list:
 
     by_key = {}
     in_spec = set()  # loose keys, and (None, value) for every length the spec states
-    for source, finds in scans:
-        for found in sorted(finds, key=lambda f: f.at):
-            built = _requirement(found, names)
+    for source, finds in _read(prompt, spec):
+        counted = set()  # the hole counts this text has stated so far
+        for label, found in finds:
+            built = _requirement(found, label)
             if built is None:
                 continue
             key, fields = built
+            again = fields["kind"] == "hole" and key in counted
+            if again:
+                # More holes, not the first count said twice: its own requirement.
+                by_key[(*key, len(by_key))] = {"id": new_id(), **fields, "source": source}
+                continue
+            if fields["kind"] == "hole":
+                counted.add(key)
             first = by_key.get(key)
             if first is not None:
                 if first["tolerance"] is None:
@@ -420,7 +532,9 @@ def extract_requirements(prompt, spec, new_id=None) -> list:
 
     requirements = list(by_key.values())
     counts = [r for r in requirements if r["kind"] == "hole"]
-    if len(counts) > 1:
+    total = (len(counts) == 1 and counts[0]["label"] == "hole count"
+             and not mentions_uncounted_hole(spec) and not mentions_uncounted_hole(prompt))
+    if not total:
         for requirement in counts:
             requirement["check_method"] = MANUAL
     return requirements
@@ -483,6 +597,7 @@ def extract(prompt, spec=None, new_id=None) -> dict:
 
 __all__ = [
     "VERSION", "MACHINE", "VISUAL", "MANUAL", "CRITERIA", "SIZE_NOUNS",
-    "Found", "Quantity", "scan", "extract_quantities", "extract_requirements",
-    "rubric_items", "extract", "box_noun", "uses_length", "axis_names",
+    "Found", "Quantity", "scan", "extract_quantities", "stated_quantities",
+    "extract_requirements", "rubric_items", "extract", "box_noun", "quantity_key",
+    "label_parts", "mentions_uncounted_hole", "uses_length", "axis_names",
 ]

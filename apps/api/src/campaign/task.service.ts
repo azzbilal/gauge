@@ -18,6 +18,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { BuiltPacket, buildPacket, rubricItemIdOf } from '../verify/packet-builder';
 import { LintFindingResult, VerifyClient } from '../verify/verify.client';
+import { VerifyUnreachableError } from '../verify/verify.errors';
 import { CreateTaskDto, PreviewTaskDto } from './dto/task.dto';
 import { AdjudicateTaskDto, CreateTaskReviewDto } from './dto/task-review.dto';
 import {
@@ -167,15 +168,26 @@ export class TaskService {
     await this.requireExpert(dto.authorId, 'Author');
 
     // The gate (docs/pipeline.md §2 Layer 2): lint the packet before anything is stored. A
-    // critical finding refuses the task, whoever the client is. A verify service that
-    // cannot be reached does not refuse it, but the task is then recorded as not linted.
-    // The service also extracts the requirements, so without it there is no packet either.
+    // critical finding refuses the task, whoever the client is. The service also extracts
+    // the requirements, so without it there is no packet either.
+    //
+    // Only an outage lets a task through unlinted, recorded as such: the service could
+    // not be reached or did not answer in time, which says nothing about the task. Any
+    // other failure refuses the create. A service that answered with an error status, a
+    // malformed body or a rubric this API does not store is one whose lint cannot be
+    // trusted, and accepting the task then would be the gate failing open.
     let built: BuiltPacket | null = null;
     let lint: LintOutcome;
     try {
       built = await buildPacket(dto, this.verifyClient);
       lint = { status: 'ok', findings: await this.verifyClient.lint(built.packet) };
     } catch (err) {
+      if (!(err instanceof VerifyUnreachableError)) {
+        this.logger.error(`Task refused, the lint gate could not run: ${message(err)}`);
+        throw new UnprocessableEntityException(
+          `Task not created, it could not be linted: ${message(err)}`,
+        );
+      }
       lint = { status: 'not_run', note: message(err) };
     }
     if (lint.status === 'ok' && built) {

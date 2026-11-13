@@ -6,6 +6,7 @@ import type {
   RequirementExtractor,
   TaskPacket,
 } from './packet-builder';
+import { VerifyContractError, VerifyUnreachableError } from './verify.errors';
 
 /** One M7 Packet Lint finding; the same fields as the LintFinding model. */
 export interface LintFindingResult {
@@ -29,8 +30,11 @@ const VERIFY_TIMEOUT_MS = 5000;
 
 /**
  * HTTP client for the Layer 2 verify service (verify/service/main.py).
- * Uses Node's built-in fetch. Every call throws when the service is unreachable, slow,
- * or answers with anything but the expected shape; the caller decides what that means.
+ * Uses Node's built-in fetch. Every call throws one of two errors (verify.errors.ts) and
+ * the caller decides what each means:
+ *   VerifyUnreachableError  no answer: connection refused, or the timeout ran out
+ *   VerifyContractError     an answer that cannot be used: an error status, or anything
+ *                           but the expected shape
  * Nothing is contacted at construction, so the API boots without the service.
  */
 @Injectable()
@@ -48,7 +52,7 @@ export class VerifyClient implements RequirementExtractor {
     const path = '/extract';
     const json = await this.post(path, source);
     const malformed = (what: string) =>
-      new Error(`verify service ${path} returned a malformed answer (${what})`);
+      new VerifyContractError(`verify service ${path} returned a malformed answer (${what})`);
 
     const version = json.version;
     if (typeof version !== 'string' || version === '') throw malformed('no version');
@@ -103,20 +107,25 @@ export class VerifyClient implements RequirementExtractor {
     return { version, requirements, rubricItems };
   }
 
-  /** POST /lint: the lint findings for a packet. */
+  /**
+   * POST /lint: the lint findings for a packet. Strict like `extract`: a finding that
+   * cannot be read rejects the whole answer, because it may be the critical one.
+   */
   async lint(packet: TaskPacket): Promise<LintFindingResult[]> {
-    const rows = await this.postForList('/lint', packet, 'findings');
-    return rows.filter(isRecord).flatMap((row) =>
-      typeof row.rule === 'string' && typeof row.severity === 'string'
-        ? [
-            {
-              rule: row.rule,
-              severity: row.severity,
-              detail: typeof row.detail === 'string' ? row.detail : null,
-            },
-          ]
-        : [],
-    );
+    const path = '/lint';
+    const rows = await this.postForList(path, packet, 'findings');
+    return rows.map((row): LintFindingResult => {
+      if (!isRecord(row) || typeof row.rule !== 'string' || typeof row.severity !== 'string') {
+        throw new VerifyContractError(
+          `verify service ${path} returned a malformed answer (a finding without rule or severity)`,
+        );
+      }
+      return {
+        rule: row.rule,
+        severity: row.severity,
+        detail: typeof row.detail === 'string' ? row.detail : null,
+      };
+    });
   }
 
   /** POST /verify: one verdict per machine-checkable rubric item. */
@@ -142,7 +151,7 @@ export class VerifyClient implements RequirementExtractor {
   private async postForList(path: string, packet: TaskPacket, key: string): Promise<unknown[]> {
     const rows = (await this.post(path, packet))[key];
     if (!Array.isArray(rows)) {
-      throw new Error(`verify service ${path} did not return a "${key}" list`);
+      throw new VerifyContractError(`verify service ${path} did not return a "${key}" list`);
     }
     return rows;
   }
@@ -158,15 +167,30 @@ export class VerifyClient implements RequirementExtractor {
         signal: AbortSignal.timeout(VERIFY_TIMEOUT_MS),
       });
     } catch (err) {
-      throw new Error(`verify service unreachable at ${url} (${describe(err)})`);
+      throw new VerifyUnreachableError(`verify service unreachable at ${url} (${describe(err)})`);
     }
     if (!res.ok) {
+      // The service answered, and refused: the status is the answer, whatever the body.
       const body = await res.text().catch(() => '');
-      throw new Error(`verify service ${path} answered ${res.status} ${body.slice(0, 200)}`.trim());
+      throw new VerifyContractError(
+        `verify service ${path} answered ${res.status} ${body.slice(0, 200)}`.trim(),
+      );
     }
-    const json: unknown = await res.json().catch(() => null);
+    let json: unknown;
+    try {
+      json = await res.json();
+    } catch (err) {
+      // A body that is not JSON is a wrong answer. Anything else is the body not arriving:
+      // the timeout also covers reading it, and the connection can drop half way.
+      if (!(err instanceof SyntaxError)) {
+        throw new VerifyUnreachableError(
+          `verify service at ${url} did not finish answering (${describe(err)})`,
+        );
+      }
+      json = null;
+    }
     if (!isRecord(json)) {
-      throw new Error(`verify service ${path} did not return a JSON object`);
+      throw new VerifyContractError(`verify service ${path} did not return a JSON object`);
     }
     return json;
   }
