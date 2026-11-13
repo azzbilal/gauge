@@ -1,0 +1,40 @@
+version: 2
+
+sources:
+  - name: raw
+    description: App tables copied verbatim from Postgres by warehouse/load.py.
+    schema: raw
+    tables:
+      - name: campaign
+      - name: expert
+      - name: task
+      - name: task_review
+      - name: review_decision
+      - name: event
+
+models:
+  - name: stg_tasks
+    description: One row per task, all tasks kept (gold tasks and gold clones flagged).
+    columns:
+      - name: task_id
+        data_tests: [unique, not_null]
+      - name: campaign_id
+        data_tests: [not_null]
+      - name: status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [DRAFT, SUBMITTED, IN_REVIEW, ACCEPTED, REJECTED]
+
+  - name: stg_reviews
+    description: One row per peer review of a task; legacy rows flagged by is_legacy.
+    columns:
+      - name: review_id
+        data_tests: [unique, not_null]
+      - name: task_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_tasks')
+                field: task_id

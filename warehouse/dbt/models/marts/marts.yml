@@ -1,0 +1,23 @@
+version: 2
+
+models:
+  - name: mart_campaign
+    description: >
+      One row per campaign (campaigns with no tasks included). Gold tasks, including
+      gold clones, are calibration items and are excluded from every metric; they are
+      counted in gold_task_count only.
+    columns:
+      - name: campaign_id
+        data_tests: [unique, not_null]
+      - name: task_count
+        description: Non-gold tasks in the campaign.
+      - name: accept_rate
+        description: accepted / (accepted + rejected) task status; null when nothing is decided.
+      - name: tasks_per_day
+        description: task_count / calendar days from first to last task createdAt, inclusive.
+      - name: multi_reviewed_count
+        description: Tasks with at least two identified (non-legacy) peer reviews.
+      - name: reviewer_agreement
+        description: >
+          Share of multi-reviewed tasks where every identified reviewer gave the same
+          accept/reject verdict; null when no task has two reviews.

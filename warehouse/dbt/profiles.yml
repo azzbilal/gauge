@@ -1,0 +1,9 @@
+gauge_warehouse:
+  target: local
+  outputs:
+    local:
+      type: duckdb
+      # Set by warehouse/run.py; defaults to warehouse/gauge.duckdb when run from the repo root.
+      path: "{{ env_var('GAUGE_DUCKDB_PATH', 'warehouse/gauge.duckdb') }}"
+      schema: main
+      threads: 1

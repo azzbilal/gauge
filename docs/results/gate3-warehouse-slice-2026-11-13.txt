@@ -1,0 +1,28 @@
+Gate 3: warehouse vertical slice (Postgres -> DuckDB -> dbt)
+Run 2026-11-13T23:21:12+01:00; raw loaded at 2026-11-13 23:21:02.725112+01:00
+Note: local docker Postgres with dev data (two demo campaigns + the seeded verifier golden set); not a real campaign.
+Note: the golden set's reviews are scripted against author labels, so its agreement of 1.0 is by construction; none of its tasks is flagged isGold, so it counts as an ordinary campaign.
+Note: CAD tasks v1 shows null agreement: its decided tasks have only legacy (unidentified) reviews.
+
+Raw tables loaded
+  raw.campaign              3 rows
+  raw.expert                9 rows
+  raw.task                 17 rows
+  raw.task_review          27 rows
+  raw.review_decision       1 rows
+  raw.event                58 rows
+
+dbt build: Done. PASS=13 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=13
+dbt test:  Done. PASS=10 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=10
+
+mart_campaign (gold tasks excluded from metrics; see warehouse/dbt/models/marts/marts.yml)
+  campaign_name           task_count  gold_task_count  accepted_count  rejected_count  accept_rate  active_days  tasks_per_day  multi_reviewed_count  agreed_count  reviewer_agreement
+  Verifier golden set v1          10                0               4               6          0.4            1           10.0                    10            10                 1.0
+  My first campaign                4                0               1               0          1.0            1            4.0                     1             1                 1.0
+  CAD tasks v1                     3                0               1               1          0.5            2            1.5                     0             0                null
+
+Definitions
+  accept_rate        = accepted / (accepted + rejected); null when nothing is decided
+  tasks_per_day      = task_count / calendar days from first to last task (inclusive)
+  reviewer_agreement = share of tasks with >=2 identified reviews whose accept/reject
+                       verdicts all match; null when no task has two reviews
