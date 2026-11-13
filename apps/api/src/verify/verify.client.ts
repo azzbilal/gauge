@@ -207,7 +207,10 @@ export class VerifyClient implements RequirementExtractor {
     const malformed = (what: string) =>
       new VerifyContractError(`verify service ${path} returned a malformed answer (${what})`);
 
-    const tier = typeof json.tier === 'string' ? PROBE_TIERS[json.tier] : undefined;
+    const tier =
+      typeof json.tier === 'string' && Object.prototype.hasOwnProperty.call(PROBE_TIERS, json.tier)
+        ? PROBE_TIERS[json.tier]
+        : undefined;
     if (!tier) throw malformed(`tier ${JSON.stringify(json.tier)}`);
     const rate = json.solve_rate;
     if (typeof rate !== 'number' || !Number.isFinite(rate) || rate < 0 || rate > 1) {
