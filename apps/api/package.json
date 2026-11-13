@@ -9,6 +9,7 @@
     "start:prod": "node dist/main.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run --dir src",
+    "golden": "ts-node src/intake/golden/run-golden.ts",
     "prebuild": "prisma generate",
     "pretypecheck": "prisma generate",
     "prisma:generate": "prisma generate",

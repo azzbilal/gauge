@@ -1,0 +1,42 @@
+
+> @gauge/api@0.1.0 golden
+> ts-node src/intake/golden/run-golden.ts --out docs/results/gate1-golden-2026-11-13.json
+
+[Nest] 42476  - 13/11/2026 17:05:28     LOG [OllamaProvider] Using local model qwen3.5:9b-q4_K_M at http://localhost:11434 (num_ctx=16384, 4 few-shot examples)
+Golden set  apps/api/prisma/golden-set.json (20 pairs)
+Scorer      intake-v3-fewshot@ollama/qwen3.5:9b-q4_K_M
+Rule        a criterion agrees when |agent - gold| <= 1; a pair passes when all agree
+Columns     criterion agent/gold (* = outside tolerance), route agent/gold
+
+[ 1/20] gold-01  PASS  cad 5/5   code 4/5   comm 5/4   geo 5/5   route auto /auto   16.6s  LEAK 0.82 vs strong-code-first-cad
+[ 2/20] gold-02  FAIL  cad 4/5   code 0/1   comm 2/4*  geo 5/4   route human/auto   7.9s  LEAK 0.57 vs strong-code-first-cad
+[ 3/20] gold-03  PASS  cad 3/3   code 3/2   comm 2/3   geo 2/3   route auto /human  6.8s
+[ 4/20] gold-04  PASS  cad 3/2   code 1/1   comm 2/3   geo 2/2   route human/human  7.1s
+[ 5/20] gold-05  FAIL  cad 0/0   code 0/0   comm 1/3*  geo 0/0   route human/human  6.4s
+[ 6/20] gold-06  FAIL  cad 0/0   code 1/5*  comm 2/4*  geo 0/0   route human/human  7.7s
+[ 7/20] gold-07  FAIL  cad 3/4   code 1/2   comm 2/5*  geo 5/5   route human/auto   8.1s
+[ 8/20] gold-08  FAIL  cad 2/3   code 0/0   comm 2/4*  geo 2/2   route human/human  7.7s
+[ 9/20] gold-09  FAIL  cad 2/2   code 1/2   comm 0/3*  geo 2/2   route auto /human  10.2s
+[10/20] gold-10  FAIL  cad 0/1   code 0/1   comm 2/4*  geo 0/1   route human/human  7.0s
+[11/20] gold-11  FAIL  cad 2/4*  code 0/2*  comm 1/3*  geo 2/3   route human/human  9.9s
+[12/20] gold-12  PASS  cad 2/3   code 3/4   comm 2/3   geo 2/3   route auto /human  7.5s
+[13/20] gold-13  FAIL  cad 0/0   code 1/4*  comm 1/4*  geo 0/0   route human/human  19.6s
+[14/20] gold-14  FAIL  cad 0/2*  code 0/4*  comm 0/4*  geo 0/4*  route auto /human  7.5s
+[15/20] gold-15  FAIL  cad 0/1   code 0/0   comm 0/3*  geo 0/2*  route auto /human  7.4s
+[16/20] gold-16  FAIL  cad 2/4*  code 3/2   comm 2/4*  geo 2/5*  route human/auto   8.9s
+[17/20] gold-17  FAIL  cad 0/0   code 1/4*  comm 2/4*  geo 0/0   route human/human  7.7s
+[18/20] gold-18  FAIL  cad 3/4   code 1/3*  comm 4/5   geo 3/4   route auto /auto   10.7s
+[19/20] gold-19  FAIL  cad 2/2   code 1/1   comm 0/3*  geo 2/3   route human/human  7.6s
+[20/20] gold-20  FAIL  cad 2/2   code 0/0   comm 1/4*  geo 2/4*  route auto /human  8.4s
+
+Agreement   4/20 pairs pass = 20%
+Without     gold-01, gold-02 (overlap a few-shot example): 3/18 = 17%
+Routing     agent and gold agree on human review for 55% of scored pairs
+Criterion   exact  within  MAE   bias
+  cad         45%    85%   0.70 -0.60
+  code        30%    70%   1.30 -1.10
+  comm         0%    25%   2.15 -2.05
+  geo         45%    80%   0.90 -0.80
+
+Report      docs/results/gate1-golden-2026-11-13.json
+exit 0

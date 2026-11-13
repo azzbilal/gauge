@@ -1,0 +1,887 @@
+{
+  "generatedAt": "2026-11-13T16:08:28.890Z",
+  "goldenSet": {
+    "file": "apps/api/prisma/golden-set.json",
+    "sha256": "d4c45fbbb0b358c7dc96936ef0aaaea76a32ac20c42e0c82498b5541a8d65ae1",
+    "pairs": 20
+  },
+  "scorer": {
+    "provider": "ollama",
+    "promptVersion": "intake-v3-fewshot@ollama/qwen3.5:9b-q4_K_M"
+  },
+  "summary": {
+    "tolerance": 1,
+    "pairs": 20,
+    "judged": 20,
+    "passed": 4,
+    "failed": 16,
+    "errors": 0,
+    "agreementRate": 0.2,
+    "clean": {
+      "pairs": 18,
+      "passed": 3,
+      "agreementRate": 0.16666666666666666,
+      "excluded": [
+        "gold-01",
+        "gold-02"
+      ]
+    },
+    "routingAgreement": 0.55,
+    "perCriterion": [
+      {
+        "criterionId": "cad",
+        "judged": 20,
+        "exactRate": 0.45,
+        "withinToleranceRate": 0.85,
+        "meanAbsError": 0.7,
+        "bias": -0.6
+      },
+      {
+        "criterionId": "code",
+        "judged": 20,
+        "exactRate": 0.3,
+        "withinToleranceRate": 0.7,
+        "meanAbsError": 1.3,
+        "bias": -1.1
+      },
+      {
+        "criterionId": "comm",
+        "judged": 20,
+        "exactRate": 0,
+        "withinToleranceRate": 0.25,
+        "meanAbsError": 2.15,
+        "bias": -2.05
+      },
+      {
+        "criterionId": "geo",
+        "judged": 20,
+        "exactRate": 0.45,
+        "withinToleranceRate": 0.8,
+        "meanAbsError": 0.9,
+        "bias": -0.8
+      }
+    ]
+  },
+  "results": [
+    {
+      "id": "gold-01",
+      "goldNeedsReview": false,
+      "overlap": 0.8181818181818182,
+      "overlapExampleId": "strong-code-first-cad",
+      "leak": true,
+      "status": "pass",
+      "criteria": [
+        {
+          "criterionId": "cad",
+          "gold": 5,
+          "agent": 5,
+          "diff": 0,
+          "agrees": true
+        },
+        {
+          "criterionId": "code",
+          "gold": 5,
+          "agent": 4,
+          "diff": -1,
+          "agrees": true
+        },
+        {
+          "criterionId": "comm",
+          "gold": 4,
+          "agent": 5,
+          "diff": 1,
+          "agrees": true
+        },
+        {
+          "criterionId": "geo",
+          "gold": 5,
+          "agent": 5,
+          "diff": 0,
+          "agrees": true
+        }
+      ],
+      "agentNeedsReview": false,
+      "agentConfidence": 0.93,
+      "latencyMs": 16619
+    },
+    {
+      "id": "gold-02",
+      "goldNeedsReview": false,
+      "overlap": 0.5714285714285714,
+      "overlapExampleId": "strong-code-first-cad",
+      "leak": true,
+      "status": "fail",
+      "criteria": [
+        {
+          "criterionId": "cad",
+          "gold": 5,
+          "agent": 4,
+          "diff": -1,
+          "agrees": true
+        },
+        {
+          "criterionId": "code",
+          "gold": 1,
+          "agent": 0,
+          "diff": -1,
+          "agrees": true
+        },
+        {
+          "criterionId": "comm",
+          "gold": 4,
+          "agent": 2,
+          "diff": -2,
+          "agrees": false
+        },
+        {
+          "criterionId": "geo",
+          "gold": 4,
+          "agent": 5,
+          "diff": 1,
+          "agrees": true
+        }
+      ],
+      "agentNeedsReview": true,
+      "agentConfidence": 0.82,
+      "latencyMs": 7884
+    },
+    {
+      "id": "gold-03",
+      "goldNeedsReview": true,
+      "overlap": 0.23076923076923078,
+      "overlapExampleId": "strong-code-first-cad",
+      "leak": false,
+      "status": "pass",
+      "criteria": [
+        {
+          "criterionId": "cad",
+          "gold": 3,
+          "agent": 3,
+          "diff": 0,
+          "agrees": true
+        },
+        {
+          "criterionId": "code",
+          "gold": 2,
+          "agent": 3,
+          "diff": 1,
+          "agrees": true
+        },
+        {
+          "criterionId": "comm",
+          "gold": 3,
+          "agent": 2,
+          "diff": -1,
+          "agrees": true
+        },
+        {
+          "criterionId": "geo",
+          "gold": 3,
+          "agent": 2,
+          "diff": -1,
+          "agrees": true
+        }
+      ],
+      "agentNeedsReview": false,
+      "agentConfidence": 0.82,
+      "latencyMs": 6841
+    },
+    {
+      "id": "gold-04",
+      "goldNeedsReview": true,
+      "overlap": 0.18181818181818182,
+      "overlapExampleId": "openscad-hobbyist",
+      "leak": false,
+      "status": "pass",
+      "criteria": [
+        {
+          "criterionId": "cad",
+          "gold": 2,
+          "agent": 3,
+          "diff": 1,
+          "agrees": true
+        },
+        {
+          "criterionId": "code",
+          "gold": 1,
+          "agent": 1,
+          "diff": 0,
+          "agrees": true
+        },
+        {
+          "criterionId": "comm",
+          "gold": 3,
+          "agent": 2,
+          "diff": -1,
+          "agrees": true
+        },
+        {
+          "criterionId": "geo",
+          "gold": 2,
+          "agent": 2,
+          "diff": 0,
+          "agrees": true
+        }
+      ],
+      "agentNeedsReview": true,
+      "agentConfidence": 0.78,
+      "latencyMs": 7090
+    },
+    {
+      "id": "gold-05",
+      "goldNeedsReview": true,
+      "overlap": 0,
+      "overlapExampleId": null,
+      "leak": false,
+      "status": "fail",
+      "criteria": [
+        {
+          "criterionId": "cad",
+          "gold": 0,
+          "agent": 0,
+          "diff": 0,
+          "agrees": true
+        },
+        {
+          "criterionId": "code",
+          "gold": 0,
+          "agent": 0,
+          "diff": 0,
+          "agrees": true
+        },
+        {
+          "criterionId": "comm",
+          "gold": 3,
+          "agent": 1,
+          "diff": -2,
+          "agrees": false
+        },
+        {
+          "criterionId": "geo",
+          "gold": 0,
+          "agent": 0,
+          "diff": 0,
+          "agrees": true
+        }
+      ],
+      "agentNeedsReview": true,
+      "agentConfidence": 0.87,
+      "latencyMs": 6410
+    },
+    {
+      "id": "gold-06",
+      "goldNeedsReview": true,
+      "overlap": 0.45454545454545453,
+      "overlapExampleId": "off-domain-backend",
+      "leak": false,
+      "status": "fail",
+      "criteria": [
+        {
+          "criterionId": "cad",
+          "gold": 0,
+          "agent": 0,
+          "diff": 0,
+          "agrees": true
+        },
+        {
+          "criterionId": "code",
+          "gold": 5,
+          "agent": 1,
+          "diff": -4,
+          "agrees": false
+        },
+        {
+          "criterionId": "comm",
+          "gold": 4,
+          "agent": 2,
+          "diff": -2,
+          "agrees": false
+        },
+        {
+          "criterionId": "geo",
+          "gold": 0,
+          "agent": 0,
+          "diff": 0,
+          "agrees": true
+        }
+      ],
+      "agentNeedsReview": true,
+      "agentConfidence": 0.78,
+      "latencyMs": 7687
+    },
+    {
+      "id": "gold-07",
+      "goldNeedsReview": false,
+      "overlap": 0.47058823529411764,
+      "overlapExampleId": "strong-code-first-cad",
+      "leak": false,
+      "status": "fail",
+      "criteria": [
+        {
+          "criterionId": "cad",
+          "gold": 4,
+          "agent": 3,
+          "diff": -1,
+          "agrees": true
+        },
+        {
+          "criterionId": "code",
+          "gold": 2,
+          "agent": 1,
+          "diff": -1,
+          "agrees": true
+        },
+        {
+          "criterionId": "comm",
+          "gold": 5,
+          "agent": 2,
+          "diff": -3,
+          "agrees": false
+        },
+        {
+          "criterionId": "geo",
+          "gold": 5,
+          "agent": 5,
+          "diff": 0,
+          "agrees": true
+        }
+      ],
+      "agentNeedsReview": true,
+      "agentConfidence": 0.75,
+      "latencyMs": 8113
+    },
+    {
+      "id": "gold-08",
+      "goldNeedsReview": true,
+      "overlap": 0.1,
+      "overlapExampleId": "strong-code-first-cad",
+      "leak": false,
+      "status": "fail",
+      "criteria": [
+        {
+          "criterionId": "cad",
+          "gold": 3,
+          "agent": 2,
+          "diff": -1,
+          "agrees": true
+        },
+        {
+          "criterionId": "code",
+          "gold": 0,
+          "agent": 0,
+          "diff": 0,
+          "agrees": true
+        },
+        {
+          "criterionId": "comm",
+          "gold": 4,
+          "agent": 2,
+          "diff": -2,
+          "agrees": false
+        },
+        {
+          "criterionId": "geo",
+          "gold": 2,
+          "agent": 2,
+          "diff": 0,
+          "agrees": true
+        }
+      ],
+      "agentNeedsReview": true,
+      "agentConfidence": 0.75,
+      "latencyMs": 7741
+    },
+    {
+      "id": "gold-09",
+      "goldNeedsReview": true,
+      "overlap": 0.36363636363636365,
+      "overlapExampleId": "openscad-hobbyist",
+      "leak": false,
+      "status": "fail",
+      "criteria": [
+        {
+          "criterionId": "cad",
+          "gold": 2,
+          "agent": 2,
+          "diff": 0,
+          "agrees": true
+        },
+        {
+          "criterionId": "code",
+          "gold": 2,
+          "agent": 1,
+          "diff": -1,
+          "agrees": true
+        },
+        {
+          "criterionId": "comm",
+          "gold": 3,
+          "agent": 0,
+          "diff": -3,
+          "agrees": false
+        },
+        {
+          "criterionId": "geo",
+          "gold": 2,
+          "agent": 2,
+          "diff": 0,
+          "agrees": true
+        }
+      ],
+      "agentNeedsReview": false,
+      "agentConfidence": 0.85,
+      "latencyMs": 10162
+    },
+    {
+      "id": "gold-10",
+      "goldNeedsReview": true,
+      "overlap": 0.2,
+      "overlapExampleId": "strong-code-first-cad",
+      "leak": false,
+      "status": "fail",
+      "criteria": [
+        {
+          "criterionId": "cad",
+          "gold": 1,
+          "agent": 0,
+          "diff": -1,
+          "agrees": true
+        },
+        {
+          "criterionId": "code",
+          "gold": 1,
+          "agent": 0,
+          "diff": -1,
+          "agrees": true
+        },
+        {
+          "criterionId": "comm",
+          "gold": 4,
+          "agent": 2,
+          "diff": -2,
+          "agrees": false
+        },
+        {
+          "criterionId": "geo",
+          "gold": 1,
+          "agent": 0,
+          "diff": -1,
+          "agrees": true
+        }
+      ],
+      "agentNeedsReview": true,
+      "agentConfidence": 0.87,
+      "latencyMs": 6975
+    },
+    {
+      "id": "gold-11",
+      "goldNeedsReview": true,
+      "overlap": 0.14285714285714285,
+      "overlapExampleId": "gui-only-mechanical",
+      "leak": false,
+      "status": "fail",
+      "criteria": [
+        {
+          "criterionId": "cad",
+          "gold": 4,
+          "agent": 2,
+          "diff": -2,
+          "agrees": false
+        },
+        {
+          "criterionId": "code",
+          "gold": 2,
+          "agent": 0,
+          "diff": -2,
+          "agrees": false
+        },
+        {
+          "criterionId": "comm",
+          "gold": 3,
+          "agent": 1,
+          "diff": -2,
+          "agrees": false
+        },
+        {
+          "criterionId": "geo",
+          "gold": 3,
+          "agent": 2,
+          "diff": -1,
+          "agrees": true
+        }
+      ],
+      "agentNeedsReview": true,
+      "agentConfidence": 0.75,
+      "latencyMs": 9919
+    },
+    {
+      "id": "gold-12",
+      "goldNeedsReview": true,
+      "overlap": 0.18181818181818182,
+      "overlapExampleId": "strong-code-first-cad",
+      "leak": false,
+      "status": "pass",
+      "criteria": [
+        {
+          "criterionId": "cad",
+          "gold": 3,
+          "agent": 2,
+          "diff": -1,
+          "agrees": true
+        },
+        {
+          "criterionId": "code",
+          "gold": 4,
+          "agent": 3,
+          "diff": -1,
+          "agrees": true
+        },
+        {
+          "criterionId": "comm",
+          "gold": 3,
+          "agent": 2,
+          "diff": -1,
+          "agrees": true
+        },
+        {
+          "criterionId": "geo",
+          "gold": 3,
+          "agent": 2,
+          "diff": -1,
+          "agrees": true
+        }
+      ],
+      "agentNeedsReview": false,
+      "agentConfidence": 0.82,
+      "latencyMs": 7545
+    },
+    {
+      "id": "gold-13",
+      "goldNeedsReview": true,
+      "overlap": 0.18181818181818182,
+      "overlapExampleId": "openscad-hobbyist",
+      "leak": false,
+      "status": "fail",
+      "criteria": [
+        {
+          "criterionId": "cad",
+          "gold": 0,
+          "agent": 0,
+          "diff": 0,
+          "agrees": true
+        },
+        {
+          "criterionId": "code",
+          "gold": 4,
+          "agent": 1,
+          "diff": -3,
+          "agrees": false
+        },
+        {
+          "criterionId": "comm",
+          "gold": 4,
+          "agent": 1,
+          "diff": -3,
+          "agrees": false
+        },
+        {
+          "criterionId": "geo",
+          "gold": 0,
+          "agent": 0,
+          "diff": 0,
+          "agrees": true
+        }
+      ],
+      "agentNeedsReview": true,
+      "agentConfidence": 0.82,
+      "latencyMs": 19563
+    },
+    {
+      "id": "gold-14",
+      "goldNeedsReview": true,
+      "overlap": 0.16666666666666666,
+      "overlapExampleId": "strong-code-first-cad",
+      "leak": false,
+      "status": "fail",
+      "criteria": [
+        {
+          "criterionId": "cad",
+          "gold": 2,
+          "agent": 0,
+          "diff": -2,
+          "agrees": false
+        },
+        {
+          "criterionId": "code",
+          "gold": 4,
+          "agent": 0,
+          "diff": -4,
+          "agrees": false
+        },
+        {
+          "criterionId": "comm",
+          "gold": 4,
+          "agent": 0,
+          "diff": -4,
+          "agrees": false
+        },
+        {
+          "criterionId": "geo",
+          "gold": 4,
+          "agent": 0,
+          "diff": -4,
+          "agrees": false
+        }
+      ],
+      "agentNeedsReview": false,
+      "agentConfidence": 0.92,
+      "latencyMs": 7496
+    },
+    {
+      "id": "gold-15",
+      "goldNeedsReview": true,
+      "overlap": 0,
+      "overlapExampleId": null,
+      "leak": false,
+      "status": "fail",
+      "criteria": [
+        {
+          "criterionId": "cad",
+          "gold": 1,
+          "agent": 0,
+          "diff": -1,
+          "agrees": true
+        },
+        {
+          "criterionId": "code",
+          "gold": 0,
+          "agent": 0,
+          "diff": 0,
+          "agrees": true
+        },
+        {
+          "criterionId": "comm",
+          "gold": 3,
+          "agent": 0,
+          "diff": -3,
+          "agrees": false
+        },
+        {
+          "criterionId": "geo",
+          "gold": 2,
+          "agent": 0,
+          "diff": -2,
+          "agrees": false
+        }
+      ],
+      "agentNeedsReview": false,
+      "agentConfidence": 0.98,
+      "latencyMs": 7382
+    },
+    {
+      "id": "gold-16",
+      "goldNeedsReview": false,
+      "overlap": 0.16666666666666666,
+      "overlapExampleId": "strong-code-first-cad",
+      "leak": false,
+      "status": "fail",
+      "criteria": [
+        {
+          "criterionId": "cad",
+          "gold": 4,
+          "agent": 2,
+          "diff": -2,
+          "agrees": false
+        },
+        {
+          "criterionId": "code",
+          "gold": 2,
+          "agent": 3,
+          "diff": 1,
+          "agrees": true
+        },
+        {
+          "criterionId": "comm",
+          "gold": 4,
+          "agent": 2,
+          "diff": -2,
+          "agrees": false
+        },
+        {
+          "criterionId": "geo",
+          "gold": 5,
+          "agent": 2,
+          "diff": -3,
+          "agrees": false
+        }
+      ],
+      "agentNeedsReview": true,
+      "agentConfidence": 0.72,
+      "latencyMs": 8888
+    },
+    {
+      "id": "gold-17",
+      "goldNeedsReview": true,
+      "overlap": 0,
+      "overlapExampleId": null,
+      "leak": false,
+      "status": "fail",
+      "criteria": [
+        {
+          "criterionId": "cad",
+          "gold": 0,
+          "agent": 0,
+          "diff": 0,
+          "agrees": true
+        },
+        {
+          "criterionId": "code",
+          "gold": 4,
+          "agent": 1,
+          "diff": -3,
+          "agrees": false
+        },
+        {
+          "criterionId": "comm",
+          "gold": 4,
+          "agent": 2,
+          "diff": -2,
+          "agrees": false
+        },
+        {
+          "criterionId": "geo",
+          "gold": 0,
+          "agent": 0,
+          "diff": 0,
+          "agrees": true
+        }
+      ],
+      "agentNeedsReview": true,
+      "agentConfidence": 0.83,
+      "latencyMs": 7735
+    },
+    {
+      "id": "gold-18",
+      "goldNeedsReview": false,
+      "overlap": 0.15384615384615385,
+      "overlapExampleId": "strong-code-first-cad",
+      "leak": false,
+      "status": "fail",
+      "criteria": [
+        {
+          "criterionId": "cad",
+          "gold": 4,
+          "agent": 3,
+          "diff": -1,
+          "agrees": true
+        },
+        {
+          "criterionId": "code",
+          "gold": 3,
+          "agent": 1,
+          "diff": -2,
+          "agrees": false
+        },
+        {
+          "criterionId": "comm",
+          "gold": 5,
+          "agent": 4,
+          "diff": -1,
+          "agrees": true
+        },
+        {
+          "criterionId": "geo",
+          "gold": 4,
+          "agent": 3,
+          "diff": -1,
+          "agrees": true
+        }
+      ],
+      "agentNeedsReview": false,
+      "agentConfidence": 0.78,
+      "latencyMs": 10671
+    },
+    {
+      "id": "gold-19",
+      "goldNeedsReview": true,
+      "overlap": 0.09090909090909091,
+      "overlapExampleId": "strong-code-first-cad",
+      "leak": false,
+      "status": "fail",
+      "criteria": [
+        {
+          "criterionId": "cad",
+          "gold": 2,
+          "agent": 2,
+          "diff": 0,
+          "agrees": true
+        },
+        {
+          "criterionId": "code",
+          "gold": 1,
+          "agent": 1,
+          "diff": 0,
+          "agrees": true
+        },
+        {
+          "criterionId": "comm",
+          "gold": 3,
+          "agent": 0,
+          "diff": -3,
+          "agrees": false
+        },
+        {
+          "criterionId": "geo",
+          "gold": 3,
+          "agent": 2,
+          "diff": -1,
+          "agrees": true
+        }
+      ],
+      "agentNeedsReview": true,
+      "agentConfidence": 0.82,
+      "latencyMs": 7558
+    },
+    {
+      "id": "gold-20",
+      "goldNeedsReview": true,
+      "overlap": 0.25,
+      "overlapExampleId": "strong-code-first-cad",
+      "leak": false,
+      "status": "fail",
+      "criteria": [
+        {
+          "criterionId": "cad",
+          "gold": 2,
+          "agent": 2,
+          "diff": 0,
+          "agrees": true
+        },
+        {
+          "criterionId": "code",
+          "gold": 0,
+          "agent": 0,
+          "diff": 0,
+          "agrees": true
+        },
+        {
+          "criterionId": "comm",
+          "gold": 4,
+          "agent": 1,
+          "diff": -3,
+          "agrees": false
+        },
+        {
+          "criterionId": "geo",
+          "gold": 4,
+          "agent": 2,
+          "diff": -2,
+          "agrees": false
+        }
+      ],
+      "agentNeedsReview": false,
+      "agentConfidence": 0.92,
+      "latencyMs": 8392
+    }
+  ]
+}

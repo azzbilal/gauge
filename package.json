@@ -19,6 +19,7 @@
     "typecheck:api": "cd apps/api && npm run typecheck",
     "test": "npm run test:api",
     "test:api": "cd apps/api && npm test",
+    "golden": "cd apps/api && npm run golden --",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down"
   }

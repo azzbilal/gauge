@@ -1,9 +1,9 @@
 # M8 — Verifier Pack
 
-Deterministic checkers per deliverable type, run in an isolated worker with a timeout.
-CAD in depth (dimensions, holes, manifold solid, volume); PCB and simulation get one narrow
-check each. Returns one verdict per machine-checkable rubric item. The same code is the
-pre-submit gate, the review auto-check and the training reward.
+Deterministic checkers for CAD tasks. The reference CadQuery code runs in a worker process
+with a timeout. Returns one verdict per machine-checkable rubric item. The same code serves the
+Author view's pre-submit check, the verdicts stored on every new task, and (planned) the
+training reward. PCB and circuit checks from the plan are not built.
 
 ```python
 from verifiers import verify
@@ -26,6 +26,16 @@ to come.
 A rubric item is machine-checkable when its `checkMethod` is `machine`, or when it has none
 and M7's inference tags it machine. Requirements whose kind or text mentions manifold,
 watertight or volume go to `manifold_volume`; the rest go to `geometry_cad` / `static_cad`.
+
+The numbers a requirement states are read back out of its text with the M7 scanner
+(`lint/extract.py`, `extract-7`), the same one that wrote it, so the verifier and the
+extraction cannot disagree about what a requirement says. A structured `value` field wins over
+the prose when it is clear what it refers to.
+
+What reaches the verifier through the API is what extraction tags machine (see the M7 README):
+part sizes, hole and circle sizes, and a hole count only when it is certainly the total.
+Extraction makes no volume requirement, so **`manifold_volume` runs only on packets that state
+a volume requirement themselves**, never on a task created through the API.
 
 ## Executed geometry
 
@@ -89,7 +99,9 @@ Known gap: holes are still read statically, so a hole written in dead code is co
 long as some solid is built.
 
 Axis naming: CadQuery's `box(length, width, height)` is X, Y, Z. A spec that says "width"
-and "depth" means X and Y; a spec that says "length" means X by it and Y by "width".
+and "depth" means X and Y; a spec that says "length" means X by it, Y by "width", and Z by
+"depth". "Height" and "thickness" are always Z. Only box sizes are measured on the executed
+solid; hole and circle diameters/radii and hole counts are always read statically.
 
 The static check fails closed. A value it cannot resolve to a constant (a hole made in a
 loop, a `cut()` of another solid, a function parameter, more than one box) is `not_run`

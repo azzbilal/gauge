@@ -5,9 +5,8 @@ import { LLM_PROVIDER, LlmScoringProvider, RubricCriterion } from './llm/types';
 import { RunIntakeDto } from './dto/run-intake.dto';
 import { SlackService } from '../slack/slack.service';
 import { AuthUser } from '../auth/auth.decorators';
-
-// Below this, the run is routed to a human for review.
-const LOW_CONFIDENCE_THRESHOLD = 0.7;
+import { minConfidence as lowestConfidence, needsHumanReview } from './routing';
+import { postingText as textOfPosting } from './posting';
 
 @Injectable()
 export class IntakeService {
@@ -30,7 +29,7 @@ export class IntakeService {
     }
 
     const criteria = posting.rubric.criteria as unknown as RubricCriterion[];
-    const postingText = [posting.title, posting.description].filter(Boolean).join('\n');
+    const postingText = textOfPosting(posting);
 
     // Resolve or create the expert being screened.
     let expertId = dto.expertId;
@@ -47,13 +46,9 @@ export class IntakeService {
 
     const cost = assessment.costUsd;
 
-    const minConfidence = Math.min(
-      assessment.overallConfidence,
-      ...assessment.scores.map((s) => s.confidence),
-    );
-    const needsReview =
-      assessment.overallConfidence < LOW_CONFIDENCE_THRESHOLD ||
-      minConfidence < LOW_CONFIDENCE_THRESHOLD;
+    // Low confidence, overall or on any criterion, routes the run to a human (routing.ts).
+    const minConfidence = lowestConfidence(assessment);
+    const needsReview = needsHumanReview(assessment);
 
     const run = await this.prisma.intakeRun.create({
       data: {
