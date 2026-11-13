@@ -4,6 +4,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import {
   CheckMethod,
@@ -47,6 +48,15 @@ const TASK_INCLUDE = {
   author: { select: { id: true, name: true } },
   taskReviews: { orderBy: { createdAt: 'asc' } },
 } satisfies Prisma.TaskInclude;
+
+// Stored in place of findings when the linter could not be asked: no findings is not a clean lint.
+const LINT_NOT_RUN_RULE = 'lint_not_run';
+const CRITICAL = 'critical';
+
+/** The lint a create ran before its insert: the findings, or why there are none. */
+type LintOutcome =
+  | { status: 'ok'; findings: LintFindingResult[] }
+  | { status: 'not_run'; note: string };
 
 type TaskRow = Prisma.TaskGetPayload<{ include: typeof TASK_INCLUDE }>;
 type Tx = Prisma.TransactionClient;
@@ -156,6 +166,30 @@ export class TaskService {
     }
     await this.requireExpert(dto.authorId, 'Author');
 
+    // The gate (docs/pipeline.md §2 Layer 2): lint the packet before anything is stored. A
+    // critical finding refuses the task, whoever the client is. A linter that cannot be
+    // reached does not refuse it, but the task is then recorded as not linted.
+    const built = buildPacket(dto);
+    let lint: LintOutcome;
+    try {
+      lint = { status: 'ok', findings: await this.verifyClient.lint(built.packet) };
+    } catch (err) {
+      lint = { status: 'not_run', note: message(err) };
+    }
+    if (lint.status === 'ok') {
+      const critical = lint.findings.filter((f) => f.severity === CRITICAL);
+      if (critical.length > 0) {
+        const labels = packetLabels(built);
+        const reasons = critical.map(
+          (f) => `${f.rule.replace(/_/g, ' ')}: ${f.detail === null ? '' : labels.readable(f.detail)}`,
+        );
+        throw new UnprocessableEntityException(
+          `Task not created, ${critical.length === 1 ? 'a critical lint finding' : `${critical.length} critical lint findings`}: ${reasons.join('; ')}`,
+        );
+      }
+    }
+    const linted = lint.status === 'ok';
+
     const isGold = dto.goldExpectedAccept !== undefined;
     const task = await this.prisma.task.create({
       data: {
@@ -174,13 +208,18 @@ export class TaskService {
       data: {
         actorId: dto.authorId,
         type: 'task.created',
-        payload: { taskId: task.id, campaignId: dto.campaignId, isGold } as Prisma.InputJsonValue,
+        payload: {
+          taskId: task.id,
+          campaignId: dto.campaignId,
+          isGold,
+          linted,
+        } as Prisma.InputJsonValue,
       },
     });
 
-    await this.runVerification(task);
+    await this.runVerification(task, built, lint);
 
-    return task;
+    return { ...task, linted };
   }
 
   /**
@@ -237,47 +276,58 @@ export class TaskService {
   }
 
   /**
-   * Layer 2 on a new task: build its packet, lint it and verify its reference, and store
-   * what comes back. Never throws: the task already exists, and neither a verify service
-   * that is down nor a failed write here may fail the create.
+   * Layer 2 on a new task: verify its reference and store that with the lint its create
+   * already ran, on the same packet, so the stored rows carry the ids the findings quote.
+   * Never throws: the task already exists, and neither a verify service that is down nor a
+   * failed write here may fail the create.
    */
-  private async runVerification(task: Task): Promise<void> {
+  private async runVerification(task: Task, built: BuiltPacket, lint: LintOutcome): Promise<void> {
     try {
-      const { requirements, rubricItems, packet } = buildPacket(task);
-      const [lint, verify] = await Promise.allSettled([
-        this.verifyClient.lint(packet),
-        this.verifyClient.verify(packet),
-      ]);
-      for (const call of [lint, verify]) {
-        if (call.status === 'rejected') {
-          this.logger.warn(`Task ${task.id} created without verification: ${message(call.reason)}`);
-        }
+      const { requirements, rubricItems, packet } = built;
+      const [verify] = await Promise.allSettled([this.verifyClient.verify(packet)]);
+      if (lint.status === 'not_run') {
+        this.logger.warn(`Task ${task.id} created without lint: ${lint.note}`);
       }
-      if (lint.status === 'rejected' && verify.status === 'rejected') return;
+      if (verify.status === 'rejected') {
+        this.logger.warn(`Task ${task.id} created without verification: ${message(verify.reason)}`);
+      }
 
-      // The stored findings and verdicts quote these ids, so the rows keep them.
-      const writes: Prisma.PrismaPromise<unknown>[] = [
-        this.prisma.requirement.createMany({
-          data: requirements.map((r) => ({ ...r, taskId: task.id })),
-        }),
-        this.prisma.rubricItem.createMany({
-          data: rubricItems.map((item) => ({
-            id: item.id,
-            taskId: task.id,
-            requirementId: item.requirementId,
-            text: item.text,
-            checkMethod: item.checkMethod === 'machine' ? CheckMethod.MACHINE : CheckMethod.MANUAL,
-            weight: item.weight,
-          })),
-        }),
-      ];
-      if (lint.status === 'fulfilled') {
+      const writes: Prisma.PrismaPromise<unknown>[] = [];
+      if (lint.status === 'ok' || verify.status === 'fulfilled') {
+        // The stored findings and verdicts quote these ids, so the rows keep them.
         writes.push(
-          this.prisma.lintFinding.createMany({
-            data: lint.value.map((f) => ({ ...f, taskId: task.id })),
+          this.prisma.requirement.createMany({
+            data: requirements.map((r) => ({ ...r, taskId: task.id })),
+          }),
+          this.prisma.rubricItem.createMany({
+            data: rubricItems.map((item) => ({
+              id: item.id,
+              taskId: task.id,
+              requirementId: item.requirementId,
+              text: item.text,
+              checkMethod: item.checkMethod === 'machine' ? CheckMethod.MACHINE : CheckMethod.MANUAL,
+              weight: item.weight,
+            })),
           }),
         );
       }
+      // Everything the linter said is stored as it said it. When it said nothing because it
+      // was not asked, one row says so: an empty list would read as a clean lint.
+      writes.push(
+        this.prisma.lintFinding.createMany({
+          data:
+            lint.status === 'ok'
+              ? lint.findings.map((f) => ({ ...f, taskId: task.id }))
+              : [
+                  {
+                    taskId: task.id,
+                    rule: LINT_NOT_RUN_RULE,
+                    severity: 'warning',
+                    detail: `Not linted: ${lint.note}`,
+                  },
+                ],
+        }),
+      );
       if (verify.status === 'fulfilled') {
         const verdicts = verify.value.map((v) => ({
           ...v,

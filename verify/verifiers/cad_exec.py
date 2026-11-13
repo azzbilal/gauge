@@ -33,6 +33,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 from collections import OrderedDict, namedtuple
 
 OK = "ok"                    # the code ran and built a solid; size and volume are set
@@ -58,6 +59,9 @@ Measurement = namedtuple(
 
 _CACHE_SIZE = 64
 _cache = OrderedDict()   # (python, source) -> Measurement, for outcomes that will not change
+# The service answers each request on its own thread. Held for the cache bookkeeping only,
+# never while a worker runs.
+_cache_lock = threading.Lock()
 _has_cadquery = {}       # python -> cadquery version, once a pre-flight has imported it
 _no_cadquery = {}        # python -> detail, once a pre-flight has a definite "no"
 
@@ -85,16 +89,18 @@ def measure(source: str, timeout=None, python=None) -> Measurement:
     if blocked is not None:
         return blocked
     key = (python, source)
-    if key in _cache:
-        _cache.move_to_end(key)
-        return _cache[key]
+    with _cache_lock:
+        if key in _cache:
+            _cache.move_to_end(key)
+            return _cache[key]
 
     result = _run_reference(source, timeout, python)
     # A timeout depends on machine load and not_run on the machine: try again next time.
     if result.kind not in (TIMEOUT, NOT_RUN):
-        _cache[key] = result
-        while len(_cache) > _CACHE_SIZE:
-            _cache.popitem(last=False)
+        with _cache_lock:
+            _cache[key] = result
+            while len(_cache) > _CACHE_SIZE:
+                _cache.popitem(last=False)
     return result
 
 

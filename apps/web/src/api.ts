@@ -64,6 +64,8 @@ export interface Task {
   taskReviews: TaskReview[];
   reviewState: ReviewState;
   adjudication: Adjudication | null;
+  /** Only on the answer to a create: false when the linter could not be reached. */
+  linted?: boolean;
 }
 
 /** One packet lint finding from POST /tasks/preview. */

@@ -7,10 +7,13 @@ POST /probe runs the M9 Probe Gate: body {"packet": {...}, "model": "...", "roll
 (rollouts optional, default 3) and returns {"tier": ..., "rollouts": [...], ...}. It calls
 the local Ollama server and answers 502 when that fails.
 /health proves the seam works. Uses only the standard library.
+
+One thread per request, so a lint (pure and fast) is never queued behind a verify or a
+probe that is waiting on a worker process or on Ollama.
 """
 import json
 import sys
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 # Make verify/ importable regardless of the directory the service is started from.
@@ -114,4 +117,4 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     print(f"verify service listening on http://127.0.0.1:{PORT}")
-    HTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
+    ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()

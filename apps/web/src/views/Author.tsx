@@ -46,6 +46,15 @@ const SEVERITY_ORDER = ['critical', 'warning', 'info'];
 const isCritical = (f: LintFinding) => f.severity === 'critical';
 const words = (s: string) => s.replace(/_/g, ' ');
 
+// Every packet is built with rubric items that name no requirement (the manual criteria),
+// so the linter says so about each one, on every draft, and the author can do nothing about
+// it. Only that one sentence is hidden, and never a critical finding: "requirement Y is not
+// referenced by any rubric item" still shows.
+const isBuiltInNoise = (f: LintFinding) =>
+  f.rule === 'traceability' &&
+  !isCritical(f) &&
+  /^rubric item .+ does not reference any requirement$/.test(f.detail ?? '');
+
 // A check that could not be asked for at all reads the same as one the API could not run.
 function notRun(note: string): TaskPreview {
   return {
@@ -56,8 +65,9 @@ function notRun(note: string): TaskPreview {
 
 function lintRows(preview: TaskPreview | null): Row[] {
   if (!preview) return [{ state: 'idle', name: 'Packet lint', word: 'not run' }];
-  const { status, findings, note } = preview.lint;
+  const { status, note } = preview.lint;
   if (status !== 'ok') return [{ state: 'idle', name: 'Packet lint', word: 'not run', detail: note }];
+  const findings = preview.lint.findings.filter((f) => !isBuiltInNoise(f));
   if (findings.length === 0) return [{ state: 'pass', name: 'No findings', word: 'pass' }];
   // Critical first; a severity this view does not know sorts last.
   const rank = (f: LintFinding) => {
@@ -153,7 +163,10 @@ export function AuthorView({ identityId }: { identityId: string }) {
 
   const text = JSON.stringify([prompt, spec, reference]);
   const preview = result?.text === text ? result.preview : null;
-  const blocking = blockedText === text ? (preview?.lint.findings.filter(isCritical) ?? []) : [];
+  const blocked = blockedText === text ? preview : null;
+  const blocking = blocked?.lint.findings.filter(isCritical) ?? [];
+  // A lint that did not run is not a clean lint: the submit was stopped for that alone.
+  const unlinted = blocked && blocked.lint.status !== 'ok' ? blocked.lint : null;
 
   // The first thing still missing, said in words: the button alone can't explain itself.
   const missing = !identityId
@@ -188,9 +201,10 @@ export function AuthorView({ identityId }: { identityId: string }) {
     setError('');
     try {
       // The gate is the lint of exactly this text: reuse a finished check of it, otherwise
-      // run one now. A lint that could not run does not block, as on the server.
+      // run one now. It fails closed: a lint that could not run stops the submit, and so
+      // does a critical finding. The server lints again before it stores anything.
       const checked = preview?.lint.status === 'ok' ? preview : await runCheck();
-      if (checked.lint.findings.some(isCritical)) {
+      if (checked.lint.status !== 'ok' || checked.lint.findings.some(isCritical)) {
         setBlockedText(text);
         return;
       }
@@ -201,7 +215,8 @@ export function AuthorView({ identityId }: { identityId: string }) {
         spec,
         reference,
       });
-      notify(`Task created (${task.status}).`);
+      // The linter can go away between the check above and the create; the server says so.
+      notify(`Task created (${task.status})${task.linted === false ? ', not linted' : ''}.`);
       setPrompt('');
       setSpec('');
       setReference('');
@@ -306,6 +321,15 @@ export function AuthorView({ identityId }: { identityId: string }) {
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+          {unlinted && (
+            <div className="error au-blocked" role="alert">
+              <p>
+                Not submitted: the lint could not run, so the draft was not checked. Nothing was
+                created. Start the verify service and submit again.
+              </p>
+              {unlinted.note && <p>{unlinted.note}</p>}
             </div>
           )}
           {error && <p className="error">{error}</p>}
