@@ -79,7 +79,12 @@ class Handler(BaseHTTPRequestHandler):
             if spec is not None and not isinstance(spec, str):
                 self._json(400, {"error": "'spec' must be a string or null"})
                 return
-            self._json(200, extract(prompt, spec))
+            try:
+                self._json(200, extract(prompt, spec))
+            except PacketError as err:
+                self._json(400, {"error": str(err)})
+            except Exception:
+                self._json(500, {"error": "internal server error"})
         elif self.path == "/lint":
             packet = self._read_json()
             if packet is None:
@@ -88,6 +93,9 @@ class Handler(BaseHTTPRequestHandler):
                 findings = lint(packet)
             except PacketError as err:
                 self._json(400, {"error": str(err)})
+                return
+            except Exception:
+                self._json(500, {"error": "internal server error"})
                 return
             self._json(200, {"findings": findings})
         elif self.path == "/verify":
@@ -98,6 +106,9 @@ class Handler(BaseHTTPRequestHandler):
                 verdicts = verify(packet)
             except PacketError as err:
                 self._json(400, {"error": str(err)})
+                return
+            except Exception:
+                self._json(500, {"error": "internal server error"})
                 return
             self._json(200, {"verdicts": verdicts})
         elif self.path == "/probe":
@@ -124,6 +135,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             except OllamaError as err:
                 self._json(502, {"error": str(err)})
+                return
+            except Exception:
+                self._json(500, {"error": "internal server error"})
                 return
             self._json(200, result)
         else:

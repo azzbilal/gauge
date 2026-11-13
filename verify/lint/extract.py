@@ -116,6 +116,19 @@ _COUNT_FILLER = {
 # machine only when it is one of these, or a hole count that is certainly the total.
 SIZE_NOUNS = ("width", "length", "height", "depth", "thickness", "diameter", "radius")
 
+# A triple adjacent to one of these is a feature (a pocket or slot inside the part), not
+# the part itself, so it must not be named width/depth/height and compared with the part.
+_FEATURE_NOUNS = frozenset({
+    "pocket", "slot", "groove", "cutout", "notch", "recess", "cavity", "channel",
+    "keyway", "bore", "hole", "counterbore", "countersink", "cut",
+})
+
+# Words that are not the noun a triple describes: articles, prepositions, connectors.
+_NON_NOUNS = frozenset({
+    "a", "an", "the", "with", "of", "and", "or", "is", "are", "has", "have", "in",
+    "on", "at", "to", "for", "by", "into", "about", "approximately", "roughly", "x",
+})
+
 # Sizes of the part as a whole, as opposed to the size of a feature on it.
 _BOX_NOUNS = {"width", "length", "depth", "height", "thickness"}
 _BOX_QUALIFIERS = {"plate", "base", "body", "board", "outer"}
@@ -300,6 +313,18 @@ def mentions_uncounted_hole(text: str) -> bool:
     return False
 
 
+def _triple_noun(text, start, end):
+    """The noun a triple describes: the word before it, unless that is an article or
+    preposition, in which case the word after it (as in 'a 20 x 10 x 3 mm pocket')."""
+    before = re.findall(r"[A-Za-z]+", text[:start])
+    after = re.findall(r"[A-Za-z]+", text[end:])
+    before_word = before[-1].lower() if before else ""
+    after_word = after[0].lower() if after else ""
+    if before_word and before_word not in _NON_NOUNS:
+        return before_word
+    return after_word
+
+
 def scan(text: str) -> list:
     """Every number the text states, most specific reading first: a later pattern never
     re-reads a number an earlier one claimed. Finds come back in pattern order (triples,
@@ -320,9 +345,10 @@ def scan(text: str) -> list:
     for m in _TRIPLE.finditer(text):
         spans.append(m.span())
         last = m.group("uc") or "mm"
+        noun = _triple_noun(text, m.start(), m.end())
         for axis, (num, unit) in enumerate((("a", "ua"), ("b", "ub"), ("c", "uc"))):
             found.append(Found(
-                (m.start(num), axis), TRIPLE, None, m.group(num),
+                (m.start(num), axis), TRIPLE, noun, m.group(num),
                 m.group(unit) or last, None, axis))
     triples = list(spans)
 
@@ -428,10 +454,16 @@ def _read(prompt, spec) -> list:
     names = axis_names(uses_length(
         f.label for _, finds in scans for f in finds if f.origin == LABELLED))
     return [
-        (source, [(names[f.axis] if f.origin == TRIPLE else f.label, f)
+        (source, [(_triple_axis(f, names) if f.origin == TRIPLE else f.label, f)
                   for f in sorted(finds, key=lambda f: f.at)])
         for source, finds in scans
     ]
+
+
+def _triple_axis(f, names):
+    """The axis name for a triple, or None when the triple is a feature so it does not
+    compete with the part's own width/depth/height."""
+    return None if f.label in _FEATURE_NOUNS else names[f.axis]
 
 
 def stated_quantities(prompt, spec) -> dict:

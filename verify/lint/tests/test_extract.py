@@ -152,6 +152,14 @@ class Triples(unittest.TestCase):
             texts("Plate 80 x 50 x 6 mm, slot length 20 mm")[:3],
             ["width of 80 mm", "depth of 50 mm", "height of 6 mm"])
 
+    def test_feature_triple_is_not_named_as_the_part(self):
+        # A pocket triple must not become the part's width/depth/height.
+        self.assertEqual(
+            texts("width of 60 mm, depth of 40 mm, height of 5 mm",
+                  prompt="A bracket with a 20 x 10 x 3 mm pocket."),
+            ["width of 60 mm", "depth of 40 mm", "height of 5 mm",
+             "20 mm", "10 mm", "3 mm"])
+
     def test_a_number_in_a_triple_is_read_once(self):
         self.assertEqual(
             texts("Rectangular plate 60 x 40 x 5 mm thick with four mounting holes of "
