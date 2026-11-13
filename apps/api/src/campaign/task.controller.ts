@@ -22,11 +22,13 @@ export class TaskController {
 
   // Declared before ':id' so they are not read as task ids.
   @Get('agreement')
+  @Roles(Role.ADMIN)
   agreement(@Query('campaignId') campaignId?: string) {
     return this.tasks.agreement(campaignId || undefined);
   }
 
   @Get('calibration')
+  @Roles(Role.ADMIN)
   calibration(@Query('campaignId') campaignId?: string) {
     return this.tasks.calibration(campaignId || undefined);
   }
