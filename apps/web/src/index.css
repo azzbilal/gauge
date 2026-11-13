@@ -44,8 +44,19 @@ body { margin: 0; min-height: 100vh; background: var(--ground); color: var(--hi)
 
 .topbar nav { display: flex; }
 
-.identity { margin-left: auto; }
-.identity select { max-width: 240px; }
+.identity { margin-left: auto; display: flex; align-items: center; gap: 0.75rem; font-size: 13px; }
+.identity-role { color: var(--text-2); text-transform: lowercase; }
+
+/* ── Login: one narrow column, the same fields as every other form ── */
+.login { max-width: 360px; margin: 3rem auto 0; }
+.login h2 { margin: 0 0 1.25rem; font-size: 18px; font-weight: 600; }
+.login-form { display: flex; flex-direction: column; gap: 1rem; }
+.login-form .error { margin: 0; }
+.login-switch {
+  margin-top: 1.25rem; padding: 0; border: none; background: none;
+  font: inherit; font-size: 13px; color: var(--text-2); cursor: pointer;
+}
+.login-switch:hover { color: var(--hi); }
 
 .tab {
   background: none; border: none; border-bottom: 1px solid transparent;

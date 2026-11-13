@@ -1,19 +1,23 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
+import { Role } from '@prisma/client';
 import { TaskService } from './task.service';
 import { parseCreateTaskDto, parsePreviewTaskDto } from './dto/task.dto';
 import { parseAdjudicateTaskDto, parseCreateTaskReviewDto } from './dto/task-review.dto';
+import { AuthUser, CurrentUser, Roles } from '../auth/auth.decorators';
 
 /**
  * M2 — Task authoring and review (docs/pipeline.md).
+ * Who acts is always the signed-in user; the role decides what they may do.
  */
 @Controller('tasks')
 export class TaskController {
   constructor(private readonly tasks: TaskService) {}
 
-  /** `?reviewerId=` turns the list into that reviewer's work queue. */
+  /** `?queue=1` turns the list into the signed-in user's work queue. */
   @Get()
-  list(@Query('campaignId') campaignId?: string, @Query('reviewerId') reviewerId?: string) {
-    return this.tasks.list(campaignId || undefined, reviewerId?.trim() || undefined);
+  list(@CurrentUser() user: AuthUser, @Query('campaignId') campaignId?: string, @Query('queue') queue?: string) {
+    const mine = queue === '1' || queue === 'true';
+    return this.tasks.list(campaignId || undefined, mine ? user : undefined);
   }
 
   // Declared before ':id' so they are not read as task ids.
@@ -39,8 +43,9 @@ export class TaskController {
   }
 
   @Post()
-  create(@Body() body: unknown) {
-    return this.tasks.create(parseCreateTaskDto(body));
+  @Roles(Role.AUTHOR)
+  create(@CurrentUser() user: AuthUser, @Body() body: unknown) {
+    return this.tasks.create(parseCreateTaskDto(body), user);
   }
 
   /**
@@ -48,18 +53,21 @@ export class TaskController {
    * that is down is reported as `not_run` in the body, not as an error.
    */
   @Post('preview')
+  @Roles(Role.AUTHOR)
   @HttpCode(200)
   preview(@Body() body: unknown) {
     return this.tasks.preview(parsePreviewTaskDto(body));
   }
 
   @Post(':id/reviews')
-  review(@Param('id') id: string, @Body() body: unknown) {
-    return this.tasks.review(id, parseCreateTaskReviewDto(body));
+  @Roles(Role.REVIEWER)
+  review(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: unknown) {
+    return this.tasks.review(id, parseCreateTaskReviewDto(body), user);
   }
 
   @Post(':id/adjudication')
-  adjudicate(@Param('id') id: string, @Body() body: unknown) {
-    return this.tasks.adjudicate(id, parseAdjudicateTaskDto(body));
+  @Roles(Role.ADJUDICATOR)
+  adjudicate(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: unknown) {
+    return this.tasks.adjudicate(id, parseAdjudicateTaskDto(body), user);
   }
 }

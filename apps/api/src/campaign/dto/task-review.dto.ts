@@ -5,16 +5,13 @@ import { CRITERIA, Scores } from '../review-protocol';
 // so existing imports keep working.
 export { ACCEPTANCE_MIN, VERIFIABLE_MIN, isAccepted } from '../review-protocol';
 
+// Who reviews or adjudicates is the signed-in user, never a body field: a review without
+// a real identity cannot be paired, calibrated, or kept independent of the author.
 export interface CreateTaskReviewDto {
-  /** The reviewer's Expert id. Required: a review without an identity cannot be
-   *  paired, calibrated, or kept independent of the author. */
-  reviewerId: string;
   scores: Scores;
 }
 
 export interface AdjudicateTaskDto {
-  /** The adjudicator's Expert id. */
-  adjudicatorId: string;
   verdict: 'accept' | 'reject';
   reason: string;
 }
@@ -34,8 +31,7 @@ function requiredString(value: unknown, name: string): string {
 }
 
 export function parseCreateTaskReviewDto(body: unknown): CreateTaskReviewDto {
-  const { reviewerId, scores } = asObject(body);
-  const reviewer = requiredString(reviewerId, 'reviewerId');
+  const { scores } = asObject(body);
   if (!scores || typeof scores !== 'object' || Array.isArray(scores)) {
     throw new BadRequestException('scores must be an object');
   }
@@ -48,18 +44,16 @@ export function parseCreateTaskReviewDto(body: unknown): CreateTaskReviewDto {
     }
   }
   return {
-    reviewerId: reviewer,
     scores: Object.fromEntries(CRITERIA.map((c) => [c, s[c] as number])),
   };
 }
 
 export function parseAdjudicateTaskDto(body: unknown): AdjudicateTaskDto {
-  const { adjudicatorId, verdict, reason } = asObject(body);
+  const { verdict, reason } = asObject(body);
   if (verdict !== 'accept' && verdict !== 'reject') {
     throw new BadRequestException('verdict must be "accept" or "reject"');
   }
   return {
-    adjudicatorId: requiredString(adjudicatorId, 'adjudicatorId'),
     verdict,
     // An adjudication overrides one reviewer; the record must say why.
     reason: requiredString(reason, 'reason'),

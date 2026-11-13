@@ -1,8 +1,49 @@
+const TOKEN_KEY = 'gauge.token';
+
+export type Role = 'AUTHOR' | 'REVIEWER' | 'ADJUDICATOR' | 'ADMIN';
+
+/** The signed-in user, as the API returns it from /auth/login and /auth/me. */
+export interface AuthUser {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  /** The expert this login acts as: task authors and reviewers are experts. */
+  expertId: string;
+}
+
+export interface Session {
+  accessToken: string;
+  user: AuthUser;
+}
+
+/** ADMIN may do everything the other roles may. */
+export const can = (user: AuthUser, role: Role) => user.role === role || user.role === 'ADMIN';
+
+export const getToken = () => localStorage.getItem(TOKEN_KEY);
+
+export function setToken(token: string | null) {
+  if (token) localStorage.setItem(TOKEN_KEY, token);
+  else localStorage.removeItem(TOKEN_KEY);
+}
+
+/** Fired when the API refuses the stored token; the app returns to the login view. */
+export const SIGNED_OUT = 'gauge:signed-out';
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
+  const token = getToken();
   const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
     ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
   });
+  // Only a refused token ends the session; a wrong password at login sends none.
+  if (res.status === 401 && token) {
+    setToken(null);
+    window.dispatchEvent(new Event(SIGNED_OUT));
+  }
   if (!res.ok) {
     let msg = res.statusText;
     try {
@@ -27,13 +68,6 @@ export interface Campaign {
   targetCount: number;
   specVersion: string;
   _count?: { tasks: number };
-}
-
-export interface Expert {
-  id: string;
-  name: string;
-  domain: string;
-  status: string;
 }
 
 export interface TaskReview {

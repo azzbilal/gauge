@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { api, Expert } from './api';
+import { useCallback, useEffect, useState } from 'react';
+import { api, AuthUser, getToken, setToken, SIGNED_OUT } from './api';
 import { CommandPalette } from './components/CommandPalette';
 import { Toasts } from './toast';
 import { navigate, useHashRoute } from './useHashRoute';
@@ -7,6 +7,7 @@ import { CampaignsView } from './views/Campaigns';
 import { CampaignView } from './views/Campaign';
 import { AuthorView } from './views/Author';
 import { ReviewView } from './views/Review';
+import { LoginView } from './views/Login';
 
 const TABS = [
   { path: '/campaigns', label: 'Campaigns' },
@@ -16,22 +17,39 @@ const TABS = [
 
 export default function App() {
   const { path, param } = useHashRoute();
-  const [experts, setExperts] = useState<Expert[]>([]);
-  const [identityId, setIdentityId] = useState<string>(() => localStorage.getItem('gauge.identity') ?? '');
+  // undefined: still asking the API who the stored token belongs to.
+  const [user, setUser] = useState<AuthUser | null | undefined>(() => (getToken() ? undefined : null));
   const [paletteOpen, setPaletteOpen] = useState(false);
 
+  // A stored token is only a claim: the API says whose it is, and whether it still holds.
   useEffect(() => {
-    api.get<Expert[]>('/api/experts').then(setExperts).catch(() => undefined);
+    if (!getToken()) return;
+    api
+      .get<AuthUser>('/api/auth/me')
+      .then(setUser)
+      .catch(() => setUser(null));
   }, []);
 
-  function setIdentity(id: string) {
-    setIdentityId(id);
-    localStorage.setItem('gauge.identity', id);
-  }
+  // Any request the API refuses for the token (expired, user removed) ends the session.
+  useEffect(() => {
+    const onSignedOut = () => {
+      setUser(null);
+      setPaletteOpen(false);
+    };
+    window.addEventListener(SIGNED_OUT, onSignedOut);
+    return () => window.removeEventListener(SIGNED_OUT, onSignedOut);
+  }, []);
+
+  const signOut = useCallback(() => {
+    setToken(null);
+    setUser(null);
+    setPaletteOpen(false);
+  }, []);
 
   // Ctrl+K opens the palette from anywhere. While it is open it owns the keyboard
   // (it stops key events), so closing by the same chord is handled inside it.
   useEffect(() => {
+    if (!user) return;
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'k') {
         e.preventDefault();
@@ -40,7 +58,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [user]);
 
   const activePath = path.startsWith('/author') ? '/author' : path.startsWith('/review') ? '/review' : '/campaigns';
 
@@ -48,37 +66,37 @@ export default function App() {
     <div className="shell">
       <header className="topbar">
         <span className="brand">Gauge</span>
-        <nav>
-          {TABS.map((t) => (
-            <button key={t.path} className={`tab${activePath === t.path ? ' active' : ''}`} onClick={() => navigate(t.path)}>
-              {t.label}
-            </button>
-          ))}
-        </nav>
-        <div className="identity">
-          <select value={identityId} onChange={(e) => setIdentity(e.target.value)} aria-label="You are">
-            <option value="">You are…</option>
-            {experts.map((x) => (
-              <option key={x.id} value={x.id}>
-                {x.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        {user && (
+          <>
+            <nav>
+              {TABS.map((t) => (
+                <button key={t.path} className={`tab${activePath === t.path ? ' active' : ''}`} onClick={() => navigate(t.path)}>
+                  {t.label}
+                </button>
+              ))}
+            </nav>
+            <div className="identity">
+              <span>
+                {user.name} <span className="identity-role">· {user.role}</span>
+              </span>
+              <button type="button" onClick={signOut}>
+                Sign out
+              </button>
+            </div>
+          </>
+        )}
       </header>
       <main className="content">
-        {activePath === '/campaigns' && (path === '/campaigns' && param ? <CampaignView key={param} id={param} /> : <CampaignsView />)}
-        {activePath === '/author' && <AuthorView identityId={identityId} />}
-        {activePath === '/review' && <ReviewView identityId={identityId} taskId={param} />}
+        {user === null && <LoginView onSignedIn={setUser} />}
+        {user && (
+          <>
+            {activePath === '/campaigns' && (path === '/campaigns' && param ? <CampaignView key={param} id={param} /> : <CampaignsView />)}
+            {activePath === '/author' && <AuthorView user={user} />}
+            {activePath === '/review' && <ReviewView key={user.id} user={user} taskId={param} />}
+          </>
+        )}
       </main>
-      {paletteOpen && (
-        <CommandPalette
-          experts={experts}
-          identityId={identityId}
-          onIdentity={setIdentity}
-          onClose={() => setPaletteOpen(false)}
-        />
-      )}
+      {user && paletteOpen && <CommandPalette onSignOut={signOut} onClose={() => setPaletteOpen(false)} />}
       <Toasts />
     </div>
   );

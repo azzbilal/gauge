@@ -24,6 +24,14 @@ enum Verdict {
   NEEDS_REVIEW
 }
 
+// What a signed-in user may do (docs/pipeline.md §2.1). ADMIN may do all of it.
+enum Role {
+  AUTHOR
+  REVIEWER
+  ADJUDICATOR
+  ADMIN
+}
+
 enum TaskStatus {
   DRAFT
   SUBMITTED
@@ -44,6 +52,22 @@ model Expert {
   tasks      Task[] @relation("TaskAuthor")
   taskReviews TaskReview[] @relation("TaskReviewer")
   events     Event[] @relation("EventActor")
+  user       User?
+}
+
+// A login. Every user is backed by one Expert row, because tasks, reviews and
+// events keep pointing at Expert; the user adds credentials and a role.
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(AUTHOR)
+  expertId     String   @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  expert Expert @relation(fields: [expertId], references: [id], onDelete: Restrict)
 }
 
 model Posting {

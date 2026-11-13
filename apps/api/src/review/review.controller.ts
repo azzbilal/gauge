@@ -1,5 +1,7 @@
 import { Body, Controller, Get, Header, Param, Post } from '@nestjs/common';
+import { Role } from '@prisma/client';
 import { ReviewService } from './review.service';
+import { AuthUser, CurrentUser, Roles } from '../auth/auth.decorators';
 import { parseDecideReviewDto } from './dto/decide-review.dto';
 
 /**
@@ -15,8 +17,9 @@ export class ReviewController {
   }
 
   @Post('queue/:id/decide')
-  decide(@Param('id') id: string, @Body() body: unknown) {
-    return this.reviewService.decide(id, parseDecideReviewDto(body));
+  @Roles(Role.REVIEWER)
+  decide(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: unknown) {
+    return this.reviewService.decide(id, parseDecideReviewDto(body), user);
   }
 
   @Get('export')

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { api, Task } from '../api';
+import { api, AuthUser, can, Task } from '../api';
 import { notify } from '../toast';
 import { navigate } from '../useHashRoute';
 import { EmptyState } from '../components/EmptyState';
@@ -27,11 +27,15 @@ const at = (value: number) => ({ '--p': value / MAX }) as CSSProperties;
 
 type Mode = 'read' | 'decided' | 'review' | 'adjudicate';
 
-function modeOf(task: Task, identityId: string): Mode {
-  if (!identityId) return 'read';
+/** What the signed-in user may do with this task; the API enforces the same roles. */
+function modeOf(task: Task, user: AuthUser): Mode {
   if (task.reviewState === 'decided') return 'decided';
-  return task.reviewState === 'awaiting_adjudication' ? 'adjudicate' : 'review';
+  if (task.reviewState === 'awaiting_adjudication') return can(user, 'ADJUDICATOR') ? 'adjudicate' : 'read';
+  return can(user, 'REVIEWER') ? 'review' : 'read';
 }
+
+/** Reviewers, adjudicators and admins get a work queue; an author sees every task, read-only. */
+const hasQueue = (user: AuthUser) => can(user, 'REVIEWER') || can(user, 'ADJUDICATOR');
 
 function isTyping(el: HTMLElement | null): boolean {
   if (!el) return false;
@@ -39,7 +43,8 @@ function isTyping(el: HTMLElement | null): boolean {
   return el.tagName === 'INPUT' && (el as HTMLInputElement).type !== 'range';
 }
 
-export function ReviewView({ identityId, taskId }: { identityId: string; taskId?: string }) {
+export function ReviewView({ user, taskId }: { user: AuthUser; taskId?: string }) {
+  const queued = hasQueue(user);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [scores, setScores] = useState<Scores>(freshScores);
@@ -52,20 +57,21 @@ export function ReviewView({ identityId, taskId }: { identityId: string; taskId?
   const rows = useRef(new Map<string, HTMLButtonElement>());
 
   const load = useCallback(() => {
-    const url = identityId ? `/api/tasks?reviewerId=${encodeURIComponent(identityId)}` : '/api/tasks';
+    // The queue is the signed-in user's: the API reads who from the token.
+    const url = queued ? '/api/tasks?queue=1' : '/api/tasks';
     api
       .get<Task[]>(url)
       .then(setTasks)
       .catch((e) => setError(String(e.message)))
       .finally(() => setLoaded(true));
-  }, [identityId]);
+  }, [queued]);
 
   useEffect(load, [load]);
 
   // The address is the selection: '/review/:id'. One task is always open.
   const selected = tasks.find((t) => t.id === taskId) ?? tasks[0];
   const selectedId = selected?.id;
-  const mode: Mode = selected ? modeOf(selected, identityId) : 'read';
+  const mode: Mode = selected ? modeOf(selected, user) : 'read';
   const editable = mode === 'review' || mode === 'adjudicate';
   const failed = failing(scores);
   const accepted = failed.length === 0;
@@ -107,13 +113,12 @@ export function ReviewView({ identityId, taskId }: { identityId: string; taskId?
     try {
       if (mode === 'adjudicate') {
         await api.post(`/api/tasks/${selected.id}/adjudication`, {
-          adjudicatorId: identityId,
           verdict: accepted ? 'accept' : 'reject',
           reason: reason.trim(),
         });
         notify('Adjudication saved');
       } else {
-        await api.post(`/api/tasks/${selected.id}/reviews`, { reviewerId: identityId, scores });
+        await api.post(`/api/tasks/${selected.id}/reviews`, { scores });
         notify('Review saved');
       }
       navigate(next ? `/review/${next.id}` : '/review');
@@ -167,8 +172,8 @@ export function ReviewView({ identityId, taskId }: { identityId: string; taskId?
         {error && <p className="error">{error}</p>}
         {loaded && (
           <EmptyState
-            title={identityId ? 'Nothing to review' : 'No tasks yet'}
-            body={identityId ? 'There is nothing waiting for you right now.' : 'Tasks authors submit will show up here for review.'}
+            title={queued ? 'Nothing to review' : 'No tasks yet'}
+            body={queued ? 'There is nothing waiting for you right now.' : 'Tasks authors submit will show up here for review.'}
           />
         )}
       </section>

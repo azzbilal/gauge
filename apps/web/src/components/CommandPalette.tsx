@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api, Campaign, Expert } from '../api';
-import { notify } from '../toast';
+import { api, Campaign } from '../api';
 import { navigate } from '../useHashRoute';
 
 interface Item {
@@ -12,17 +11,13 @@ interface Item {
 }
 
 interface Props {
-  experts: Expert[];
-  identityId: string;
-  onIdentity: (id: string) => void;
+  onSignOut: () => void;
   onClose: () => void;
 }
 
 /** Ctrl+K palette. Mounted only while open, so every opening starts clean. */
-export function CommandPalette({ experts, identityId, onIdentity, onClose }: Props) {
+export function CommandPalette({ onSignOut, onClose }: Props) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  // 'root' lists destinations and actions; 'identity' lists who you can be
-  const [page, setPage] = useState<'root' | 'identity'>('root');
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
 
@@ -56,18 +51,6 @@ export function CommandPalette({ experts, identityId, onIdentity, onClose }: Pro
       navigate(path);
       onClose();
     };
-    if (page === 'identity') {
-      return experts.map((x) => ({
-        id: `expert:${x.id}`,
-        label: x.name,
-        kind: x.id === identityId ? 'current' : x.domain,
-        run: () => {
-          onIdentity(x.id);
-          notify(`You are ${x.name}`);
-          onClose();
-        },
-      }));
-    }
     return [
       { id: 'go:campaigns', label: 'Campaigns', kind: 'go to', run: go('/campaigns') },
       { id: 'go:author', label: 'Author task', kind: 'go to', run: go('/author') },
@@ -78,18 +61,10 @@ export function CommandPalette({ experts, identityId, onIdentity, onClose }: Pro
         kind: 'campaign',
         run: go(`/campaigns/${c.id}`),
       })),
-      {
-        id: 'do:identity',
-        label: 'Switch identity',
-        kind: 'action',
-        run: () => {
-          setPage('identity');
-          setQuery('');
-          setActive(0);
-        },
-      },
+      // Who you are is the signed-in account; acting as someone else means signing in as them.
+      { id: 'do:sign-out', label: 'Sign out', kind: 'action', run: onSignOut },
     ];
-  }, [page, campaigns, experts, identityId, onIdentity, onClose]);
+  }, [campaigns, onSignOut, onClose]);
 
   const needle = query.trim().toLowerCase();
   const shown = needle ? items.filter((it) => `${it.label} ${it.kind}`.toLowerCase().includes(needle)) : items;
@@ -99,12 +74,6 @@ export function CommandPalette({ experts, identityId, onIdentity, onClose }: Pro
   useEffect(() => {
     listRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
   }, [current, shown.length]);
-
-  function back() {
-    setPage('root');
-    setQuery('');
-    setActive(0);
-  }
 
   function onKeyDown(e: React.KeyboardEvent) {
     // Nothing typed here may reach the views' own shortcuts (J/K, Ctrl+Enter).
@@ -137,12 +106,6 @@ export function CommandPalette({ experts, identityId, onIdentity, onClose }: Pro
         e.preventDefault();
         onClose();
         break;
-      case 'Backspace':
-        if (page === 'identity' && !query) {
-          e.preventDefault();
-          back();
-        }
-        break;
       case 'Tab':
         // the input is the only stop; keep focus inside the dialog
         e.preventDefault();
@@ -171,8 +134,8 @@ export function CommandPalette({ experts, identityId, onIdentity, onClose }: Pro
           aria-controls="cmd-list"
           aria-activedescendant={activeId}
           aria-autocomplete="list"
-          aria-label={page === 'identity' ? 'Switch identity to' : 'Search destinations and actions'}
-          placeholder={page === 'identity' ? 'Switch identity to…' : 'Go to or do…'}
+          aria-label="Search destinations and actions"
+          placeholder="Go to or do…"
           autoComplete="off"
           spellCheck={false}
           value={query}
@@ -202,9 +165,7 @@ export function CommandPalette({ experts, identityId, onIdentity, onClose }: Pro
           ))}
         </ul>
         {shown.length === 0 && (
-          <p className="cmd-none">
-            {page === 'identity' && experts.length === 0 ? 'No experts to switch to' : 'No matches'}
-          </p>
+          <p className="cmd-none">No matches</p>
         )}
         <p className="cmd-keys" aria-hidden="true">
           <kbd>↑</kbd>

@@ -62,6 +62,22 @@ npm run dev:web
 Open http://localhost:5173 — the app calls `GET /api/health` to confirm the front end and
 back end are wired together.
 
+### Auth
+
+Every API route except `GET /health`, `POST /auth/login` and `POST /auth/register` needs
+`Authorization: Bearer <jwt>`. Set `JWT_SECRET` (32+ characters) in `apps/api/.env` or the
+API will not start. `npm run prisma:seed` creates two logins: `admin@gauge.local` /
+`gauge-admin-dev` and `reviewer@gauge.local` / `gauge-reviewer-dev` (override with
+`SEED_ADMIN_PASSWORD` / `SEED_REVIEWER_PASSWORD`). Roles: an **author** creates tasks, a
+**reviewer** reviews them, an **adjudicator** resolves split reviews, an **admin** may do all
+three. Public registration creates authors; an admin's token may register any role:
+
+```bash
+curl -X POST http://localhost:3000/auth/register -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Ada","email":"ada@example.com","password":"at-least-8","role":"adjudicator"}'
+```
+
 Other useful commands:
 
 ```bash
@@ -95,7 +111,11 @@ npm run db:down    # stop PostgreSQL
 
    ```bash
    npm run dev:api             # from apps/api
+   TOKEN=$(curl -s -X POST http://localhost:3000/auth/login -H "Content-Type: application/json" \
+     -d '{"email":"admin@gauge.local","password":"gauge-admin-dev"}' \
+     | node -pe 'JSON.parse(require("fs").readFileSync(0)).accessToken')
    curl -X POST http://localhost:3000/intake/runs \
+     -H "Authorization: Bearer $TOKEN" \
      -H "Content-Type: application/json" \
      -d '{"cv":"...","postingId":"<id from seed>","expertName":"Bilal"}'
    ```

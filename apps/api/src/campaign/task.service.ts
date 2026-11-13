@@ -10,12 +10,14 @@ import {
   CheckMethod,
   Prisma,
   ReviewDecision,
+  Role,
   Task,
   TaskStatus,
   Verdict,
   VerifySubjectType,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuthUser } from '../auth/auth.decorators';
 import { BuiltPacket, buildPacket, rubricItemIdOf } from '../verify/packet-builder';
 import { LintFindingResult, VerifyClient } from '../verify/verify.client';
 import { VerifyUnreachableError } from '../verify/verify.errors';
@@ -115,13 +117,11 @@ export class TaskService {
   ) {}
 
   /**
-   * All tasks, newest first. With `reviewerId` it becomes that reviewer's work queue:
-   * only tasks they may act on, oldest first, with gold tasks mixed in at ~20%.
+   * All tasks, newest first. With `queueOf` it becomes that user's work queue: only tasks
+   * their role lets them act on, oldest first, with gold tasks mixed in at ~20%.
    */
-  async list(campaignId?: string, reviewerId?: string) {
-    if (reviewerId) {
-      await this.requireExpert(reviewerId, 'Reviewer');
-    }
+  async list(campaignId?: string, queueOf?: AuthUser) {
+    const reviewerId = queueOf?.expertId;
     const tasks = await this.prisma.task.findMany({
       where: campaignId ? { campaignId } : undefined,
       orderBy: { createdAt: reviewerId ? 'asc' : 'desc' },
@@ -130,10 +130,10 @@ export class TaskService {
     const adjudications = await this.adjudicationsFor(tasks.map((t) => t.id));
     const view = (t: TaskRow) => this.toView(t, adjudications.get(t.id));
 
-    if (!reviewerId) return tasks.map(view);
+    if (!queueOf || !reviewerId) return tasks.map(view);
 
     const actionable = tasks.filter((t) =>
-      this.canAct(t, reviewerId, adjudications.get(t.id)),
+      this.canAct(t, queueOf, adjudications.get(t.id)),
     );
     const regular = actionable.filter((t) => !t.isGold);
     const gold = goldOrder(
@@ -160,12 +160,12 @@ export class TaskService {
     return this.toView(task, (await this.adjudicationsFor([id])).get(id));
   }
 
-  async create(dto: CreateTaskDto) {
+  async create(dto: CreateTaskDto, author: AuthUser) {
     const campaign = await this.prisma.campaign.findUnique({ where: { id: dto.campaignId } });
     if (!campaign) {
       throw new NotFoundException(`Campaign "${dto.campaignId}" not found`);
     }
-    await this.requireExpert(dto.authorId, 'Author');
+    const authorId = author.expertId;
 
     // The gate (docs/pipeline.md §2 Layer 2): lint the packet before anything is stored. A
     // critical finding refuses the task, whoever the client is. The service also extracts
@@ -208,7 +208,7 @@ export class TaskService {
     const task = await this.prisma.task.create({
       data: {
         campaignId: dto.campaignId,
-        authorId: dto.authorId,
+        authorId,
         prompt: dto.prompt,
         spec: dto.spec ?? null,
         reference: dto.reference ?? null,
@@ -220,7 +220,7 @@ export class TaskService {
 
     await this.prisma.event.create({
       data: {
-        actorId: dto.authorId,
+        actorId: authorId,
         type: 'task.created',
         payload: {
           taskId: task.id,
@@ -402,8 +402,8 @@ export class TaskService {
    *                    otherwise stays IN_REVIEW and an adjudication is opened.
    * Gold tasks are calibration only: any number of reviewers, never a status change.
    */
-  async review(taskId: string, dto: CreateTaskReviewDto) {
-    await this.requireExpert(dto.reviewerId, 'Reviewer');
+  async review(taskId: string, dto: CreateTaskReviewDto, reviewer: AuthUser) {
+    const reviewerId = reviewer.expertId;
 
     // The rubric decides acceptance (docs/pipeline.md §2), not the client.
     const accepted = isAccepted(dto.scores);
@@ -414,10 +414,10 @@ export class TaskService {
       const task = await this.lockTask(tx, taskId);
       const peerReviews = task.taskReviews.filter((r) => r.reviewerExpertId !== null);
 
-      if (task.authorId === dto.reviewerId) {
+      if (task.authorId === reviewerId) {
         throw new ForbiddenException('Authors cannot review their own task');
       }
-      if (peerReviews.some((r) => r.reviewerExpertId === dto.reviewerId)) {
+      if (peerReviews.some((r) => r.reviewerExpertId === reviewerId)) {
         throw new ConflictException('This reviewer has already reviewed this task');
       }
       if (!task.isGold) {
@@ -434,8 +434,8 @@ export class TaskService {
       const review = await tx.taskReview.create({
         data: {
           taskId,
-          reviewerId: dto.reviewerId,
-          reviewerExpertId: dto.reviewerId,
+          reviewerId: reviewerId,
+          reviewerExpertId: reviewerId,
           scores: dto.scores as Prisma.InputJsonValue,
           accepted,
         },
@@ -472,12 +472,12 @@ export class TaskService {
 
       await tx.event.create({
         data: {
-          actorId: dto.reviewerId,
+          actorId: reviewerId,
           type: 'task.reviewed',
           payload: {
             taskId,
             reviewId: review.id,
-            reviewerId: dto.reviewerId,
+            reviewerId: reviewerId,
             accepted,
             outcome,
           } as Prisma.InputJsonValue,
@@ -493,8 +493,8 @@ export class TaskService {
    * Resolve a split: a third expert, who is neither the author nor one of the two
    * reviewers, gives the final verdict with a written reason.
    */
-  async adjudicate(taskId: string, dto: AdjudicateTaskDto) {
-    await this.requireExpert(dto.adjudicatorId, 'Adjudicator');
+  async adjudicate(taskId: string, dto: AdjudicateTaskDto, adjudicator: AuthUser) {
+    const adjudicatorId = adjudicator.expertId;
 
     return this.prisma.$transaction(async (tx) => {
       const task = await this.lockTask(tx, taskId);
@@ -504,10 +504,10 @@ export class TaskService {
       if (!pending) {
         throw new ConflictException('Task is not awaiting adjudication');
       }
-      if (task.authorId === dto.adjudicatorId) {
+      if (task.authorId === adjudicatorId) {
         throw new ForbiddenException('Authors cannot adjudicate their own task');
       }
-      if (task.taskReviews.some((r) => r.reviewerExpertId === dto.adjudicatorId)) {
+      if (task.taskReviews.some((r) => r.reviewerExpertId === adjudicatorId)) {
         throw new ForbiddenException('A reviewer of this task cannot also adjudicate it');
       }
 
@@ -517,7 +517,7 @@ export class TaskService {
         data: {
           verdict: accept ? Verdict.APPROVE : Verdict.REJECT,
           reason: dto.reason,
-          reviewerId: dto.adjudicatorId,
+          reviewerId: adjudicatorId,
         },
       });
       const status = accept ? TaskStatus.ACCEPTED : TaskStatus.REJECTED;
@@ -525,12 +525,12 @@ export class TaskService {
 
       await tx.event.create({
         data: {
-          actorId: dto.adjudicatorId,
+          actorId: adjudicatorId,
           type: 'task.adjudicated',
           payload: {
             taskId,
             decisionId: decision.id,
-            adjudicatorId: dto.adjudicatorId,
+            adjudicatorId: adjudicatorId,
             verdict: decision.verdict,
           } as Prisma.InputJsonValue,
         },
@@ -600,14 +600,6 @@ export class TaskService {
 
   // ------------------------------------------------------------------ helpers
 
-  private async requireExpert(id: string, role: string) {
-    const expert = await this.prisma.expert.findUnique({ where: { id } });
-    if (!expert) {
-      throw new NotFoundException(`${role} (expert) "${id}" not found`);
-    }
-    return expert;
-  }
-
   /** Lock the task row for the rest of the transaction and load it with its reviews. */
   private async lockTask(tx: Tx, taskId: string): Promise<TaskRow> {
     const locked = await tx.$queryRaw<
@@ -629,12 +621,19 @@ export class TaskService {
     return new Map(decisions.map((d) => [d.subjectId, d]));
   }
 
-  /** May this expert review or adjudicate this task right now? */
-  private canAct(task: TaskRow, expertId: string, adjudication?: ReviewDecision): boolean {
+  /**
+   * May this user act on this task right now? Reviewers see tasks open for a peer review
+   * (gold included), adjudicators see split tasks, an admin sees both, an author neither.
+   */
+  private canAct(task: TaskRow, user: AuthUser, adjudication?: ReviewDecision): boolean {
+    const expertId = user.expertId;
+    const reviews = user.role === Role.REVIEWER || user.role === Role.ADMIN;
+    const adjudicates = user.role === Role.ADJUDICATOR || user.role === Role.ADMIN;
     if (task.authorId === expertId) return false;
     if (task.taskReviews.some((r) => r.reviewerExpertId === expertId)) return false;
-    if (task.isGold) return true;
-    if (adjudication?.verdict === Verdict.NEEDS_REVIEW) return true;
+    if (task.isGold) return reviews;
+    if (adjudication?.verdict === Verdict.NEEDS_REVIEW) return adjudicates;
+    if (!reviews) return false;
     const open = task.status === TaskStatus.SUBMITTED || task.status === TaskStatus.IN_REVIEW;
     const peerReviews = task.taskReviews.filter((r) => r.reviewerExpertId !== null);
     return open && peerReviews.length < REVIEWS_REQUIRED;

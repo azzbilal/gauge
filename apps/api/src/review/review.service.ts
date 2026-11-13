@@ -7,12 +7,10 @@ import {
 import { ExpertStatus, Prisma, Verdict } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { DecideReviewDto } from './dto/decide-review.dto';
+import { AuthUser } from '../auth/auth.decorators';
 
 // ReviewDecision is polymorphic; this module only handles intake runs.
 const INTAKE_RUN_SUBJECT = 'intake_run';
-
-// Stored when a human decides without identifying themselves (reviewerId is non-null).
-const ANONYMOUS_REVIEWER = 'anonymous-reviewer';
 
 export interface QueueItem {
   decisionId: string;
@@ -73,7 +71,7 @@ export class ReviewService {
   }
 
   /** Resolve a queued intake review: update the decision, the expert's status, and the audit log. */
-  async decide(decisionId: string, dto: DecideReviewDto) {
+  async decide(decisionId: string, dto: DecideReviewDto, reviewer: AuthUser) {
     const decision = await this.prisma.reviewDecision.findUnique({ where: { id: decisionId } });
     if (!decision || decision.subjectType !== INTAKE_RUN_SUBJECT) {
       throw new NotFoundException(`Review decision "${decisionId}" not found`);
@@ -92,14 +90,9 @@ export class ReviewService {
     const verdict = dto.verdict === 'approve' ? Verdict.APPROVE : Verdict.REJECT;
     const expertStatus =
       verdict === Verdict.APPROVE ? ExpertStatus.ACCEPTED : ExpertStatus.REJECTED;
-    const reviewerId = dto.reviewerId ?? ANONYMOUS_REVIEWER;
-
-    // Event.actorId is an FK to Expert. Use the reviewer only if they are an Expert row;
-    // otherwise attribute to the screened expert and keep reviewerId in the payload.
-    const reviewerIsExpert = dto.reviewerId
-      ? (await this.prisma.expert.count({ where: { id: dto.reviewerId } })) > 0
-      : false;
-    const actorId = reviewerIsExpert ? dto.reviewerId! : run.expertId;
+    // The signed-in reviewer, as their Expert row: Event.actorId is an FK to Expert.
+    const reviewerId = reviewer.expertId;
+    const actorId = reviewerId;
 
     return this.prisma.$transaction(async (tx) => {
       // Guarded update: if a concurrent request resolved it first, count is 0.

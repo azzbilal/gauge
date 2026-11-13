@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { api, Campaign, LintFinding, Task, TaskPreview } from '../api';
+import { api, AuthUser, Campaign, can, LintFinding, Task, TaskPreview } from '../api';
 import { notify } from '../toast';
 import { PrimaryButton } from '../components/PrimaryButton';
 
@@ -125,7 +125,7 @@ function CheckRows({ title, rows }: { title: string; rows: Row[] }) {
   );
 }
 
-export function AuthorView({ identityId }: { identityId: string }) {
+export function AuthorView({ user }: { user: AuthUser }) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [draft] = useState(loadDraft);
   const [campaignId, setCampaignId] = useState(draft.campaignId);
@@ -169,8 +169,8 @@ export function AuthorView({ identityId }: { identityId: string }) {
   const unlinted = blocked && blocked.lint.status !== 'ok' ? blocked.lint : null;
 
   // The first thing still missing, said in words: the button alone can't explain itself.
-  const missing = !identityId
-    ? 'Choose who you are, top right'
+  const missing = !can(user, 'AUTHOR')
+    ? `Only authors can submit tasks; you are signed in as a ${user.role.toLowerCase()}`
     : !campaigns.some((c) => c.id === campaignId)
       ? 'Choose a campaign'
       : !prompt.trim()
@@ -209,8 +209,8 @@ export function AuthorView({ identityId }: { identityId: string }) {
         return;
       }
       const task = await api.post<Task>('/api/tasks', {
+        // The author is whoever is signed in; the API reads it from the token.
         campaignId,
-        authorId: identityId,
         prompt,
         spec,
         reference,
@@ -300,7 +300,7 @@ export function AuthorView({ identityId }: { identityId: string }) {
                   </>
                 )}
               </span>
-              <button type="button" disabled={checking} onClick={() => void runCheck()}>
+              <button type="button" disabled={checking || !can(user, 'AUTHOR')} onClick={() => void runCheck()}>
                 {checking ? 'Checking…' : 'Run check'}
               </button>
               <PrimaryButton type="submit" disabled={!canSubmit} label={busy ? 'Submitting…' : 'Submit task'} />
