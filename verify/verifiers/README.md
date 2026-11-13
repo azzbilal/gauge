@@ -20,7 +20,7 @@ to come.
 | Check | What it does |
 | --- | --- |
 | `geometry_cad` | Runs the reference CadQuery code in a worker process with a timeout and measures the solid it builds. Width/depth/height are compared with the bounding box of that solid. |
-| `static_cad` | Parses the reference with `ast` (never executes it). Reads hole or circle size and hole count. Also reads box width/depth/height, as the fallback when the code could not be measured. |
+| `static_cad` | Parses the reference with `ast` (never executes it). Reads hole or circle size and hole count. Also reads box width/depth/height, as the fallback when cadquery is missing or execution is switched off. |
 | `manifold_volume` | Compares the volume of the executed solid with the requirement. `not_run` when the solid could not be measured (`needs cadquery` when cadquery is missing) and for requirements that state no volume: there is no manifold check yet. |
 
 A rubric item is machine-checkable when its `checkMethod` is `machine`, or when it has none
@@ -48,12 +48,17 @@ Because it measures what the code builds and not what it mentions, it fails mode
 static reader passes: a box inside `if False:` when the result is a sphere, a box in a
 function that is never called, a box that is cut in half afterwards.
 
-| Outcome of running the code | Box size | Volume |
-| --- | --- | --- |
-| built a solid | measured (`geometry_cad`) | measured |
-| ran cleanly, built no solid | `fail` | `fail` |
-| raised, crashed or timed out | static fallback (`static_cad`), detail ends `[static fallback: <reason>]` | `not_run` |
-| cadquery missing, or execution switched off | static fallback | `not_run`, `needs cadquery` |
+| Outcome of running the code | Box size | Holes | Volume |
+| --- | --- | --- | --- |
+| built a solid | measured (`geometry_cad`) | static | measured |
+| ran cleanly, built no solid | `fail` | `fail` | `fail` |
+| raised or crashed | `fail` | `fail` | `not_run` |
+| timed out | `not_run` | `not_run` | `not_run` |
+| cadquery missing, or execution switched off | static fallback (`static_cad`); when cadquery is missing the detail ends `[static fallback: <reason>]` | static | `not_run`, `needs cadquery` |
+
+The static fallback applies only when nothing was executed. Code that was executed and did
+not finish is never read statically: a box in dead code followed by a `raise` would
+otherwise pass.
 
 Tolerances: a measured size may be off by the requirement's tolerance plus 0.0001 mm. A
 volume may be off by the requirement's tolerance (`5%`, `10 mm3`), else 0.1 %, since a

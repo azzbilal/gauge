@@ -234,6 +234,30 @@ class ExecutedRollouts(unittest.TestCase):
         self.assertIn("`result` measures 10 mm", dead["verdicts"][0]["detail"])
         self.assertEqual(result["solve_rate"], 0.5)
 
+    def test_dead_code_rollout_that_crashes_is_not_solved(self):
+        for ending, reason in (
+            ("raise RuntimeError('boom')\n", "reference raised RuntimeError: boom"),
+            ("import os\nos._exit(3)\n", "reference crashed the worker (exit code 3)"),
+        ):
+            with self.subTest(ending=ending):
+                code = self.DEAD_CODE + "\n" + ending
+                with mock.patch.dict(os.environ, {"GAUGE_CAD_EXEC": "0"}):
+                    unexecuted = probe(packet(), "tiny", n=1, rollout_fn=fake_rollouts(code))
+                self.assertTrue(unexecuted["rollouts"][0]["solved"])  # the static reading
+
+                result = probe(packet(), "tiny", n=2, rollout_fn=fake_rollouts(OK, code))
+                good, dead = result["rollouts"]
+                self.assertTrue(good["solved"])
+                self.assertFalse(dead["solved"])
+                self.assertIsNone(dead["error"])  # a wrong solution, not a verifier error
+                for verdict in dead["verdicts"]:
+                    self.assertEqual(verdict["status"], "fail", verdict)
+                    self.assertEqual(verdict["check"], "geometry_cad")
+                    self.assertIn(reason, verdict["detail"])
+                    self.assertNotIn("static fallback", verdict["detail"])
+                self.assertEqual(result["solve_rate"], 0.5)
+                self.assertEqual(result["verifier_errors"], 0)
+
     def test_static_only_scoring_would_have_solved_it(self):
         with mock.patch.dict(os.environ, {"GAUGE_CAD_EXEC": "0"}):
             result = probe(packet(), "tiny", n=1, rollout_fn=fake_rollouts(self.DEAD_CODE))

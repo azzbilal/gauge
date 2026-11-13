@@ -16,9 +16,10 @@ and every one of them passes. manifold_volume verdicts are ignored: they only ru
 CAD kernel is available.
 A *verifier error* is a rollout the verifier could not judge: it raised, the packet
 produced no geometry_cad or static_cad verdict, or nothing failed but a check came back
-not_run (a quantity the checks do not cover, or code the static reader cannot resolve). A
-rollout with any failed check, including generated code that does not parse or that builds
-no solid, is an ordinary failed rollout, not a verifier error.
+not_run (a quantity the checks do not cover, code the static reader cannot resolve, or
+generated code that timed out). A rollout with any failed check, including generated code
+that does not parse, raises, crashes or builds no solid, is an ordinary failed rollout, not
+a verifier error.
 
 The model only ever sees the prompt and the spec, never the reference solution.
 

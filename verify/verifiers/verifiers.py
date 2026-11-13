@@ -13,10 +13,12 @@ that could not run never reads as a pass. Three checks exist today:
 
     geometry_cad     width/depth/height measured on the solid the reference actually
                      builds: the code is executed in a worker process with a timeout and
-                     the bounding box of the result is compared to the requirement
+                     the bounding box of the result is compared to the requirement. A
+                     reference that raises, crashes or builds no solid fails every
+                     dimension and hole item; one that times out leaves them not_run
     static_cad       hole or circle size and hole count, read from the reference with
-                     `ast`; also box width/depth/height whenever execution is switched
-                     off, fails, times out or has no cadquery (the fallback)
+                     `ast`; also box width/depth/height when execution is switched off
+                     or has no cadquery (the fallback), and only then
     manifold_volume  volume of the executed solid against the requirement; not run when
                      the solid could not be measured, and for manifold-only requirements
 
@@ -298,16 +300,22 @@ class VerifierPack:
     def cad(model: CadModel, expected: list, axes: dict, measured=None) -> tuple:
         """(check, status, detail) for every quantity the requirement states.
 
-        Box sizes come from `measured`, the executed solid, when there is one. When the
-        reference could not be measured (it raised, timed out, or cadquery is missing)
-        they fall back to the static reading, and the detail says so. Holes are always
-        read statically."""
+        Box sizes come from `measured`, the executed solid, when there is one. They fall
+        back to the static reading, and the detail says so, only when nothing was
+        executed: execution is switched off (`measured` is None) or cadquery is missing.
+        Holes are read statically, off a reference that ran to the end.
+
+        A reference that was executed and did not finish is never read statically, since
+        the source then says what was written and not what was built: one that raised,
+        crashed or left no solid fails the item, and one that timed out is not_run."""
         if not expected:
             return STATIC_CAD, NOT_RUN, (
                 "no checkable dimension or hole count found in the requirement")
-        if measured is not None and measured.kind == cad_exec.NO_SOLID:
-            # Nothing was built, so nothing the source mentions is real.
-            return GEOMETRY_CAD, FAIL, measured.detail
+        if not _static_allowed(measured) and measured.kind != cad_exec.OK:
+            # Nothing was delivered, so nothing the source mentions is real. Only a
+            # timeout is left open: it depends on machine load, not on the code alone.
+            status = NOT_RUN if measured.kind == cad_exec.TIMEOUT else FAIL
+            return GEOMETRY_CAD, status, measured.detail
         results = [_check_one(model, e, axes, measured) for e in expected]
         statuses = [status for status, _, _ in results]
         status = FAIL if FAIL in statuses else NOT_RUN if NOT_RUN in statuses else PASS
@@ -317,6 +325,12 @@ class VerifierPack:
         if measured.kind == cad_exec.OK:
             return GEOMETRY_CAD, status, detail
         return STATIC_CAD, status, f"{detail} [static fallback: {measured.detail}]"
+
+
+def _static_allowed(measured) -> bool:
+    """True when box sizes may be read off the source instead of the executed solid:
+    nothing was executed, because execution is switched off or cadquery is missing."""
+    return measured is None or measured.kind == cad_exec.UNAVAILABLE
 
 
 def _box_noun(label: str):
@@ -337,10 +351,14 @@ def _check_one(model: CadModel, e: Expected, axes: dict, measured=None) -> tuple
                 set(qualifiers[:-1]) <= _COUNT_QUALIFIERS):
             return _check_hole_count(model, e) + (False,)
     elif _box_noun(e.label) in axes:
-        if measured is not None and measured.kind == cad_exec.OK:
-            status, detail = _check_extent(measured, e, axes[noun])
-        else:
+        if _static_allowed(measured):
             status, detail = _check_box(model, e, axes[noun])
+        elif measured.kind == cad_exec.OK:
+            status, detail = _check_extent(measured, e, axes[noun])
+        elif measured.kind == cad_exec.TIMEOUT:
+            status, detail = NOT_RUN, f"{e.label}: {measured.detail}"
+        else:  # it raised, crashed or built no solid: never the static reading
+            status, detail = FAIL, f"{e.label}: {measured.detail}"
         return status, detail + e.note, True
     elif noun in ("diameter", "radius") and set(qualifiers) <= _HOLE_QUALIFIERS:
         status, detail = _check_round(model, e, noun, bool(qualifiers))

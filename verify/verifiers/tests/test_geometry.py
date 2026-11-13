@@ -265,37 +265,67 @@ class WhatTheBoundingBoxMeans(unittest.TestCase):
 
 
 @needs_cadquery
-class FallbackWithCadquery(unittest.TestCase):
+class ReferenceThatDoesNotFinish(unittest.TestCase):
+    """A reference that raises, crashes or times out is never read statically: the source
+    says what was written, not what was built."""
+
     PLATE = "import cadquery as cq\nresult = cq.Workplane('XY').box(60, 40, 10)\n"
+    CAD_ITEMS = DIMENSIONS + ["holes", "hole_d"]
 
-    def assert_static_fallback(self, v, reason):
-        self.assertEqual(v["width"]["check"], "static_cad")
-        self.assertEqual(v["width"]["status"], "pass", v["width"])
-        self.assertIn("width 60 mm matches spec [static fallback: ", v["width"]["detail"])
-        self.assertIn(reason, v["width"]["detail"])
-        self.assertEqual(v["volume"]["status"], "not_run")
-        self.assertIn(reason, v["volume"]["detail"])
+    def assert_no_static_reading(self, v, status, reason):
+        for item in self.CAD_ITEMS:
+            self.assertEqual(v[item]["status"], status, v[item])
+            self.assertIs(v[item]["pass"], False)
+            self.assertEqual(v[item]["check"], "geometry_cad")
+            self.assertIn(reason, v[item]["detail"])
+            self.assertNotIn("static fallback", v[item]["detail"])
+            self.assertNotIn("matches spec", v[item]["detail"])
 
-    def test_reference_that_raises_falls_back_to_static(self):
+    def test_reference_that_raises_fails(self):
         v = executed(self.PLATE + "raise RuntimeError('boom')\n")
-        self.assert_static_fallback(v, "reference raised RuntimeError: boom")
+        self.assert_no_static_reading(v, "fail", "reference raised RuntimeError: boom")
+        self.assertEqual(v["volume"]["status"], "not_run")
+        self.assertIn("reference raised RuntimeError: boom", v["volume"]["detail"])
 
-    def test_reference_that_times_out_falls_back_to_static(self):
+    def test_reference_that_times_out_is_not_run(self):
         v = executed(self.PLATE + "while True:\n    pass\n", timeout=3)
-        self.assert_static_fallback(v, "did not finish within 3 s")
+        self.assert_no_static_reading(v, "not_run", "did not finish within 3 s")
+        self.assertEqual(v["volume"]["status"], "not_run")
+        self.assertIn("did not finish within 3 s", v["volume"]["detail"])
 
-    def test_fallback_still_fails_a_wrong_static_dimension(self):
+    def test_dead_code_followed_by_a_crash_fails(self):
+        # The plate and its holes sit in a branch that never runs, so the static reader
+        # passes every item. The script then dies: nothing it mentions was delivered.
+        for ending, reason in (
+            ("raise RuntimeError('boom')\n", "reference raised RuntimeError: boom"),
+            ("raise SystemExit(0)\n", "reference raised SystemExit"),
+            ("import os\nos._exit(3)\n", "reference crashed the worker (exit code 3)"),
+        ):
+            with self.subTest(ending=ending):
+                code = IF_FALSE + "\n" + ending
+                before = static(code)
+                for item in self.CAD_ITEMS:
+                    self.assertEqual(before[item]["status"], "pass", before[item])
+                self.assert_no_static_reading(executed(code), "fail", reason)
+
+    def test_dead_code_followed_by_a_hang_is_not_run(self):
+        v = executed(IF_FALSE + "\nwhile True:\n    pass\n", timeout=3)
+        self.assert_no_static_reading(v, "not_run", "did not finish within 3 s")
+
+    def test_a_raise_fails_whatever_the_source_says(self):
         v = executed(self.PLATE.replace("60", "65") + "raise RuntimeError('boom')\n")
         self.assertEqual(v["width"]["status"], "fail")
-        self.assertIn("reference has 65 mm", v["width"]["detail"])
+        self.assertIn("reference raised RuntimeError: boom", v["width"]["detail"])
+        self.assertNotIn("65 mm", v["width"]["detail"])
 
     def test_huge_numbers_do_not_crash_or_pass(self):
         for code in (
             "import cadquery as cq\nr = cq.Workplane('XY').box(" + "9" * 400 + ", 40, 10)\n",
             "import cadquery as cq\nr = cq.Workplane('XY').box(1e999, 40, 10)\n",
         ):
+            self.assertEqual(cad_exec.measure(code).kind, "error", code)
             v = executed(code)
-            self.assertEqual(v["width"]["status"], "not_run", v["width"])
+            self.assertEqual(v["width"]["status"], "fail", v["width"])
             self.assertIs(v["width"]["pass"], False)
 
 
