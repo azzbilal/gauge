@@ -167,6 +167,12 @@ export class TaskService {
     }
     const authorId = author.expertId;
 
+    // Gold tasks calibrate reviewers, so only an admin may plant one; a public author
+    // must not be able to skew the calibration set.
+    if (dto.goldExpectedAccept !== undefined && author.role !== Role.ADMIN) {
+      throw new ForbiddenException('Only an admin can create a gold task');
+    }
+
     // The gate (docs/pipeline.md §2 Layer 2): lint the packet before anything is stored. A
     // critical finding refuses the task, whoever the client is. The service also extracts
     // the requirements, so without it there is no packet either.
