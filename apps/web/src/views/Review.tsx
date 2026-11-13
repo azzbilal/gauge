@@ -347,7 +347,7 @@ export function ReviewView({ user, taskId }: { user: AuthUser; taskId?: string }
           </div>
         </div>
 
-        <ReviewVerifier taskId={selected.id} criteria={CRITERIA} />
+        {!editable && <ReviewVerifier taskId={selected.id} criteria={CRITERIA} />}
 
         {mode === 'read' && <p className="muted rv-note">Read only · {stateWord(selected)}</p>}
 
