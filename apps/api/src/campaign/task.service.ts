@@ -183,7 +183,10 @@ function plausibleCreatedAt(source: TaskRow, all: TaskRow[], now: number): Date 
   return new Date(Math.min(now, base + randomInt(1, 60_000)));
 }
 
-/** A review while the second review is still open: who and when, never the scores. */
+/**
+ * A review while the second review is still open: who and when, never scores, evidence or
+ * verdict.
+ */
 function redactedReview(r: TaskRow['taskReviews'][number]) {
   return { id: r.id, taskId: r.taskId, reviewerId: r.reviewerId, createdAt: r.createdAt };
 }
@@ -1038,10 +1041,10 @@ export class TaskService {
    * The shape the API returns. Three things are deliberately withheld:
    *  - gold markers and the gold answer, or calibration would measure nothing;
    *  - updatedAt, which would show which rows a review never wrote (gold ones);
-   *  - other reviewers' scores while a second review is still open, so that
-   *    review (and the agreement statistic built on it) stays independent. Scores
-   *    release once the two reviewers are done — at adjudication and after the
-   *    decision — so the adjudicator can see the dispute.
+   *  - reviews' scores, evidence and verdict while a second review is still open, so
+   *    that review (and the agreement statistic built on it) stays independent. Full
+   *    reviews release once the two reviewers are done — at adjudication and after the
+   *    decision — to anyone who can see the task, so the adjudicator can see the dispute.
    * A gold row (a clone to its one reviewer, a source to an admin) is presented as an
    * ordinary task in the state the viewer's own actions would have left it: nobody has
    * reviewed it yet, or it has their one review and waits for a second (a clone they

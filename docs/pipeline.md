@@ -53,8 +53,15 @@ agreement statistic as a default score.
 Rules:
 
 - **Identity.** A reviewer is an expert (`experts` row). No anonymous reviews.
-- **Independence.** Nobody reviews their own task, nobody reviews a task twice, and a
-  reviewer does not see the other reviewer's scores until the task is decided.
+- **Independence.** Nobody reviews their own task, and nobody reviews a task twice. The task
+  API returns a review only as who wrote it and when, with no scores, evidence or verdict,
+  until the task is decided or split and awaiting adjudication. Only the second review can
+  move a task into either state, so in practice a reviewer never sees the other review
+  before submitting their own. From then on both reviews come back in full (scores, evidence
+  and verdict), because the adjudicator needs the dispute. Release depends on the task's
+  state, not on who is asking, so anyone who can see the task gets both reviews, including
+  the two reviewers once they have split. A gold clone never leaves the redacted form (§3).
+  The admin-only agreement and calibration reports read verdicts directly.
 - **Exactly two.** A third peer review is refused; a decided task is closed to review.
 - **Adjudication.** A split is recorded as a `review_decisions` row (`subject_type = task`,
   verdict `NEEDS_REVIEW`). A third expert — not the author, not either reviewer — resolves

@@ -75,7 +75,8 @@ export interface Campaign {
 export interface TaskReview {
   id: string;
   reviewerId: string;
-  // Withheld until the task is decided, so reviews stay independent.
+  // Withheld until both reviews are in (decided, or split and awaiting adjudication), so
+  // reviews stay independent. The API then also returns each review's evidence.
   scores?: Record<string, number>;
   accepted?: boolean;
 }

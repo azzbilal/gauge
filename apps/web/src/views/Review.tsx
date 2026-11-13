@@ -65,6 +65,8 @@ export function ReviewView({ user, taskId }: { user: AuthUser; taskId?: string }
 
   const sliders = useRef<(HTMLInputElement | null)[]>([]);
   const rows = useRef(new Map<string, HTMLButtonElement>());
+  // The slider a pointer went down on, so a release only scores the slider it was pressed on.
+  const pressed = useRef<Criterion | null>(null);
 
   const load = useCallback(() => {
     // The queue is the signed-in user's: the API reads who from the token.
@@ -187,6 +189,26 @@ export function ReviewView({ user, taskId }: { user: AuthUser; taskId?: string }
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
+  // Forget the press on every release, wherever it lands. A press released off its slider
+  // fires no onPointerUp there, and a remembered press would let a later drag that starts
+  // elsewhere score that slider. Bubble-phase window listeners run after React's root-level
+  // handlers, so the slider's own onPointerUp still sees the press first. Every new press
+  // also starts clean (capture phase, before the slider's onPointerDown records it), in case
+  // a release never reached the window.
+  useEffect(() => {
+    const release = () => {
+      pressed.current = null;
+    };
+    window.addEventListener('pointerdown', release, true);
+    window.addEventListener('pointerup', release);
+    window.addEventListener('pointercancel', release);
+    return () => {
+      window.removeEventListener('pointerdown', release, true);
+      window.removeEventListener('pointerup', release);
+      window.removeEventListener('pointercancel', release);
+    };
+  }, []);
+
   if (!selected) {
     return (
       <section>
@@ -307,10 +329,18 @@ export function ReviewView({ user, taskId }: { user: AuthUser; taskId?: string }
                         onFocus={() => setCrit(i)}
                         onChange={commit}
                         // Pressing the value the thumb already shows fires no change event, so
-                        // without this an unscored slider could not take its resting value.
-                        // Not onClick: activating the <label> synthesises a click, which would
-                        // score the criterion without the reviewer choosing a value.
-                        onPointerUp={commit}
+                        // without the release commit an unscored slider could not take its
+                        // resting value. It commits only when the press began on this same
+                        // slider: a drag that starts elsewhere and is released here must not
+                        // score it. Not onClick: activating the <label> synthesises a click,
+                        // which would score the criterion without the reviewer choosing a value.
+                        onPointerDown={() => {
+                          pressed.current = c;
+                        }}
+                        onPointerUp={(e) => {
+                          if (pressed.current === c) commit(e);
+                          pressed.current = null;
+                        }}
                       />
                       <div className="rv-ticks" aria-hidden="true">
                         {STOPS.map((s) => (
