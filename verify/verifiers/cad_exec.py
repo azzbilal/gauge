@@ -18,8 +18,10 @@ timeout is $GAUGE_CAD_TIMEOUT seconds, else 30.
 Before any reference is run, a pre-flight run of the worker that is given no code finds out
 whether the interpreter has cadquery. `unavailable` comes from that run alone, never from a
 run that executed a reference, and is remembered for the process only when it is definite:
-the worker said the import failed, or the interpreter file does not exist. A worker that
-could not be started for another reason is `not_run` and is tried again on the next call.
+the worker's import raised ModuleNotFoundError for the module `cadquery` itself, or the
+interpreter file does not exist. Any other failure of the import (a missing dependency, a
+DLL that would not load, a MemoryError) and a worker that could not be started for another
+reason are `not_run`, are never remembered, and are tried again on the next call.
 
 A timeout bounds how long the code runs. It is not a sandbox: the code runs with the
 permissions of the calling process.
@@ -38,7 +40,7 @@ NO_SOLID = "no_solid"        # the code ran cleanly but left no solid to measure
 ERROR = "error"              # the code raised, crashed, or the measurement was not finite
 TIMEOUT = "timeout"          # the code did not finish in time
 NOT_RUN = "not_run"          # the worker could not be run this time; nothing is known
-UNAVAILABLE = "unavailable"  # the worker interpreter is missing or has no cadquery
+UNAVAILABLE = "unavailable"  # the worker interpreter is missing or has no cadquery module
 
 DEFAULT_TIMEOUT_S = 30.0
 
@@ -102,8 +104,9 @@ def _preflight(python, timeout):
     Whether cadquery is there is decided here and only here, by a worker run that is given
     no reference code: nothing a reference does can make an interpreter look as if it had
     no cadquery. Only a definite answer is remembered: cadquery imported, the worker's own
-    report that the import failed, or an interpreter file that does not exist. Anything
-    else (the process could not be started, it hung, it died) is not_run, and the next
+    report that there is no module `cadquery` (it says unavailable for nothing else), or
+    an interpreter file that does not exist. Anything else (the import failed for another
+    reason, the process could not be started, it hung, it died) is not_run, and the next
     call asks again."""
     if python in _has_cadquery:
         return None
@@ -121,6 +124,9 @@ def _preflight(python, timeout):
             _no_cadquery[python] = str(
                 value.get("detail") or "cadquery is not available to the worker")
             return Measurement(UNAVAILABLE, _no_cadquery[python])
+        if kind == NOT_RUN:  # the import failed for a reason that may pass: ask again
+            return Measurement(NOT_RUN, str(
+                value.get("detail") or "cadquery could not be imported this time"))
         return Measurement(
             NOT_RUN, "the worker gave no usable answer before any reference ran")
     if outcome == _FAILED_TO_START:
@@ -158,6 +164,12 @@ def _run_reference(source, timeout, python) -> Measurement:
         return Measurement(
             NOT_RUN, "the worker reported no cadquery in a run that was given the "
                      "reference, which is not accepted")
+    if kind == NOT_RUN:
+        # cadquery imported in the pre-flight and failed to in this run. Nothing was
+        # measured, so nothing is known, and measure() does not remember a not_run.
+        return Measurement(
+            NOT_RUN, "the worker could not import cadquery in the run that was given "
+                     "the reference")
     unusable = Measurement(ERROR, "reference left the worker with an answer it does not give")
     if kind not in (OK, NO_SOLID, ERROR):
         return unusable
@@ -283,9 +295,17 @@ def _worker():
 
     try:
         import cadquery as cq
-    except Exception as err:  # not installed, or installed but broken
-        reply(kind=UNAVAILABLE,
-              detail=f"cadquery is not available to the worker ({type(err).__name__})")
+    except Exception as err:
+        # Only "there is no module called cadquery" says the interpreter has no cadquery.
+        # A missing dependency, a DLL that would not load, a MemoryError: cadquery may well
+        # import next time, so those are not_run. The type alone is given: messages of
+        # import errors carry paths.
+        if isinstance(err, ModuleNotFoundError) and err.name == "cadquery":
+            reply(kind=UNAVAILABLE,
+                  detail=f"cadquery is not available to the worker ({type(err).__name__})")
+        else:
+            reply(kind=NOT_RUN,
+                  detail=f"cadquery could not be imported this time ({type(err).__name__})")
         return
     version = getattr(cq, "__version__", None)
     if source is None:  # the pre-flight: cadquery imports, and there is nothing to run

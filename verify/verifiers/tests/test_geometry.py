@@ -7,8 +7,10 @@ The tests that execute reference code need cadquery in the worker interpreter
 fallback tests run everywhere.
 """
 import json
+import os
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -473,6 +475,83 @@ class WorkerThatCannotBeStarted(_Caches, unittest.TestCase):
         v = executed(reference("plate_ok.py"), python=sys.executable)
         self.assertEqual(v["width"]["check"], "static_cad")
         self.assertIn("[static fallback: cadquery is not available", v["width"]["detail"])
+
+
+class ImportFailureInTheRealWorker(_Caches, unittest.TestCase):
+    """Runs everywhere, with the real worker: a module called cadquery that fails as it is
+    imported is put first on the worker's path. Only "no module named cadquery" is a
+    definite no; any other failure may pass, so it is not_run and never remembered."""
+
+    PLATE = WorkerThatCannotBeStarted.PLATE
+    TRANSIENT = {
+        "MemoryError": "raise MemoryError()\n",
+        "ImportError": "raise ImportError('DLL load failed while importing OCP')\n",
+        "OSError": "raise OSError(126, 'The specified module could not be found')\n",
+        # a dependency of cadquery is missing, not cadquery
+        "ModuleNotFoundError": "import gauge_no_such_dependency_of_cadquery\n",
+    }
+    NO_MODULE = "raise ModuleNotFoundError(\"No module named 'cadquery'\", name='cadquery')\n"
+
+    def fake_cadquery(self, body):
+        folder = tempfile.TemporaryDirectory(prefix="gauge-fake-cq-")
+        self.addCleanup(folder.cleanup)
+        Path(folder.name, "cadquery.py").write_text(body, encoding="utf-8")
+        patch = mock.patch.dict(os.environ, {"PYTHONPATH": folder.name})
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_transient_import_failure_is_not_run_and_not_remembered(self):
+        for name, body in self.TRANSIENT.items():
+            with self.subTest(raised=name):
+                self.fake_cadquery(body)
+                with mock.patch("subprocess.run", wraps=subprocess.run) as run:
+                    first = cad_exec.measure(self.PLATE, python=sys.executable)
+                    second = cad_exec.measure(self.PLATE, python=sys.executable)
+                    self.assertEqual(run.call_count, 2)  # asked again, not remembered
+                for m in (first, second):
+                    self.assertEqual(m.kind, "not_run", m)
+                    self.assertEqual(
+                        m.detail, f"cadquery could not be imported this time ({name})")
+                self.assertEqual(cad_exec._no_cadquery, {})
+                self.assertEqual(cad_exec._has_cadquery, {})
+                self.assertEqual(cad_exec._cache, {})
+
+    def test_transient_import_failure_gives_not_run_verdicts_not_a_static_pass(self):
+        self.fake_cadquery(self.TRANSIENT["MemoryError"])
+        v = executed(IF_FALSE, python=sys.executable)  # the static reading would pass it
+        for item in DIMENSIONS + ["holes", "hole_d"]:
+            self.assertEqual(v[item]["status"], "not_run", v[item])
+            self.assertEqual(v[item]["check"], "geometry_cad")
+            self.assertNotIn("static fallback", v[item]["detail"])
+        self.assertEqual(v["volume"]["status"], "not_run")
+        self.assertNotEqual(v["volume"]["detail"], "needs cadquery")
+        self.assertEqual(cad_exec._no_cadquery, {})
+
+    def test_no_module_named_cadquery_is_unavailable_and_remembered(self):
+        self.fake_cadquery(self.NO_MODULE)
+        with mock.patch("subprocess.run", wraps=subprocess.run) as run:
+            first = cad_exec.measure(self.PLATE, python=sys.executable)
+            second = cad_exec.measure("x = 1\n", python=sys.executable)
+            self.assertEqual(run.call_count, 1)  # remembered: not asked again
+        self.assertEqual((first.kind, second), ("unavailable", first))
+        self.assertIn("ModuleNotFoundError", first.detail)
+        self.assertEqual(list(cad_exec._no_cadquery), [sys.executable])
+
+    def test_import_failure_in_a_reference_run_is_not_run_and_not_remembered(self):
+        # Mocked: the pre-flight imported cadquery, the run given the reference could not.
+        def reply(request):
+            if "source" in request:
+                return {"kind": "not_run",
+                        "detail": "cadquery could not be imported this time (MemoryError)"}
+            return {"kind": "ok", "cadquery": "9.9"}
+
+        with mock.patch("subprocess.run", worker_run(reply)) as run:
+            first = cad_exec.measure(self.PLATE, python=sys.executable)
+            second = cad_exec.measure(self.PLATE, python=sys.executable)
+            self.assertEqual(["source" in r for r in run.requests], [False, True, True])
+        self.assertEqual((first.kind, second.kind), ("not_run", "not_run"))
+        self.assertEqual(cad_exec._no_cadquery, {})
+        self.assertEqual(cad_exec._cache, {})
 
 
 # The reference finds the worker's nonce in the frame that called it, answers in the
