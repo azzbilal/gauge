@@ -274,6 +274,66 @@ class Triples(unittest.TestCase):
                      "The plate with a pocket measures 80 x 50 x 6 mm"):
             self.assertPart(text)
 
+    def test_a_preceding_triple_ends_the_subject(self):
+        # The subject of the second "is" starts after the first triple, so the plate
+        # before it does not name the pocket's triple.
+        self.assertEqual(
+            texts("The plate with a pocket is 60 x 40 x 10 mm and the pocket is "
+                  "20 x 10 x 3 mm"),
+            ["width of 60 mm", "depth of 40 mm", "height of 10 mm",
+             "20 mm", "10 mm", "3 mm"])
+        # Only the cut can name the plate here: read from the start of the sentence,
+        # its subject is "the pocket in the plate ... and the plate", headed by pocket.
+        self.assertEqual(
+            texts("The pocket in the plate is 20 x 10 x 3 mm and the plate is "
+                  "60 x 40 x 10 mm"),
+            ["20 mm", "10 mm", "3 mm",
+             "width of 60 mm", "depth of 40 mm", "height of 10 mm"])
+        # The cut ends the subject only: the look back past a break still reaches the
+        # feature named before both triples.
+        self.assertEqual(
+            texts(self.PART_SPEC, prompt="Two pockets, 20 x 10 x 3 mm and 15 x 10 x 3 mm"),
+            self.FEATURE + ["15 mm"])
+
+    def test_two_different_triples_in_one_text_are_not_both_the_part(self):
+        # Neither "block" nor "plate" is a feature noun; the smaller one is a feature.
+        part = ["width of 60 mm", "depth of 40 mm", "height of 5 mm"]
+        feature = ["20 mm", "10 mm", "3 mm"]
+        self.assertEqual(texts("Plate 60 x 40 x 5 mm. Block 20 x 10 x 3 mm"),
+                         part + feature)
+        self.assertEqual(texts("Block 20 x 10 x 3 mm. Plate 60 x 40 x 5 mm"),
+                         feature + part)
+        # The same size stated twice, in any unit, is still the part.
+        self.assertEqual(texts("Plate 60 x 40 x 5 mm. Plate 60 x 40 x 5 mm"), part)
+        self.assertEqual(texts("Plate 6 x 4 x 0.5 cm. Plate 60 x 40 x 5 mm"),
+                         ["width of 6 cm", "depth of 4 cm", "height of 0.5 cm"])
+        # Two different sizes of the same volume: neither is taken for the part.
+        self.assertEqual(texts("Plate 60 x 40 x 5 mm. Plate 40 x 60 x 5 mm"),
+                         ["60 mm", "40 mm", "5 mm"])
+        # Also when the products differ in the last bit (0.7 * 1.1 * 2.5 in floats).
+        self.assertEqual(texts("Plate 0.7 x 1.1 x 2.5 mm. Plate 2.5 x 0.7 x 1.1 mm"),
+                         ["0.7 mm", "1.1 mm", "2.5 mm"])
+        # A triple named as a feature does not compete with the part.
+        self.assertEqual(texts("Plate 60 x 40 x 5 mm with a 80 x 50 x 1 mm pocket"),
+                         part + ["80 mm", "50 mm", "1 mm"])
+
+    def test_a_size_heading_does_not_look_back(self):
+        for text in ("Plate with a pocket. Dimensions: 80 x 50 x 6 mm",
+                     "Plate with a slot. Size: 80 x 50 x 6 mm",
+                     "Plate with a pocket. Dimensions 80 x 50 x 6 mm",
+                     "Plate with a pocket.\nSize 80 x 50 x 6 mm"):
+            self.assertPart(text)
+        # A clause that says more than the heading still looks back.
+        self.assertFeature("Pocket; the size is 20 x 10 x 3 mm")
+
+    def test_holes_are_not_what_a_triple_sizes(self):
+        for text in ("Plate with four holes. Dimensions: 80 x 50 x 6 mm",
+                     "Plate with four holes, 80 x 50 x 6 mm",
+                     "Plate with four holes. 80 x 50 x 6 mm",
+                     "A plate with four holes that is 80 x 50 x 6 mm"):
+            with self.subTest(text=text):
+                self.assertEqual(texts(text), ["4 holes", *self.PART])
+
     def test_without_a_copula_the_word_before_the_link_is_sized(self):
         for prompt in ("A bracket with a pocket of 20 x 10 x 3 mm",
                        "A plate with a pocket measuring 20 x 10 x 3 mm",

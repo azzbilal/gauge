@@ -27,7 +27,7 @@ import re
 import uuid
 from collections import namedtuple
 
-VERSION = "extract-4"
+VERSION = "extract-5"
 
 MACHINE = "machine"
 VISUAL = "visual"
@@ -118,10 +118,20 @@ SIZE_NOUNS = ("width", "length", "height", "depth", "thickness", "diameter", "ra
 
 # A triple adjacent to one of these is a feature (a pocket or slot inside the part), not
 # the part itself, so it must not be named width/depth/height and compared with the part.
+# Not "hole": a triple does not size a hole, and holes are named all around the part's
+# own size ("Plate with four holes. Dimensions: 60 x 40 x 5 mm").
 _FEATURE_NOUNS = frozenset({
     "pocket", "slot", "groove", "cutout", "notch", "recess", "cavity", "channel",
-    "keyway", "bore", "hole", "counterbore", "countersink",
+    "keyway", "bore", "counterbore", "countersink",
 })
+
+# The label `scan` gives a triple that is smaller than another triple in the same text:
+# two different sizes cannot both be the part, so the smaller one is a feature.
+_SMALLER = "smaller triple"
+
+# A clause that is only these and link words ("Dimensions: ...", "Size ...") states the
+# size of the part, so no feature named before the previous break is read into it.
+_SIZE_HEADINGS = frozenset({"overall", "dimension", "dimensions", "size", "sizes"})
 
 # Words between a subject and the triple that state its size: "the plate is 80 x 50 x 6",
 # "a pocket of 20 x 10 x 3", "plate sized to 80 x 50 x 6", "a pocket measuring ...".
@@ -401,7 +411,7 @@ def _subject_head(subject) -> str:
     return head
 
 
-def _triple_noun(text, start, end):
+def _triple_noun(text, start, end, after_previous=0, before_next=None):
     """The noun a triple describes, singular and lower case, or "" when nothing names
     it. The clause the triple is in is read first, never past a sentence end or a comma:
 
@@ -414,16 +424,30 @@ def _triple_noun(text, start, end):
     When that clause names nothing, a feature noun just before the previous break is
     taken ("Pocket, 20 x 10 x 3 mm", "Pocket; 20 x 10 x 3 mm"). Only a feature noun:
     reading a part noun there gains nothing, and taking a part for a feature only leaves
-    its sizes to the reviewer, while the reverse checks a feature as the part.
+    its sizes to the reviewer, while the reverse checks a feature as the part. Nothing is
+    read back when the clause is a size heading ("Dimensions: 80 x 50 x 6 mm").
+
+    Another triple ends the clause too: `after_previous` is where the triple before this
+    one ends and `before_next` where the one after it starts, so in "The plate with a
+    pocket is 60 x 40 x 10 mm and the pocket is 20 x 10 x 3 mm" the second triple's
+    subject is "the pocket", not "the plate with a pocket ... and the pocket". The look
+    back past a break is not cut: in "Two pockets, 20 x 10 x 3 mm and 15 x 10 x 3 mm"
+    both triples are the pockets.
     """
+    limit = len(text) if before_next is None else before_next
     breaks = list(_CLAUSE_BREAK.finditer(text, 0, start))
-    before = _words(text[breaks[-1].end() if breaks else 0:start])
-    stop = _CLAUSE_BREAK.search(text, end)
-    after = _words(text[end:stop.start() if stop else len(text)])
+    clause_start = max(breaks[-1].end() if breaks else 0, after_previous)
+    before = _words(text[clause_start:start])
+    stop = _CLAUSE_BREAK.search(text, end, limit)
+    after = _words(text[end:stop.start() if stop else limit])
 
     noun = _clause_noun(before, after)
     if noun or not breaks or "overall" in before or "overall" in after:
         # "Overall dimensions 80 x 50 x 6 mm" sizes the part whatever came before.
+        return noun
+    if (_SIZE_HEADINGS & set(before)) and set(before) <= _TRIPLE_LINKS | _SIZE_HEADINGS:
+        # "Plate with a pocket. Dimensions: 80 x 50 x 6 mm" sizes the part. A clause
+        # that says more ("Pocket; the size is ...") still looks back.
         return noun
     # The nearest word before the break, past any run of breaks ("Pocket.\n20 x ...").
     for i in range(len(breaks) - 1, -1, -1):
@@ -472,6 +496,34 @@ def _clause_noun(before, after) -> str:
     return ""
 
 
+def _triple_sizes(m) -> tuple:
+    """A triple's three sizes in mm."""
+    last = m.group("uc") or "mm"
+    return tuple(round(float(m.group(num)) * _UNITS[m.group(unit) or last][1], 9)
+                 for num, unit in (("a", "ua"), ("b", "ub"), ("c", "uc")))
+
+
+def _smaller_triples(matches, nouns) -> list:
+    """The indexes of the triples that would be named as the part but cannot be: one text
+    gives the part one size, so of two different triples neither named as a feature the
+    smaller (by volume) is a feature on it. When the largest size is stated by two
+    different triples (60 x 40 x 5 and 40 x 60 x 5), neither is taken for the part."""
+    candidates = [i for i, noun in enumerate(nouns)
+                  if not (noun and _feature_or_word(noun) in _FEATURE_NOUNS)]
+    sizes = {i: _triple_sizes(matches[i]) for i in candidates}
+    if len(set(sizes.values())) < 2:
+        return []
+
+    def volume(size):  # sorted, so the same three sizes in any order are one volume
+        a, b, c = sorted(size)
+        return a * b * c
+
+    largest = max(volume(size) for size in sizes.values())
+    part = {size for size in sizes.values() if volume(size) == largest}
+    keep = next(iter(part)) if len(part) == 1 else None
+    return [i for i in candidates if sizes[i] != keep]
+
+
 def scan(text: str) -> list:
     """Every number the text states, most specific reading first: a later pattern never
     re-reads a number an earlier one claimed. Finds come back in pattern order (triples,
@@ -489,10 +541,18 @@ def scan(text: str) -> list:
     def claimed(start: int) -> bool:
         return start in used or any(s <= start < e for s, e in spans)
 
-    for m in _TRIPLE.finditer(text):
+    matches = list(_TRIPLE.finditer(text))
+    nouns = [
+        _triple_noun(text, m.start(), m.end(),
+                     matches[i - 1].end() if i else 0,
+                     matches[i + 1].start() if i + 1 < len(matches) else None)
+        for i, m in enumerate(matches)
+    ]
+    for i in _smaller_triples(matches, nouns):
+        nouns[i] = _SMALLER
+    for m, noun in zip(matches, nouns):
         spans.append(m.span())
         last = m.group("uc") or "mm"
-        noun = _triple_noun(text, m.start(), m.end())
         for axis, (num, unit) in enumerate((("a", "ua"), ("b", "ub"), ("c", "uc"))):
             found.append(Found(
                 (m.start(num), axis), TRIPLE, noun, m.group(num),
@@ -610,7 +670,7 @@ def _read(prompt, spec) -> list:
 def _triple_axis(f, names):
     """The axis name for a triple, or None when the triple is a feature (a pocket, slots)
     so it does not compete with the part's own width/depth/height."""
-    if f.label and _feature_or_word(f.label) in _FEATURE_NOUNS:
+    if f.label == _SMALLER or (f.label and _feature_or_word(f.label) in _FEATURE_NOUNS):
         return None
     return names[f.axis]
 
