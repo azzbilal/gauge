@@ -1,7 +1,7 @@
 {
   "name": "Layer 2 verifier golden set",
   "version": 1,
-  "description": "Ten CAD tasks with a known human verdict, to measure verifier agreement with human verdicts (Gate 2, docs/PRD.md). Each reference is in prisma/verifier-golden/. The label is what a careful reviewer decides from the prompt and the reference; it was fixed before the verifier was run and is not tuned to its result.",
+  "description": "Ten CAD tasks with a known human verdict, to measure verifier agreement with human verdicts (Gate 2, docs/PRD.md). Each reference is in prisma/verifier-golden/. The label is an objective fact of each reference (correct or broken), authored by the verifier's author with its known gaps in mind, so this is a smoke test of the measurement rather than a blind or independent accuracy estimate.",
   "campaign": "Verifier golden set v1",
   "tasks": [
     {

@@ -2,7 +2,7 @@ Gate 2: verifier agreement with human verdicts
 Layer 2 verifier golden set v1 (10 tasks), measured 2026-11-13T20:04:45.788Z
 verifier m8-static-cad; executed (geometry_cad); cadquery 2.7.0 on Python 3.10.11
 
-Agreement: 8/10 = 80 %   Cohen's kappa 0.58
+Agreement: 8/10 = 80 %   Cohen's kappa 0.58  (seeded, in-sample: scripted reviews against author labels; not an accuracy estimate)
 Decided tasks 10, compared 10, without a verifier run 0
 False pass rate (human reject, verifier pass) 17 %; false fail rate (human accept, verifier no pass) 25 %
 
