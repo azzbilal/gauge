@@ -69,6 +69,16 @@ task from a normal one: the marker and the answer are never returned by the task
 review never changes the task's status, is not capped at two reviewers, and is left out of
 IAA. A gold task therefore never becomes `ACCEPTED` and never reaches the training set.
 
+To keep it that way, the API shows each reviewer a gold task as a normal task in the state
+their own actions would leave it in. Before they review it, it is `SUBMITTED` with no reviews.
+After they review it, it is `IN_REVIEW` with their one review, like any task after a first
+review. Other reviewers' gold reviews are never shown. In the queue, the gold task is not
+pinned to the head: it sits somewhere in the first five rows and moves up as the reviewer
+works through their block of five. For reviewers, those first rows are in a per-reviewer order
+that is redrawn after each review, not by age, so an out-of-order `createdAt` does not single
+the gold task out. Task views omit `updatedAt`, because a review writes a normal task's row but
+never a gold one's.
+
 **Reviewer accuracy** = gold reviews whose verdict matches the known answer ÷ gold reviews.
 A reviewer is flagged below **0.8**, once they have at least **5** gold reviews. The flag is
 a prompt to recalibrate; it never blocks a reviewer.

@@ -28,9 +28,9 @@ import {
   ScorePair,
   Scores,
   agreementReport,
+  buildQueue,
   calibrationReport,
   consensus,
-  goldDue,
   goldOrder,
   isAccepted,
 } from './review-protocol';
@@ -107,6 +107,11 @@ function packetLabels(built: BuiltPacket) {
   };
 }
 
+/** A review while the second review is still open: who and when, never the scores. */
+function redactedReview(r: TaskRow['taskReviews'][number]) {
+  return { id: r.id, taskId: r.taskId, reviewerId: r.reviewerId, createdAt: r.createdAt };
+}
+
 @Injectable()
 export class TaskService {
   private readonly logger = new Logger(TaskService.name);
@@ -117,47 +122,46 @@ export class TaskService {
   ) {}
 
   /**
-   * All tasks, newest first. With `queueOf` it becomes that user's work queue: only tasks
-   * their role lets them act on, oldest first, with gold tasks mixed in at ~20%.
+   * All tasks, newest first, as `viewer` sees them. With `queue` it becomes the viewer's
+   * work queue: only tasks their role lets them act on, oldest first, with one gold task
+   * placed somewhere in the head of the queue in ~20% of their reviews (see buildQueue).
    */
-  async list(campaignId?: string, queueOf?: AuthUser) {
-    const reviewerId = queueOf?.expertId;
+  async list(viewer: AuthUser, campaignId?: string, queue = false) {
+    const reviewerId = viewer.expertId;
     const tasks = await this.prisma.task.findMany({
       where: campaignId ? { campaignId } : undefined,
-      orderBy: { createdAt: reviewerId ? 'asc' : 'desc' },
+      orderBy: { createdAt: queue ? 'asc' : 'desc' },
       include: TASK_INCLUDE,
     });
     const adjudications = await this.adjudicationsFor(tasks.map((t) => t.id));
-    const view = (t: TaskRow) => this.toView(t, adjudications.get(t.id));
+    const view = (t: TaskRow) => this.toView(t, viewer, adjudications.get(t.id));
 
-    if (!queueOf || !reviewerId) return tasks.map(view);
+    if (!queue) return tasks.map(view);
 
-    const actionable = tasks.filter((t) =>
-      this.canAct(t, queueOf, adjudications.get(t.id)),
-    );
+    const actionable = tasks.filter((t) => this.canAct(t, viewer, adjudications.get(t.id)));
+    // Gold only reaches people who review; anyone else keeps a plain oldest-first queue.
+    if (viewer.role !== Role.REVIEWER && viewer.role !== Role.ADMIN) {
+      return actionable.map(view);
+    }
     const regular = actionable.filter((t) => !t.isGold);
     const gold = goldOrder(
       reviewerId,
       actionable.filter((t) => t.isGold),
     );
 
-    // Gold is served one at a time, at the head of the queue, when this reviewer's
-    // own history says a calibration review is due (~20% of their reviews).
+    // Where the gold task goes is decided by this reviewer's own history (~20% of
+    // their reviews), not by a fixed position.
     const mine = tasks.filter((t) => t.taskReviews.some((r) => r.reviewerExpertId === reviewerId));
     const goldDone = mine.filter((t) => t.isGold).length;
-    const queue =
-      gold.length > 0 && goldDue(reviewerId, mine.length, goldDone)
-        ? [gold[0], ...regular]
-        : regular;
-    return queue.map(view);
+    return buildQueue(reviewerId, regular, gold, mine.length, goldDone).map(view);
   }
 
-  async get(id: string) {
+  async get(id: string, viewer: AuthUser) {
     const task = await this.prisma.task.findUnique({ where: { id }, include: TASK_INCLUDE });
     if (!task) {
       throw new NotFoundException(`Task "${id}" not found`);
     }
-    return this.toView(task, (await this.adjudicationsFor([id])).get(id));
+    return this.toView(task, viewer, (await this.adjudicationsFor([id])).get(id));
   }
 
   async create(dto: CreateTaskDto, author: AuthUser) {
@@ -241,7 +245,11 @@ export class TaskService {
 
     await this.runVerification(task, built, lint);
 
-    return { ...task, linted };
+    // The gold marker and answer never leave the API, not even in the create response.
+    const { isGold: _isGold, goldExpectedAccept: _goldExpectedAccept, ...created } = task;
+    void _isGold;
+    void _goldExpectedAccept;
+    return { ...created, linted };
   }
 
   /**
@@ -646,24 +654,41 @@ export class TaskService {
   }
 
   /**
-   * The shape the API returns. Two things are deliberately withheld:
+   * The shape the API returns. Three things are deliberately withheld:
    *  - gold markers and the gold answer, or calibration would measure nothing;
+   *  - updatedAt, which would show which rows a review never wrote (gold ones);
    *  - other reviewers' scores while a second review is still open, so that
    *    review (and the agreement statistic built on it) stays independent. Scores
    *    release once the two reviewers are done — at adjudication and after the
    *    decision — so the adjudicator can see the dispute.
-   * A gold task is presented as an ordinary task nobody has reviewed yet.
+   * A gold task is presented, to each viewer, as an ordinary task in the state their own
+   * actions would have left it: nobody has reviewed it yet, or — once the viewer has —
+   * it has their one review and waits for a second, exactly like a normal task after its
+   * first review. Other reviewers' gold reviews are never shown (there can be many).
    */
-  private toView(task: TaskRow, adjudication?: ReviewDecision) {
-    const { isGold, goldExpectedAccept, taskReviews, ...rest } = task;
+  private toView(task: TaskRow, viewer: AuthUser, adjudication?: ReviewDecision) {
+    // updatedAt is withheld for every task: a review writes a normal task's row but never
+    // a gold one's, so the update time would tell them apart.
+    const { isGold, goldExpectedAccept, updatedAt, taskReviews, ...rest } = task;
     void goldExpectedAccept;
+    void updatedAt;
 
     if (isGold) {
+      const own = taskReviews.find((r) => r.reviewerExpertId === viewer.expertId);
+      if (!own) {
+        return {
+          ...rest,
+          status: TaskStatus.SUBMITTED,
+          reviewState: 'awaiting_reviews' as ReviewState,
+          taskReviews: [],
+          adjudication: null,
+        };
+      }
       return {
         ...rest,
-        status: TaskStatus.SUBMITTED,
+        status: TaskStatus.IN_REVIEW,
         reviewState: 'awaiting_reviews' as ReviewState,
-        taskReviews: [],
+        taskReviews: [redactedReview(own)],
         adjudication: null,
       };
     }
@@ -680,9 +705,7 @@ export class TaskService {
       ...rest,
       reviewState,
       taskReviews: taskReviews.map((r) =>
-        decided || awaitingAdjudication
-          ? r
-          : { id: r.id, taskId: r.taskId, reviewerId: r.reviewerId, createdAt: r.createdAt },
+        decided || awaitingAdjudication ? r : redactedReview(r),
       ),
       adjudication: adjudication
         ? {

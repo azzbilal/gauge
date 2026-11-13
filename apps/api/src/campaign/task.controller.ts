@@ -17,7 +17,7 @@ export class TaskController {
   @Get()
   list(@CurrentUser() user: AuthUser, @Query('campaignId') campaignId?: string, @Query('queue') queue?: string) {
     const mine = queue === '1' || queue === 'true';
-    return this.tasks.list(campaignId || undefined, mine ? user : undefined);
+    return this.tasks.list(user, campaignId || undefined, mine);
   }
 
   // Declared before ':id' so they are not read as task ids.
@@ -34,8 +34,8 @@ export class TaskController {
   }
 
   @Get(':id')
-  get(@Param('id') id: string) {
-    return this.tasks.get(id);
+  get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.tasks.get(id, user);
   }
 
   /** Layer 2 results stored when the task was created: lint findings and verifier runs. */

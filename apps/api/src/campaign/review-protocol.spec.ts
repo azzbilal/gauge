@@ -5,11 +5,13 @@ import {
   IAA_MIN_PAIRS,
   agreementReport,
   agreementStat,
+  buildQueue,
   calibrationReport,
   CalibrationInput,
   consensus,
   goldDue,
   goldOrder,
+  goldSlot,
   isAccepted,
   krippendorffAlpha,
   Scores,
@@ -357,5 +359,127 @@ describe('goldOrder', () => {
     expect(ids('alice')).toBe(ids('alice'));
     const orders = new Set(['alice', 'bob', 'carol', 'dave'].map(ids));
     expect(orders.size).toBeGreaterThan(1);
+  });
+});
+
+describe('goldSlot / buildQueue (gold is not always at the head of the queue)', () => {
+  type Row = { id: string; createdAt: number; gold?: boolean };
+
+  /**
+   * A reviewer who always takes the head of the queue, against a backlog of regular
+   * tasks (oldest first) and a gold pool. Returns, per review, the gold task's index in
+   * the queue they were shown (-1 when there was none) and whether they took gold.
+   */
+  function walk(reviewerId: string, n: number) {
+    let regular: Row[] = Array.from({ length: 200 }, (_, i) => ({ id: `t${i}`, createdAt: i }));
+    let gold: Row[] = Array.from({ length: 50 }, (_, i) => ({
+      id: `g${i}`,
+      createdAt: -1000 + i, // gold is the oldest work in the system
+      gold: true,
+    }));
+    const steps: Array<{ goldIndex: number; tookGold: boolean; queue: Row[] }> = [];
+    let total = 0;
+    let goldDone = 0;
+    for (let step = 0; step < n; step++) {
+      const queue = buildQueue(reviewerId, regular, goldOrder(reviewerId, gold), total, goldDone);
+      // Same history, same queue: no jumping around on a refetch.
+      expect(buildQueue(reviewerId, regular, goldOrder(reviewerId, gold), total, goldDone)).toEqual(
+        queue,
+      );
+      const head = queue[0];
+      steps.push({ goldIndex: queue.findIndex((t) => t.gold), tookGold: !!head.gold, queue });
+      total += 1;
+      if (head.gold) {
+        goldDone += 1;
+        gold = gold.filter((t) => t.id !== head.id);
+      } else {
+        regular = regular.filter((t) => t.id !== head.id);
+      }
+    }
+    return steps;
+  }
+
+  it('keeps exactly one gold review in every block of five for a head-taking reviewer', () => {
+    for (const reviewer of ['alice', 'bob', 'carol', 'r-123', '']) {
+      const steps = walk(reviewer, 50);
+      for (let block = 0; block < 10; block++) {
+        const taken = steps.slice(block * 5, block * 5 + 5).filter((s) => s.tookGold);
+        expect(taken).toHaveLength(1);
+      }
+    }
+  });
+
+  it('takes gold at the same points goldDue does', () => {
+    for (const reviewer of ['alice', 'bob', 'carol']) {
+      let total = 0;
+      let gold = 0;
+      for (const s of walk(reviewer, 40)) {
+        expect(s.tookGold).toBe(goldDue(reviewer, total, gold));
+        total += 1;
+        if (s.tookGold) gold += 1;
+      }
+    }
+  });
+
+  it('does not always put the gold task at the head', () => {
+    const indexes = new Set(
+      ['alice', 'bob', 'carol', 'dave']
+        .flatMap((r) => walk(r, 40))
+        .map((s) => s.goldIndex)
+        .filter((i) => i >= 0),
+    );
+    expect(indexes.has(0)).toBe(true);
+    expect([...indexes].some((i) => i > 0)).toBe(true);
+    // It only ever sits in the head of the queue, so it is reached within the block.
+    expect(Math.max(...indexes)).toBeLessThan(5);
+  });
+
+  it('makes the gold task not the only row out of age order', () => {
+    // When gold is shown away from the head, regular rows around it are out of order too.
+    const shown = ['alice', 'bob', 'carol', 'dave']
+      .flatMap((r) => walk(r, 40))
+      .filter((s) => s.goldIndex > 0);
+    expect(shown.length).toBeGreaterThan(0);
+    const regularOutOfOrder = shown.filter((s) => {
+      const regular = s.queue.filter((t) => !t.gold);
+      return regular.some((t, i) => i > 0 && t.createdAt < regular[i - 1].createdAt);
+    });
+    expect(regularOutOfOrder.length).toBeGreaterThan(0);
+  });
+
+  it('does not leave an old task stuck in the head while newer ones pass it', () => {
+    // A head-taking reviewer works 150 reviews into a 200-task backlog. A fixed per-task
+    // order would keep the unluckiest tasks in the head for good; a redrawn one takes each
+    // head task with odds of about one in five per review.
+    for (const reviewer of ['alice', 'bob', 'carol']) {
+      const since = new Map<string, number>();
+      let longest = 0;
+      walk(reviewer, 150).forEach((s, step) => {
+        const head = s.queue.slice(0, 6).filter((t) => !t.gold);
+        for (const t of head) {
+          if (!since.has(t.id)) since.set(t.id, step);
+          longest = Math.max(longest, step - (since.get(t.id) as number));
+        }
+      });
+      expect(longest).toBeLessThan(60);
+    }
+  });
+
+  it('keeps the queue oldest first beyond the head', () => {
+    const regular: Row[] = Array.from({ length: 20 }, (_, i) => ({ id: `t${i}`, createdAt: i }));
+    const queue = buildQueue('alice', regular, [], 0, 0);
+    expect(queue.slice(5).map((t) => t.createdAt)).toEqual([...Array(15).keys()].map((i) => i + 5));
+    expect(queue.slice(0, 5).map((t) => t.createdAt).sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  it('serves no gold once the block has had its gold, and gold first when behind', () => {
+    expect(goldSlot('alice', 7, 2)).toBeNull();
+    expect(goldSlot('alice', 10, 0)).toBe(0);
+    const regular: Row[] = [{ id: 't0', createdAt: 0 }];
+    const g: Row = { id: 'g0', createdAt: -1, gold: true };
+    expect(buildQueue('alice', regular, [g], 7, 2)).toEqual(regular);
+    expect(buildQueue('alice', regular, [g], 10, 0)[0]).toBe(g);
+    // A short queue still gets the gold task, at its end at worst.
+    expect(buildQueue('alice', [], [g], 0, 0)).toEqual([g]);
   });
 });

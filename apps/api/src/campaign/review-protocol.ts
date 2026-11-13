@@ -29,6 +29,8 @@ export const IAA_MIN_PAIRS = 10;
 
 /** Gold tasks are mixed into the review queue at ~20% (docs/pipeline.md §3). */
 export const GOLD_QUEUE_SHARE = 0.2;
+/** Reviews per gold review: the block size behind the one-in-five rate. */
+const GOLD_BLOCK = Math.round(1 / GOLD_QUEUE_SHARE);
 /** A reviewer under this gold accuracy is flagged for recalibration. */
 export const GOLD_ACCURACY_MIN = 0.8;
 /** Gold reviews needed before a reviewer can be flagged at all. */
@@ -240,11 +242,60 @@ export function calibrationReport(reviews: CalibrationInput[]): ReviewerCalibrat
  * A reviewer who is behind (no gold was available earlier) catches up first.
  */
 export function goldDue(reviewerId: string, totalReviews: number, goldReviews: number): boolean {
-  const block = Math.round(1 / GOLD_QUEUE_SHARE);
-  const blockIndex = Math.floor(totalReviews / block);
-  if (goldReviews > blockIndex) return false; // this block's gold is already done
-  if (goldReviews < blockIndex) return true; // behind on calibration
-  return totalReviews % block >= stableHash(`${reviewerId}:${blockIndex}`) % block;
+  return goldSlot(reviewerId, totalReviews, goldReviews) === 0;
+}
+
+/**
+ * Where in this reviewer's queue the current block's gold task sits, or null when the
+ * block's gold review is already done.
+ *
+ * The index counts down as the reviewer works through the block: it starts at the
+ * block's slot and reaches 0 exactly when `goldDue` says gold is due, so a reviewer who
+ * always takes the head of the queue still reviews one gold task per five. A reviewer
+ * who is behind gets it at the head. Being derived from the reviewer's history, not a
+ * dice roll, the position is the same on every refetch until they review something.
+ */
+export function goldSlot(
+  reviewerId: string,
+  totalReviews: number,
+  goldReviews: number,
+): number | null {
+  const blockIndex = Math.floor(totalReviews / GOLD_BLOCK);
+  if (goldReviews > blockIndex) return null; // this block's gold is already done
+  if (goldReviews < blockIndex) return 0; // behind on calibration
+  const slot = stableHash(`${reviewerId}:${blockIndex}`) % GOLD_BLOCK;
+  return Math.max(0, slot - (totalReviews % GOLD_BLOCK));
+}
+
+/**
+ * A reviewer's work queue: regular tasks oldest first, with at most one gold task.
+ *
+ * Moving the gold task off the head is not enough on its own: in a strictly
+ * chronological list, the one row whose `createdAt` is out of order would still be the
+ * gold one. So the head of the queue — the first GOLD_BLOCK regular tasks, the only
+ * stretch the gold task can land in — is put in a per-reviewer order rather than by age,
+ * and out-of-order rows there are normal. Beyond the head the queue stays oldest first,
+ * so old work is still drained first.
+ *
+ * `regular` must already be oldest first; `gold` is the candidates in serving order.
+ */
+export function buildQueue<T extends { id: string }>(
+  reviewerId: string,
+  regular: T[],
+  gold: T[],
+  totalReviews: number,
+  goldReviews: number,
+): T[] {
+  // Salted with the review count: the order holds across refetches but is redrawn after
+  // every review, so no old task sits in the head forever behind luckier ones, and the
+  // gold row is not the only one that moves relative to its neighbours.
+  const key = (t: T) => stableHash(`${reviewerId}:${totalReviews}:${t.id}`);
+  const head = [...regular.slice(0, GOLD_BLOCK)].sort((a, b) => key(a) - key(b));
+  const queue = [...head, ...regular.slice(GOLD_BLOCK)];
+  const index = goldSlot(reviewerId, totalReviews, goldReviews);
+  if (gold.length === 0 || index === null) return queue;
+  queue.splice(Math.min(index, queue.length), 0, gold[0]);
+  return queue;
 }
 
 /** Order gold candidates differently for each reviewer, but stably. */
