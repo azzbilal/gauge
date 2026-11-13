@@ -167,16 +167,18 @@ export class TaskService {
     await this.requireExpert(dto.authorId, 'Author');
 
     // The gate (docs/pipeline.md §2 Layer 2): lint the packet before anything is stored. A
-    // critical finding refuses the task, whoever the client is. A linter that cannot be
-    // reached does not refuse it, but the task is then recorded as not linted.
-    const built = buildPacket(dto);
+    // critical finding refuses the task, whoever the client is. A verify service that
+    // cannot be reached does not refuse it, but the task is then recorded as not linted.
+    // The service also extracts the requirements, so without it there is no packet either.
+    let built: BuiltPacket | null = null;
     let lint: LintOutcome;
     try {
+      built = await buildPacket(dto, this.verifyClient);
       lint = { status: 'ok', findings: await this.verifyClient.lint(built.packet) };
     } catch (err) {
       lint = { status: 'not_run', note: message(err) };
     }
-    if (lint.status === 'ok') {
+    if (lint.status === 'ok' && built) {
       const critical = lint.findings.filter((f) => f.severity === CRITICAL);
       if (critical.length > 0) {
         const labels = packetLabels(built);
@@ -213,6 +215,8 @@ export class TaskService {
           campaignId: dto.campaignId,
           isGold,
           linted,
+          // Which extraction read the requirements; null when the service gave none.
+          extractionVersion: built?.extractionVersion ?? null,
         } as Prisma.InputJsonValue,
       },
     });
@@ -228,7 +232,17 @@ export class TaskService {
    * `not_run` with the reason, because a check that did not run is not a clean result.
    */
   async preview(dto: PreviewTaskDto): Promise<TaskPreview> {
-    const built = buildPacket(dto);
+    let built: BuiltPacket;
+    try {
+      built = await buildPacket(dto, this.verifyClient);
+    } catch (err) {
+      // No requirements, so no packet: neither half had anything to run on.
+      const note = message(err);
+      return {
+        lint: { status: 'not_run', findings: [], note },
+        verify: { status: 'not_run', verdicts: [], note },
+      };
+    }
     const labels = packetLabels(built);
     const [lint, verify] = await Promise.allSettled([
       this.verifyClient.lint(built.packet),
@@ -278,13 +292,21 @@ export class TaskService {
   /**
    * Layer 2 on a new task: verify its reference and store that with the lint its create
    * already ran, on the same packet, so the stored rows carry the ids the findings quote.
+   * `built` is null when the requirements could not be extracted; nothing is verified then.
    * Never throws: the task already exists, and neither a verify service that is down nor a
    * failed write here may fail the create.
    */
-  private async runVerification(task: Task, built: BuiltPacket, lint: LintOutcome): Promise<void> {
+  private async runVerification(
+    task: Task,
+    built: BuiltPacket | null,
+    lint: LintOutcome,
+  ): Promise<void> {
     try {
-      const { requirements, rubricItems, packet } = built;
-      const [verify] = await Promise.allSettled([this.verifyClient.verify(packet)]);
+      const [verify] = await Promise.allSettled([
+        built
+          ? this.verifyClient.verify(built.packet)
+          : Promise.reject(new Error('no packet, the requirements were not extracted')),
+      ]);
       if (lint.status === 'not_run') {
         this.logger.warn(`Task ${task.id} created without lint: ${lint.note}`);
       }
@@ -293,14 +315,21 @@ export class TaskService {
       }
 
       const writes: Prisma.PrismaPromise<unknown>[] = [];
-      if (lint.status === 'ok' || verify.status === 'fulfilled') {
+      if (built && (lint.status === 'ok' || verify.status === 'fulfilled')) {
         // The stored findings and verdicts quote these ids, so the rows keep them.
         writes.push(
           this.prisma.requirement.createMany({
-            data: requirements.map((r) => ({ ...r, taskId: task.id })),
+            data: built.requirements.map((r) => ({
+              id: r.id,
+              taskId: task.id,
+              text: r.text,
+              kind: r.kind,
+              value: r.value,
+              tolerance: r.tolerance,
+            })),
           }),
           this.prisma.rubricItem.createMany({
-            data: rubricItems.map((item) => ({
+            data: built.rubricItems.map((item) => ({
               id: item.id,
               taskId: task.id,
               requirementId: item.requirementId,

@@ -38,7 +38,9 @@ try:
 except ImportError:  # verify/ is not on sys.path yet
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from lint.packet import PacketError, TaskPacket
-from lint.rules import MACHINE, MANUAL, VISUAL, _UNITS, extract_quantities, infer_check_method
+from lint.extract import (MACHINE, MANUAL, VISUAL, _UNITS, box_noun as _box_noun,
+                          extract_quantities, uses_length)
+from lint.rules import infer_check_method
 
 try:
     from . import cad_exec
@@ -72,8 +74,6 @@ _SIZE_WORD = re.compile(
     r"\b(width|length|height|depth|thickness|diameter|radius)\b", re.IGNORECASE)
 _HOLE_WORD = re.compile(r"\bholes?\b", re.IGNORECASE)
 
-_BOX_NOUNS = {"width", "length", "depth", "height", "thickness"}
-_BOX_QUALIFIERS = {"plate", "base", "body", "board", "outer"}
 _HOLE_QUALIFIERS = {"hole", "bore", "mounting", "through"}
 _COUNT_QUALIFIERS = {"mounting", "through"}
 _AXIS_NAMES = ("X", "Y", "Z")
@@ -218,13 +218,11 @@ class VerifierPack:
 
         # CadQuery calls the X size "length". A spec that says "length" means X by it and
         # Y by "width"; a spec that does not means X by "width" and Y by "depth".
-        uses_length = any(
-            _box_noun(q.label) == "length"
-            for r in parsed.requirements for q in extract_quantities(r.text)
-        )
+        with_length = uses_length(
+            q.label for r in parsed.requirements for q in extract_quantities(r.text))
         axes = (
             {"length": 0, "width": 1, "height": 2, "thickness": 2, "depth": 2}
-            if uses_length else
+            if with_length else
             {"width": 0, "depth": 1, "height": 2, "thickness": 2}
         )
 
@@ -337,13 +335,6 @@ def _static_allowed(measured) -> bool:
     """True when box sizes may be read off the source instead of the executed solid:
     nothing was executed, because execution is switched off or cadquery is missing."""
     return measured is None or measured.kind == cad_exec.UNAVAILABLE
-
-
-def _box_noun(label: str):
-    *qualifiers, noun = label.split()
-    if noun in _BOX_NOUNS and set(qualifiers) <= _BOX_QUALIFIERS:
-        return noun
-    return None
 
 
 def _check_one(model: CadModel, e: Expected, axes: dict, measured=None) -> tuple:

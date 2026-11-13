@@ -1,5 +1,8 @@
 """Layer 2 verification service — the HTTP wrapper the API calls.
 
+POST /extract reads a task's prompt and spec: body {"prompt": "...", "spec": "..."} (spec
+optional) and returns {"version": ..., "requirements": [...], "rubric_items": [...]}. It is
+the only requirement extraction there is; the API builds its packets from this answer.
 POST /lint runs M7 Packet Lint on a task packet and returns {"findings": [...]}.
 POST /verify runs the M8 Verifier Pack on a task packet and returns {"verdicts": [...]},
 one per machine-checkable rubric item.
@@ -19,7 +22,7 @@ from pathlib import Path
 # Make verify/ importable regardless of the directory the service is started from.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lint import PacketError, lint  # noqa: E402
+from lint import PacketError, extract, lint  # noqa: E402
 from probe import DEFAULT_ROLLOUTS, OllamaError, probe  # noqa: E402
 from verifiers import verify  # noqa: E402
 
@@ -62,7 +65,22 @@ class Handler(BaseHTTPRequestHandler):
             self._json(404, {"error": "not found"})
 
     def do_POST(self):
-        if self.path == "/lint":
+        if self.path == "/extract":
+            body = self._read_json()
+            if body is None:
+                return
+            if not isinstance(body, dict):
+                self._json(400, {"error": "body must be a JSON object"})
+                return
+            prompt, spec = body.get("prompt"), body.get("spec")
+            if not isinstance(prompt, str):
+                self._json(400, {"error": "'prompt' must be a string"})
+                return
+            if spec is not None and not isinstance(spec, str):
+                self._json(400, {"error": "'spec' must be a string or null"})
+                return
+            self._json(200, extract(prompt, spec))
+        elif self.path == "/lint":
             packet = self._read_json()
             if packet is None:
                 return

@@ -1,5 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import type { TaskPacket } from './packet-builder';
+import type {
+  ExtractedRubricItem,
+  Extraction,
+  PacketRequirement,
+  RequirementExtractor,
+  TaskPacket,
+} from './packet-builder';
 
 /** One M7 Packet Lint finding; the same fields as the LintFinding model. */
 export interface LintFindingResult {
@@ -23,19 +29,83 @@ const VERIFY_TIMEOUT_MS = 5000;
 
 /**
  * HTTP client for the Layer 2 verify service (verify/service/main.py).
- * Uses Node's built-in fetch. Both calls throw when the service is unreachable, slow,
+ * Uses Node's built-in fetch. Every call throws when the service is unreachable, slow,
  * or answers with anything but the expected shape; the caller decides what that means.
  * Nothing is contacted at construction, so the API boots without the service.
  */
 @Injectable()
-export class VerifyClient {
+export class VerifyClient implements RequirementExtractor {
   private get baseUrl(): string {
     return (process.env.VERIFY_SERVICE_URL?.trim() || DEFAULT_BASE_URL).replace(/\/+$/, '');
   }
 
+  /**
+   * POST /extract: the requirements a prompt and spec state, and the rubric items with
+   * their check methods. Strict: one malformed entry rejects the whole answer, because a
+   * requirement dropped here would be a requirement nobody checks.
+   */
+  async extract(source: { prompt: string; spec: string | null }): Promise<Extraction> {
+    const path = '/extract';
+    const json = await this.post(path, source);
+    const malformed = (what: string) =>
+      new Error(`verify service ${path} returned a malformed answer (${what})`);
+
+    const version = json.version;
+    if (typeof version !== 'string' || version === '') throw malformed('no version');
+    if (!Array.isArray(json.requirements)) throw malformed('no "requirements" list');
+    if (!Array.isArray(json.rubric_items)) throw malformed('no "rubric_items" list');
+
+    // Only the stored fields are kept; these objects are written to the database as is.
+    const requirements = json.requirements.map((row: unknown): PacketRequirement => {
+      if (!isRecord(row) || !isId(row.id) || typeof row.text !== 'string') {
+        throw malformed('a requirement without id or text');
+      }
+      return {
+        id: row.id,
+        text: row.text,
+        kind: typeof row.kind === 'string' ? row.kind : 'dimension',
+        value: typeof row.value === 'string' ? row.value : null,
+        tolerance: typeof row.tolerance === 'string' ? row.tolerance : null,
+      };
+    });
+
+    const rubricItems = json.rubric_items.map((row: unknown): ExtractedRubricItem => {
+      if (
+        !isRecord(row) ||
+        !isId(row.id) ||
+        typeof row.criterion !== 'string' ||
+        typeof row.text !== 'string'
+      ) {
+        throw malformed('a rubric item without id, criterion or text');
+      }
+      const method = row.check_method;
+      if (method !== 'machine' && method !== 'manual') {
+        throw malformed(`rubric item "${row.criterion}" has check method ${JSON.stringify(method)}`);
+      }
+      const ids = row.requirement_ids;
+      if (!Array.isArray(ids) || !ids.every((id) => typeof id === 'string')) {
+        throw malformed(`rubric item "${row.criterion}" has no "requirement_ids" list`);
+      }
+      const weight = row.weight;
+      if (typeof weight !== 'number' || !Number.isFinite(weight)) {
+        throw malformed(`rubric item "${row.criterion}" has no weight`);
+      }
+      return {
+        id: row.id,
+        criterion: row.criterion,
+        text: row.text,
+        checkMethod: method,
+        requirementIds: ids as string[],
+        weight,
+      };
+    });
+
+    return { version, requirements, rubricItems };
+  }
+
   /** POST /lint: the lint findings for a packet. */
   async lint(packet: TaskPacket): Promise<LintFindingResult[]> {
-    const rows = await this.post('/lint', packet, 'findings');
+    const rows = await this.postForList('/lint', packet, 'findings');
     return rows.filter(isRecord).flatMap((row) =>
       typeof row.rule === 'string' && typeof row.severity === 'string'
         ? [
@@ -51,7 +121,7 @@ export class VerifyClient {
 
   /** POST /verify: one verdict per machine-checkable rubric item. */
   async verify(packet: TaskPacket): Promise<VerifierVerdict[]> {
-    const rows = await this.post('/verify', packet, 'verdicts');
+    const rows = await this.postForList('/verify', packet, 'verdicts');
     return rows.filter(isRecord).flatMap((row) =>
       typeof row.rubric_item_id === 'string'
         ? [
@@ -69,14 +139,22 @@ export class VerifyClient {
     );
   }
 
-  private async post(path: string, packet: TaskPacket, key: string): Promise<unknown[]> {
+  private async postForList(path: string, packet: TaskPacket, key: string): Promise<unknown[]> {
+    const rows = (await this.post(path, packet))[key];
+    if (!Array.isArray(rows)) {
+      throw new Error(`verify service ${path} did not return a "${key}" list`);
+    }
+    return rows;
+  }
+
+  private async post(path: string, body: unknown): Promise<Record<string, unknown>> {
     const url = `${this.baseUrl}${path}`;
     let res: Response;
     try {
       res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(packet),
+        body: JSON.stringify(body),
         signal: AbortSignal.timeout(VERIFY_TIMEOUT_MS),
       });
     } catch (err) {
@@ -87,12 +165,16 @@ export class VerifyClient {
       throw new Error(`verify service ${path} answered ${res.status} ${body.slice(0, 200)}`.trim());
     }
     const json: unknown = await res.json().catch(() => null);
-    const rows = isRecord(json) ? json[key] : undefined;
-    if (!Array.isArray(rows)) {
-      throw new Error(`verify service ${path} did not return a "${key}" list`);
+    if (!isRecord(json)) {
+      throw new Error(`verify service ${path} did not return a JSON object`);
     }
-    return rows;
+    return json;
   }
+}
+
+/** A usable row id. Packet rubric item ids join two ids with ":", so an id has none. */
+function isId(value: unknown): value is string {
+  return typeof value === 'string' && value !== '' && !value.includes(':');
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
