@@ -28,9 +28,10 @@ result = probe(packet, "qwen2.5-coder:7b")  # 3 rollouts by default
   measure the solid it builds. A timeout is not a sandbox: the code runs with your
   permissions. Set `GAUGE_CAD_EXEC=0` to score from the static reading alone, without
   running anything.
-- `rollout()` posts to `http://localhost:11434/api/generate` and raises `OllamaError` when
-  the server is down or the model is unknown, so an infrastructure failure is never
-  reported as a tier.
+- `rollout()` posts to `$OLLAMA_BASE_URL/api/generate` (default `http://localhost:11434`,
+  timeout `OLLAMA_TIMEOUT_MS`, default 300 s, both read when the module loads) and raises
+  `OllamaError` when the server is down or the model is unknown, so an infrastructure
+  failure is never reported as a tier.
 
 Standard library only (the worker needs cadquery, see the M8 README). Tests need no
 live Ollama:
@@ -39,5 +40,10 @@ live Ollama:
 python -m unittest discover -s verify/probe/tests -v
 ```
 
-Not yet built: the API calling the probe (the `ProbeRun` table exists but nothing writes to
-it), running two models per task, and writing the tier back to the task record.
+The API runs it with `POST /tasks/:id/probe` (admin only, body `{"rollouts": 3, "model": "..."}`,
+both optional; the model defaults to `OLLAMA_MODEL`). It stores one `ProbeRun` per call,
+with `status` `OK` (tier and solve rate set), `NOT_RUN` (verify service or Ollama
+unreachable) or `FAILED` (an unusable answer), and `GET /tasks/:id/verification` returns
+the latest one to admins as `probeRun`.
+
+Not yet built: running two models per task, and writing the tier back to the task record.

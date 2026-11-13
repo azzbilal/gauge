@@ -1,4 +1,7 @@
 import { Injectable } from '@nestjs/common';
+import { DifficultyTier } from '@prisma/client';
+import { request as httpRequest } from 'node:http';
+import { request as httpsRequest } from 'node:https';
 import type {
   ExtractedRubricItem,
   Extraction,
@@ -6,7 +9,11 @@ import type {
   RequirementExtractor,
   TaskPacket,
 } from './packet-builder';
-import { VerifyContractError, VerifyUnreachableError } from './verify.errors';
+import {
+  ProbeModelUnreachableError,
+  VerifyContractError,
+  VerifyUnreachableError,
+} from './verify.errors';
 
 /** One M7 Packet Lint finding; the same fields as the LintFinding model. */
 export interface LintFindingResult {
@@ -25,8 +32,36 @@ export interface VerifierVerdict {
   detail: string;
 }
 
+/** The M9 Probe Gate answer, as verify/probe/probe.py returns it, with the tier as stored. */
+export interface ProbeResult {
+  tier: DifficultyTier;
+  solve_rate: number;
+  model: string;
+  /** One entry per attempt: {code, solved, verdicts, error}, passed through as given. */
+  rollouts: unknown[];
+}
+
 const DEFAULT_BASE_URL = 'http://localhost:4000';
 const VERIFY_TIMEOUT_MS = 5000;
+
+const PROBE_TIERS: Record<string, DifficultyTier> = {
+  t0: DifficultyTier.T0,
+  t1: DifficultyTier.T1,
+  t2: DifficultyTier.T2,
+  broken: DifficultyTier.BROKEN,
+};
+// Per rollout: one Ollama completion (OLLAMA_TIMEOUT_MS, as the API's own Ollama calls) plus
+// time for the verifier to run the generated code. PROBE_TIMEOUT_MS overrides the total.
+const OLLAMA_TIMEOUT_MS = 300_000;
+const PROBE_VERIFY_MARGIN_MS = 60_000;
+
+export function probeTimeoutMs(rollouts: number): number {
+  const total = Number(process.env.PROBE_TIMEOUT_MS);
+  if (Number.isFinite(total) && total > 0) return total;
+  const perCompletion = Number(process.env.OLLAMA_TIMEOUT_MS);
+  const ollama = Number.isFinite(perCompletion) && perCompletion > 0 ? perCompletion : OLLAMA_TIMEOUT_MS;
+  return rollouts * (ollama + PROBE_VERIFY_MARGIN_MS);
+}
 
 /**
  * HTTP client for the Layer 2 verify service (verify/service/main.py).
@@ -148,6 +183,47 @@ export class VerifyClient implements RequirementExtractor {
     );
   }
 
+  /**
+   * POST /probe: `rollouts` attempts of the local Ollama `model` at the task, scored by the
+   * verifier, and the difficulty tier the solve rate gives. Strict like `extract`: a tier is
+   * stored and read as a fact about the task, so an answer that is not exactly one is
+   * rejected. Throws ProbeModelUnreachableError when the service reports Ollama down (502).
+   *
+   * A probe takes minutes (one Ollama completion per rollout, then the verifier), so it does
+   * not use the 5 s timeout of the other calls, nor fetch: Node's fetch gives up on any
+   * answer whose headers take over 300 s, however long its own signal allows.
+   */
+  async probe(packet: TaskPacket, model: string, rollouts: number): Promise<ProbeResult> {
+    const path = '/probe';
+    let json: Record<string, unknown>;
+    try {
+      json = await this.postSlow(path, { packet, model, rollouts }, probeTimeoutMs(rollouts));
+    } catch (err) {
+      if (err instanceof VerifyContractError && err.status === 502) {
+        throw new ProbeModelUnreachableError(`model server unreachable: ${err.message}`);
+      }
+      throw err;
+    }
+    const malformed = (what: string) =>
+      new VerifyContractError(`verify service ${path} returned a malformed answer (${what})`);
+
+    const tier = typeof json.tier === 'string' ? PROBE_TIERS[json.tier] : undefined;
+    if (!tier) throw malformed(`tier ${JSON.stringify(json.tier)}`);
+    const rate = json.solve_rate;
+    if (typeof rate !== 'number' || !Number.isFinite(rate) || rate < 0 || rate > 1) {
+      throw malformed(`solve_rate ${JSON.stringify(rate)}`);
+    }
+    if (!Array.isArray(json.rollouts) || json.rollouts.length !== rollouts) {
+      throw malformed(`expected ${rollouts} rollouts`);
+    }
+    return {
+      tier,
+      solve_rate: rate,
+      model: typeof json.model === 'string' ? json.model : model,
+      rollouts: json.rollouts,
+    };
+  }
+
   private async postForList(path: string, packet: TaskPacket, key: string): Promise<unknown[]> {
     const rows = (await this.post(path, packet))[key];
     if (!Array.isArray(rows)) {
@@ -174,6 +250,7 @@ export class VerifyClient implements RequirementExtractor {
       const body = await res.text().catch(() => '');
       throw new VerifyContractError(
         `verify service ${path} answered ${res.status} ${body.slice(0, 200)}`.trim(),
+        res.status,
       );
     }
     let json: unknown;
@@ -193,6 +270,78 @@ export class VerifyClient implements RequirementExtractor {
       throw new VerifyContractError(`verify service ${path} did not return a JSON object`);
     }
     return json;
+  }
+
+  /**
+   * `post` for a call that may take minutes, over node:http, which has no built-in limit on
+   * how long the answer may take; `timeoutMs` is the only one. Same errors as `post`.
+   */
+  private postSlow(path: string, body: unknown, timeoutMs: number): Promise<Record<string, unknown>> {
+    const url = new URL(`${this.baseUrl}${path}`);
+    const payload = Buffer.from(JSON.stringify(body), 'utf-8');
+    const send = url.protocol === 'https:' ? httpsRequest : httpRequest;
+    return new Promise((resolve, reject) => {
+      let answered = false;
+      const req = send(
+        url,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Content-Length': payload.length },
+        },
+        (res) => {
+          answered = true;
+          const chunks: Buffer[] = [];
+          res.on('data', (chunk: Buffer) => chunks.push(chunk));
+          res.on('error', (err) =>
+            reject(
+              new VerifyUnreachableError(
+                `verify service at ${url} did not finish answering (${describe(err)})`,
+              ),
+            ),
+          );
+          res.on('end', () => {
+            clearTimeout(timer);
+            const status = res.statusCode ?? 0;
+            const text = Buffer.concat(chunks).toString('utf-8');
+            if (status < 200 || status >= 300) {
+              reject(
+                new VerifyContractError(
+                  `verify service ${path} answered ${status} ${text.slice(0, 200)}`.trim(),
+                  status,
+                ),
+              );
+              return;
+            }
+            let json: unknown = null;
+            try {
+              json = JSON.parse(text);
+            } catch {
+              // not JSON: a wrong answer, reported below
+            }
+            if (!isRecord(json)) {
+              reject(new VerifyContractError(`verify service ${path} did not return a JSON object`));
+              return;
+            }
+            resolve(json);
+          });
+        },
+      );
+      const timer = setTimeout(
+        () => req.destroy(new Error(`no answer within ${timeoutMs} ms`)),
+        timeoutMs,
+      );
+      req.on('error', (err) => {
+        clearTimeout(timer);
+        reject(
+          new VerifyUnreachableError(
+            answered
+              ? `verify service at ${url} did not finish answering (${describe(err)})`
+              : `verify service unreachable at ${url} (${describe(err)})`,
+          ),
+        );
+      });
+      req.end(payload);
+    });
   }
 }
 

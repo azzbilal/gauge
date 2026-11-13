@@ -32,6 +32,10 @@ services:
 
   verify:
     build: ./verify
+    environment:
+      # /probe (POST /tasks/:id/probe) asks Ollama; none runs in this stack, so a host one.
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_TIMEOUT_MS: ${OLLAMA_TIMEOUT_MS:-300000}
     healthcheck:
       # python:3.12-slim has neither curl nor wget.
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health', timeout=3)"]

@@ -9,6 +9,8 @@ import {
 import {
   CheckMethod,
   Prisma,
+  ProbeRun,
+  ProbeStatus,
   ReviewDecision,
   Role,
   Task,
@@ -21,8 +23,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/auth.decorators';
 import { BuiltPacket, buildPacket, rubricItemIdOf } from '../verify/packet-builder';
 import { LintFindingResult, VerifyClient } from '../verify/verify.client';
-import { VerifyUnreachableError } from '../verify/verify.errors';
-import { CreateTaskDto, PreviewTaskDto } from './dto/task.dto';
+import {
+  ProbeModelUnreachableError,
+  VerifyContractError,
+  VerifyUnreachableError,
+} from '../verify/verify.errors';
+import { CreateTaskDto, PreviewTaskDto, ProbeTaskDto } from './dto/task.dto';
 import { AdjudicateTaskDto, CreateTaskReviewDto } from './dto/task-review.dto';
 import {
   Adjudicator,
@@ -49,6 +55,8 @@ const TASK_SUBJECT = 'task';
 const SYSTEM_REVIEWER = 'system';
 // The verify service does not report a version yet; this names the M8 static CAD pack.
 const VERIFIER_VERSION = 'm8-static-cad';
+// The probe model when the request names none: the same local Ollama model as intake.
+const DEFAULT_PROBE_MODEL = 'qwen3.5:9b-q4_K_M';
 
 function message(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -432,7 +440,74 @@ export class TaskService {
         select: { id: true, text: true, requirementId: true },
       }),
     ]);
-    return { taskId, lintFindings, verifierRuns, requirements, rubricItems };
+    // The probe tier is a difficulty answer and reviewers score difficulty, so only the
+    // admin, who runs the probe, sees it. Everyone gets the field, so a gold clone (which
+    // has no probe of its own) looks like any other task.
+    const probeRun =
+      viewer.role === Role.ADMIN
+        ? await this.prisma.probeRun.findFirst({ where: { taskId }, orderBy: { createdAt: 'desc' } })
+        : null;
+    return { taskId, lintFindings, verifierRuns, requirements, rubricItems, probeRun };
+  }
+
+  /**
+   * M9 Probe Gate on a task (admin only): ask the local Ollama model to solve it
+   * `dto.rollouts` times, score each attempt with the verifier against the task's
+   * requirements, and store the solve rate and difficulty tier as a ProbeRun.
+   *
+   * Never throws for a probe that could not run: one row is stored either way and returned.
+   *   OK       tier and solveRate hold the answer
+   *   NOT_RUN  the verify service or Ollama could not be reached; says nothing about the task
+   *   FAILED   the service answered with something unusable (an error status, a bad shape)
+   * tier and solveRate stay null unless OK, so an outage is never read as a difficulty.
+   * The model sees the prompt and spec only, never the reference.
+   */
+  async probe(taskId: string, dto: ProbeTaskDto, viewer: AuthUser): Promise<ProbeRun> {
+    const task = await this.prisma.task.findUnique({
+      where: { id: taskId },
+      select: {
+        id: true,
+        prompt: true,
+        spec: true,
+        reference: true,
+        isGold: true,
+        goldSourceId: true,
+        goldForExpertId: true,
+      },
+    });
+    if (!task || !visibleTo(task, viewer)) {
+      throw new NotFoundException(`Task "${taskId}" not found`);
+    }
+    const model = dto.model ?? (process.env.OLLAMA_MODEL?.trim() || DEFAULT_PROBE_MODEL);
+    const row = { taskId, model, rollouts: dto.rollouts, verifierVersion: VERIFIER_VERSION };
+
+    let data: Prisma.ProbeRunUncheckedCreateInput;
+    try {
+      const built = await buildPacket(task, this.verifyClient);
+      const result = await this.verifyClient.probe(built.packet, model, dto.rollouts);
+      data = {
+        ...row,
+        status: ProbeStatus.OK,
+        tier: result.tier,
+        solveRate: result.solve_rate,
+      };
+    } catch (err) {
+      const unreachable =
+        err instanceof VerifyUnreachableError || err instanceof ProbeModelUnreachableError;
+      if (unreachable) {
+        this.logger.warn(`Probe of task ${taskId} did not run: ${message(err)}`);
+      } else if (err instanceof VerifyContractError) {
+        this.logger.warn(`Probe of task ${taskId} failed: ${message(err)}`);
+      } else {
+        this.logger.error(`Probe of task ${taskId} failed unexpectedly: ${message(err)}`);
+      }
+      data = {
+        ...row,
+        status: unreachable ? ProbeStatus.NOT_RUN : ProbeStatus.FAILED,
+        note: message(err).slice(0, 1000),
+      };
+    }
+    return this.prisma.probeRun.create({ data });
   }
 
   /**

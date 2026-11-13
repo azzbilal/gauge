@@ -45,7 +45,7 @@ seven days to make room for verification.
 | | intake-agent agreement rate on the 20-pair golden set | **measured: 4/20 = 20 %** (`npm run golden`; see below) |
 | | published pipeline spec | `docs/pipeline.md` |
 | | ≥ 1 contributor task submitted | depends on the live database; not recorded here |
-| **2 (day 13)** | M7–M9 built and wired into submission and review | pre-submit check, server-side lint gate and stored verdicts built; verdicts are not shown on the Review screen; the probe is a service endpoint the API does not call yet |
+| **2 (day 13)** | M7–M9 built and wired into submission and review | pre-submit check, server-side lint gate and stored verdicts built; verdicts are not shown on the Review screen; the probe runs from the admin-only `POST /tasks/:id/probe` and is stored as a `ProbeRun` |
 | | verifier agreement with human verdicts | **measured on the 10-task Layer 2 golden set: 8/10 = 80 % (seeded, in-sample)**, kappa 0.58 (`npm run verifier-golden`; see below) |
 | **3 (day 19)** | all dbt tests pass, dashboard on the semantic layer, retro with real campaign numbers | not started |
 | **4 (day 28)** | held-out scores before and after training, with a failure analysis | not started |

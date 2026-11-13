@@ -252,6 +252,12 @@ enum DifficultyTier {
   BROKEN
 }
 
+enum ProbeStatus {
+  OK
+  NOT_RUN
+  FAILED
+}
+
 model Requirement {
   id        String  @id @default(cuid())
   taskId    String
@@ -314,14 +320,21 @@ model VerifierRun {
 }
 
 model ProbeRun {
-  id              String        @id @default(cuid())
+  id              String          @id @default(cuid())
   taskId          String
   model           String
+  // How many rollouts were asked for.
   rollouts        Int
-  solveRate       Float
-  tier            DifficultyTier
+  // OK: the probe ran and tier/solveRate hold its answer. NOT_RUN: the verify service or
+  // Ollama could not be reached, which says nothing about the task. FAILED: the service
+  // answered with something unusable. tier and solveRate are null unless OK, so an outage
+  // is never read as a difficulty.
+  status          ProbeStatus     @default(OK)
+  note            String?
+  solveRate       Float?
+  tier            DifficultyTier?
   verifierVersion String
-  createdAt       DateTime      @default(now())
+  createdAt       DateTime        @default(now())
 
   task Task @relation(fields: [taskId], references: [id])
 

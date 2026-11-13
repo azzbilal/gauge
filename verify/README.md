@@ -11,7 +11,7 @@ needs an interpreter with `cadquery` (see `verifiers/`).
 | `lint/extract.py` | M7 | The **only** parser of task prose. Reads named dimensions, `A x B x C` triples and hole counts out of a prompt and spec, returns requirements plus one rubric item per review criterion, each tagged machine or manual. Versioned (`extract-7`). | built |
 | `lint/` | M7 Packet Lint | Three deterministic rules over a packet: traceability, value contradiction (prompt vs spec), check-method tagging. | built |
 | `verifiers/` | M8 Verifier Pack | CAD only. Executes the reference in a worker process and measures the solid (box size, volume); reads hole size and count statically; falls back to a static reading of box size when cadquery is missing. | built (CAD); manifold, PCB and circuit checks not built |
-| `probe/` | M9 Probe Gate | Asks a local Ollama model to solve a task N times, scores each attempt with M8 and assigns a difficulty tier. | built as a service endpoint; **not called by the API** yet |
+| `probe/` | M9 Probe Gate | Asks a local Ollama model to solve a task N times, scores each attempt with M8 and assigns a difficulty tier. | built; the API calls it from `POST /tasks/:id/probe` (admin) |
 | `service/` | — | HTTP wrapper on `127.0.0.1:4000`: `/health`, `/extract`, `/lint`, `/verify`, `/probe`. | built |
 
 ## How the API uses it
@@ -30,7 +30,9 @@ The API parses nothing itself (`apps/api/src/verify/packet-builder.ts` only arra
 
 `Requirement`, `RubricItem`, `LintFinding`, `VerifierRun`, `ProbeRun`
 (`apps/api/prisma/schema.prisma`, migration `0003_verification`: `CREATE` only, no `ALTER` on a
-Layer 1 table). `ProbeRun` exists but nothing writes to it yet.
+Layer 1 table). `ProbeRun` is written by `POST /tasks/:id/probe`; migration
+`0008_probe_status` adds its `status`/`note` and makes `tier`/`solveRate` nullable, so a probe
+that could not run is stored as `NOT_RUN` or `FAILED`, never as a tier.
 
 ## Tests
 

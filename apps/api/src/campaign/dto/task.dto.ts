@@ -68,3 +68,37 @@ export function parsePreviewTaskDto(body: unknown): PreviewTaskDto {
     typeof value === 'string' && value.trim() ? value.trim() : undefined;
   return { prompt: text(prompt) ?? '', spec: text(spec), reference: text(reference) };
 }
+
+/** Most rollouts one probe may ask for; the verify service refuses more (MAX_ROLLOUTS). */
+export const MAX_PROBE_ROLLOUTS = 20;
+export const DEFAULT_PROBE_ROLLOUTS = 3;
+
+/** POST /tasks/:id/probe. Both fields optional; the model defaults to OLLAMA_MODEL. */
+export interface ProbeTaskDto {
+  rollouts: number;
+  model?: string;
+}
+
+export function parseProbeTaskDto(body: unknown): ProbeTaskDto {
+  if (body === undefined || body === null) return { rollouts: DEFAULT_PROBE_ROLLOUTS };
+  if (typeof body !== 'object' || Array.isArray(body)) {
+    throw new BadRequestException('Request body must be a JSON object');
+  }
+  const { rollouts, model } = body as Record<string, unknown>;
+  if (
+    rollouts !== undefined &&
+    (typeof rollouts !== 'number' ||
+      !Number.isInteger(rollouts) ||
+      rollouts < 1 ||
+      rollouts > MAX_PROBE_ROLLOUTS)
+  ) {
+    throw new BadRequestException(`rollouts must be an integer from 1 to ${MAX_PROBE_ROLLOUTS}`);
+  }
+  if (model !== undefined && (typeof model !== 'string' || !model.trim())) {
+    throw new BadRequestException('model must be a non-empty string');
+  }
+  return {
+    rollouts: (rollouts as number | undefined) ?? DEFAULT_PROBE_ROLLOUTS,
+    model: typeof model === 'string' ? model.trim() : undefined,
+  };
+}

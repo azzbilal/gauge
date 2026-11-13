@@ -1,7 +1,7 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { TaskService } from './task.service';
-import { parseCreateTaskDto, parsePreviewTaskDto } from './dto/task.dto';
+import { parseCreateTaskDto, parsePreviewTaskDto, parseProbeTaskDto } from './dto/task.dto';
 import { parseAdjudicateTaskDto, parseCreateTaskReviewDto } from './dto/task-review.dto';
 import { AuthUser, CurrentUser, Roles } from '../auth/auth.decorators';
 
@@ -49,6 +49,17 @@ export class TaskController {
   @Get(':id/verification')
   verification(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.tasks.verification(id, user);
+  }
+
+  /**
+   * M9 Probe Gate: the local Ollama model attempts the task, and the solve rate and tier are
+   * stored as a ProbeRun and returned. Slow (minutes). Always answers with the stored row: a
+   * probe that could not run is stored with status NOT_RUN or FAILED and a note, not thrown.
+   */
+  @Post(':id/probe')
+  @Roles(Role.ADMIN)
+  probe(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: unknown) {
+    return this.tasks.probe(id, parseProbeTaskDto(body), user);
   }
 
   @Post()

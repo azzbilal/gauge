@@ -1,9 +1,24 @@
 import 'reflect-metadata';
 import { describe, expect, it } from 'vitest';
 import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
-import { CheckMethod, Prisma, Role, TaskStatus, VerifySubjectType } from '@prisma/client';
+import {
+  CheckMethod,
+  DifficultyTier,
+  Prisma,
+  ProbeStatus,
+  Role,
+  TaskStatus,
+  VerifySubjectType,
+} from '@prisma/client';
 import { AuthUser } from '../auth/auth.decorators';
+import { TaskPacket } from '../verify/packet-builder';
+import {
+  ProbeModelUnreachableError,
+  VerifyContractError,
+  VerifyUnreachableError,
+} from '../verify/verify.errors';
 import { CampaignService } from './campaign.service';
+import { CRITERIA } from './review-protocol';
 import { TaskService } from './task.service';
 
 // A gold task must be indistinguishable from a normal task to whoever reads it
@@ -112,7 +127,10 @@ type Decision = {
  * An in-memory Prisma: tasks with their reviews, Layer 2 rows, events, the users (logins)
  * and the adjudication records.
  */
-function fakeDb(rows: Row[], extra: { users?: AuthUser[]; decisions?: Decision[] } = {}) {
+function fakeDb(
+  rows: Row[],
+  extra: { users?: AuthUser[]; decisions?: Decision[]; verify?: unknown } = {},
+) {
   let seq = 0;
   const users = extra.users ?? [];
   const decisions = (extra.decisions ?? []).map((d) => ({ ...d }));
@@ -132,6 +150,18 @@ function fakeDb(rows: Row[], extra: { users?: AuthUser[]; decisions?: Decision[]
   const table = (name: keyof typeof layer2) => ({
     findMany: async ({ where }: { where?: Where } = {}) =>
       layer2[name].filter((r) => matches(r, where)),
+    // Honours orderBy on createdAt, so "the latest" is tested and not just "the first".
+    findFirst: async ({
+      where,
+      orderBy,
+    }: { where?: Where; orderBy?: { createdAt: 'asc' | 'desc' } } = {}) => {
+      const rows = layer2[name].filter((r) => matches(r, where));
+      const time = (r: Record<string, unknown>) => (r.createdAt as Date).getTime();
+      if (orderBy) {
+        rows.sort((a, b) => (orderBy.createdAt === 'asc' ? 1 : -1) * (time(a) - time(b)));
+      }
+      return rows[0] ?? null;
+    },
     createMany: async ({ data }: { data: Array<Record<string, unknown>> }) => {
       for (const d of data) {
         layer2[name].push({ id: `${name}-${++seq}`, createdAt: new Date(clock++), ...d });
@@ -286,7 +316,7 @@ function fakeDb(rows: Row[], extra: { users?: AuthUser[]; decisions?: Decision[]
     layer2,
     events,
     decisions,
-    service: new TaskService(prisma as never, {} as never),
+    service: new TaskService(prisma as never, (extra.verify ?? {}) as never),
     campaigns: new CampaignService(prisma as never),
   };
 }
@@ -877,5 +907,137 @@ describe('adjudication: a third expert, with a small-team escape for the lead or
         db.service.adjudicate(id, { verdict: 'accept', reason: 'x' }, user('lee', Role.REVIEWER, true)),
       ).rejects.toBeInstanceOf(NotFoundException);
     }
+  });
+});
+
+describe('probe: the M9 Probe Gate on a task, stored as a ProbeRun', () => {
+  const admin = user('ada', Role.ADMIN);
+  const reviewer = user('rev', Role.REVIEWER);
+
+  /** A verify client whose /extract answers one machine requirement, and whose /probe is `probe`. */
+  function client(probe: (packet: TaskPacket, model: string, rollouts: number) => Promise<unknown>) {
+    const calls: Array<{ packet: TaskPacket; model: string; rollouts: number }> = [];
+    return {
+      calls,
+      verify: {
+        extract: async () => ({
+          version: 'x1',
+          requirements: [{ id: 'req1', text: 'width of 60 mm', kind: 'dimension', value: '60', tolerance: null }],
+          rubricItems: CRITERIA.map((criterion, i) => ({
+            id: `ri${i}`,
+            criterion,
+            text: `${criterion}: ...`,
+            checkMethod: criterion === 'correct_reference' ? 'machine' : 'manual',
+            requirementIds: criterion === 'correct_reference' ? ['req1'] : [],
+            weight: 1,
+          })),
+        }),
+        probe: async (packet: TaskPacket, model: string, rollouts: number) => {
+          calls.push({ packet, model, rollouts });
+          return probe(packet, model, rollouts);
+        },
+      },
+    };
+  }
+
+  function withTask(verify: unknown) {
+    const n0 = task('n0', { gold: false });
+    n0.spec = 'a plate 60 mm wide';
+    n0.reference = 'result = cq.Workplane().box(60, 40, 5)';
+    return fakeDb([n0, task('g0', { gold: true })], { verify });
+  }
+
+  it('stores and returns tier, solve rate, model and rollouts when the probe ran', async () => {
+    const c = client(async (_p, model, n) => ({
+      tier: DifficultyTier.T1,
+      solve_rate: 2 / 3,
+      model,
+      rollouts: Array.from({ length: n }, () => ({})),
+    }));
+    const db = withTask(c.verify);
+    const run = await db.service.probe('n0', { rollouts: 3, model: 'qwen-test' }, admin);
+    expect(run).toMatchObject({
+      taskId: 'n0',
+      status: ProbeStatus.OK,
+      tier: DifficultyTier.T1,
+      solveRate: 2 / 3,
+      model: 'qwen-test',
+      rollouts: 3,
+    });
+    expect(db.layer2.probeRun).toHaveLength(1);
+    // The service gets the task's packet: prompt, spec, its requirements.
+    expect(c.calls[0].packet).toMatchObject({ prompt: 'prompt n0', spec: 'a plate 60 mm wide' });
+    expect(c.calls[0].packet.requirements.map((r) => r.id)).toEqual(['req1']);
+    expect(c.calls[0].rollouts).toBe(3);
+  });
+
+  it('defaults the model to OLLAMA_MODEL', async () => {
+    const before = process.env.OLLAMA_MODEL;
+    process.env.OLLAMA_MODEL = 'local-model:1b';
+    try {
+      const c = client(async (_p, model) => ({ tier: DifficultyTier.T2, solve_rate: 0, model, rollouts: [{}] }));
+      const run = await withTask(c.verify).service.probe('n0', { rollouts: 1 }, admin);
+      expect(c.calls[0].model).toBe('local-model:1b');
+      expect(run.model).toBe('local-model:1b');
+    } finally {
+      if (before === undefined) delete process.env.OLLAMA_MODEL;
+      else process.env.OLLAMA_MODEL = before;
+    }
+  });
+
+  it.each([
+    ['Ollama is down (the service answers 502)', new ProbeModelUnreachableError('model server unreachable: ECONNREFUSED'), ProbeStatus.NOT_RUN],
+    ['the verify service is unreachable', new VerifyUnreachableError('verify service unreachable'), ProbeStatus.NOT_RUN],
+    ['the service gives an unusable answer', new VerifyContractError('verify service /probe answered 500', 500), ProbeStatus.FAILED],
+    ['something unexpected throws', new TypeError('boom'), ProbeStatus.FAILED],
+  ])('stores a row with no tier when %s', async (_why, error, status) => {
+    const db = withTask(client(async () => Promise.reject(error)).verify);
+    const run = await db.service.probe('n0', { rollouts: 2 }, admin);
+    expect(run).toMatchObject({ taskId: 'n0', status, rollouts: 2, note: error.message });
+    expect(run.tier ?? null).toBeNull();
+    expect(run.solveRate ?? null).toBeNull();
+    expect(db.layer2.probeRun).toHaveLength(1);
+  });
+
+  it('stores NOT_RUN when the requirements cannot be extracted because the service is down', async () => {
+    const verify = {
+      extract: async () => Promise.reject(new VerifyUnreachableError('verify service unreachable')),
+      probe: async () => {
+        throw new Error('must not be called without a packet');
+      },
+    };
+    const run = await withTask(verify).service.probe('n0', { rollouts: 1 }, admin);
+    expect(run).toMatchObject({ status: ProbeStatus.NOT_RUN, note: 'verify service unreachable' });
+  });
+
+  it('404s a missing task and stores nothing', async () => {
+    const db = withTask(client(async () => ({})).verify);
+    await expect(db.service.probe('nope', { rollouts: 1 }, admin)).rejects.toBeInstanceOf(NotFoundException);
+    expect(db.layer2.probeRun).toHaveLength(0);
+  });
+
+  it('shows an admin the latest run in the verification, and a reviewer none', async () => {
+    let tier: DifficultyTier = DifficultyTier.T2;
+    const db = withTask(
+      client(async (_p, model) => ({ tier, solve_rate: tier === DifficultyTier.T0 ? 1 : 0, model, rollouts: [{}] })).verify,
+    );
+    const first = await db.service.probe('n0', { rollouts: 1 }, admin);
+    tier = DifficultyTier.T0;
+    const second = await db.service.probe('n0', { rollouts: 1 }, admin);
+    // Stored oldest first, so a read that ignores the order would get the first run.
+    expect(db.layer2.probeRun[0].id).toBe(first.id);
+
+    const asAdmin = await db.service.verification('n0', admin);
+    expect(asAdmin.probeRun).toMatchObject({ id: second.id, tier: DifficultyTier.T0 });
+    expect(asAdmin.probeRun?.id).not.toBe(first.id);
+
+    // Reviewers score difficulty blind, so the tier is not theirs to see; the field is.
+    const asReviewer = await db.service.verification('n0', reviewer);
+    expect(asReviewer).toHaveProperty('probeRun', null);
+  });
+
+  it('answers null for a task never probed', async () => {
+    const db = withTask(client(async () => ({})).verify);
+    expect((await db.service.verification('n0', admin)).probeRun).toBeNull();
   });
 });

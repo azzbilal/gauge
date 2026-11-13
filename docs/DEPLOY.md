@@ -133,6 +133,6 @@ Every plan is set explicitly, because a Blueprint service with no `plan` default
 
 ## Known limits
 
-- **The deployed verify service cannot run submitted CAD code.** `verify/Dockerfile` is the stdlib-only Python image, without `cadquery`. `/verify` therefore falls back to static checks (`static_cad`), which read box size and holes from the source text. It does not execute the reference or measure the solid. `/probe` needs Ollama, which neither stack runs, and the API does not call it.
+- **The deployed verify service cannot run submitted CAD code.** `verify/Dockerfile` is the stdlib-only Python image, without `cadquery`. `/verify` therefore falls back to static checks (`static_cad`), which read box size and holes from the source text. It does not execute the reference or measure the solid. `/probe` needs Ollama, which neither stack runs: `POST /tasks/:id/probe` then stores a `NOT_RUN` probe run instead of a tier (compose passes `OLLAMA_BASE_URL` to the verify container, so a host Ollama can be used).
 - **CORS is open.** `apps/api/src/main.ts` calls `app.enableCors()` with no options, so any origin may call the API. `WEB_ORIGIN` appears in `.env.example`, but nothing in `apps/api/src` reads it. In both deployments the browser reaches the API through the web origin's `/api` proxy, so the app itself does not need CORS. Restricting it to the web origin is a code change that has not been made.
 - **Run the seed once per database.** A second run leaves the two users and their passwords unchanged, but it adds another rubric and another posting.

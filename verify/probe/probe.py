@@ -30,6 +30,7 @@ Standard library only; the worker needs cadquery.
 """
 import dataclasses
 import json
+import os
 import re
 import sys
 import urllib.error
@@ -54,9 +55,29 @@ BROKEN = "broken"
 T0_ABOVE = 0.8
 T1_FROM = 0.4
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
 DEFAULT_ROLLOUTS = 3
-DEFAULT_TIMEOUT_S = 300
+
+
+def _ollama_url() -> str:
+    """OLLAMA_BASE_URL (as the API reads it: a trailing /v1 is dropped) + /api/generate."""
+    base = os.environ.get("OLLAMA_BASE_URL", "").strip() or "http://localhost:11434"
+    base = base.rstrip("/")
+    if base.endswith("/v1"):
+        base = base[:-3]
+    return f"{base}/api/generate"
+
+
+def _ollama_timeout_s() -> float:
+    """OLLAMA_TIMEOUT_MS, as the API reads it, in seconds; 300 when unset or invalid."""
+    try:
+        value = float(os.environ.get("OLLAMA_TIMEOUT_MS", "")) / 1000
+    except ValueError:
+        return 300.0
+    return value if value > 0 else 300.0
+
+
+OLLAMA_URL = _ollama_url()
+DEFAULT_TIMEOUT_S = _ollama_timeout_s()
 
 _INSTRUCTIONS = (
     "You are a CAD engineer. Write a CadQuery (Python) script that models the part "

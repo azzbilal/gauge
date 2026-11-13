@@ -15,4 +15,21 @@ export class VerifyUnreachableError extends Error {
  */
 export class VerifyContractError extends Error {
   readonly name = 'VerifyContractError';
+
+  /** The HTTP status when the service answered with an error status; unset otherwise. */
+  constructor(
+    message: string,
+    readonly status?: number,
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * POST /probe only: the verify service answered, but the model server behind it (Ollama)
+ * could not produce a completion. The service says so with a 502. Like an outage, this
+ * says nothing about the task, so it must never be read as a difficulty tier.
+ */
+export class ProbeModelUnreachableError extends Error {
+  readonly name = 'ProbeModelUnreachableError';
 }
