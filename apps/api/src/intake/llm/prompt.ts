@@ -14,15 +14,17 @@ export const BASE_SYSTEM_PROMPT =
 export const FEWSHOT_SYSTEM_PROMPT =
   BASE_SYSTEM_PROMPT +
   '\n\nYou will first see worked examples scored by a senior reviewer. Match their calibration:' +
-  '\n- Reason criterion by criterion in "reasoning" BEFORE giving scores.' +
+  '\n- Reason criterion by criterion in "reasoning" BEFORE giving scores: two or three sentences per criterion,' +
+  ' then commit to one score. Do not deliberate between anchors at length.' +
+  '\n- Short CVs are normal. A one-line CV is scored on what its role and stated work imply, not marked down for being short.' +
   '\n- Score what the CV states and what its stated work clearly requires: a professional role is evidence of the skills that role uses every day.' +
   ' Do not credit hobbies listed only under interests, and never invent tools or achievements.' +
   '\n- Score each criterion on its own scale below; a weak fit for the posting on one criterion does not lower the others.' +
   '\n- cad (CAD domain depth):' +
   '\n  5 = years of professional parametric CAD with demanding evidence (configurable families, design tables, a code-CAD library).' +
-  '\n  4 = professional engineering work in which CAD models are a daily tool, even if GUI-only, CAM-oriented, surface-based or not naming the tool.' +
+  '\n  4 = professional engineering work that routinely builds or edits CAD models, even if GUI-only, for tooling or CAM, surface-based, or not naming the tool.' +
   '\n  3 = real but narrow CAD: long-term 2D drafting, small-shop part modeling, or a hobby library of parametric models.' +
-  '\n  2 = light CAD: hobby or student GUI modeling, or CAD used only at the edge of another profession (BIM, importing models into other software).' +
+  '\n  2 = light CAD: hobby or student GUI modeling, building-information modeling, or CAD used only to view or import models into other software.' +
   '\n  1 = no CAD, but adjacent 3D or physical making (renders, hand building).' +
   '\n  0 = nothing related.' +
   '\n- geo (Geometric reasoning), inside or outside CAD:' +
@@ -35,15 +37,17 @@ export const FEWSHOT_SYSTEM_PROMPT =
   '\n  0 = nothing related.' +
   '\n- code (Scripting ability): programming ability in ANY language counts in full; CAD-specific code is not required for a high score.' +
   '\n  5 = years of professional software engineering, or a reusable code-CAD library used by a team.' +
-  '\n  4 = professional programming as a main part of the job (software, data, robotics or simulation work), or a maintained code-CAD library.' +
+  '\n  4 = professional programming as a main part of the job, or a maintained code-CAD library. Roles that are programming by nature' +
+  ' (software, data science, robotics, simulation) count here even when the CV names no language.' +
   '\n  3 = regular scripting that supports a non-software job.' +
   '\n  2 = light or occasional code: macros, small task scripts, analysis scripts, hand-written machine code, a programming course.' +
   '\n  1 = no code, only design tools or spreadsheet-driven configuration.' +
   '\n  0 = no computing skill at all, or the CV says there is no code or scripting.' +
   '\n- comm (Clarity of communication): judge the CV itself and the communication its stated work requires; absence of a writing sample is not a low score.' +
   '\n  5 = documentation, writing or teaching is an explicit, regular part of the work.' +
-  '\n  4 = an established professional in a technical or design role whose output others build from (drawings, plans, code, models), or occasional public technical writing.' +
-  '\n  3 = a clear CV with no professional technical role: students, hobbyists, trades, non-technical jobs.' +
+  '\n  4 = any professional engineering, software, technical or design role, however short the CV' +
+  ' (others build on their drawings, plans, code or models), or occasional public technical writing.' +
+  '\n  3 = everyone else with a clear CV: students, hobbyists, trades, non-technical jobs.' +
   '\n  2 or lower = only when the CV itself is confusing, contradictory or careless.' +
   '\n- "evidence" must be ONE contiguous quote copied verbatim from the CV being scored (no "...", no joined fragments), never from the examples.' +
   '\n- Lower confidence when the CV is thin or the evidence is indirect.' +

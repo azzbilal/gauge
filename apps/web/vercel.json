@@ -2,6 +2,6 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "https://gauge-api.onrender.com/$1" }
+    { "source": "/api/(.*)", "destination": "https://gauge-api-98jq.onrender.com/$1" }
   ]
 }

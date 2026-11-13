@@ -10,7 +10,7 @@ import {
 } from './prompt';
 import { IntakeAssessment, LlmScoringProvider, RawScores, RubricCriterion } from './types';
 
-export const OLLAMA_PROMPT_VERSION = 'intake-v4-fewshot';
+export const OLLAMA_PROMPT_VERSION = 'intake-v5-fewshot';
 
 interface OllamaChatResponse {
   model: string;
@@ -36,6 +36,8 @@ export class OllamaProvider implements LlmScoringProvider {
   private readonly baseUrl = (process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434').replace(/\/+$/, '').replace(/\/v1$/, '');
   private readonly model = process.env.OLLAMA_MODEL ?? 'qwen3.5:9b-q4_K_M';
   private readonly numCtx = Number(process.env.OLLAMA_NUM_CTX ?? 16384);
+  /** Caps a runaway answer (a looping "reasoning" string) so it fails fast instead of filling num_ctx. */
+  private readonly numPredict = Number(process.env.OLLAMA_NUM_PREDICT ?? 2048);
   private readonly timeoutMs = Number(process.env.OLLAMA_TIMEOUT_MS ?? 300_000);
   private readonly maxAttempts = 2;
 
@@ -107,7 +109,7 @@ export class OllamaProvider implements LlmScoringProvider {
           stream: false,
           think: false,
           format: scoresJsonSchema(criteria, true),
-          options: { temperature: 0, num_ctx: this.numCtx },
+          options: { temperature: 0, num_ctx: this.numCtx, num_predict: this.numPredict },
         }),
       });
     } catch (err) {

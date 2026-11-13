@@ -1,0 +1,43 @@
+
+> @gauge/api@0.1.0 golden
+> ts-node src/intake/golden/run-golden.ts --out ../../docs/results/gate1-golden-2026-11-13-intake-v5.json
+
+[Nest] 36780  - 13/11/2026 20:38:08     LOG [OllamaProvider] Using local model qwen3.5:9b-q4_K_M at http://localhost:11434 (num_ctx=16384, 4 few-shot examples)
+Golden set  D:\10_PROJECTS\RECUITE\gauge\apps\api\prisma\golden-set.json (20 pairs)
+Scorer      intake-v5-fewshot@ollama/qwen3.5:9b-q4_K_M
+Rule        a criterion agrees when |agent - gold| <= 1; a pair passes when all agree
+Columns     criterion agent/gold (* = outside tolerance), route agent/gold
+
+[ 1/20] gold-01  PASS  cad 5/5   code 5/5   comm 5/4   geo 5/5   route auto /auto   6.7s  LEAK 0.82 vs strong-code-first-cad
+[ 2/20] gold-02  PASS  cad 4/5   code 1/1   comm 4/4   geo 4/4   route auto /auto   6.7s  LEAK 0.57 vs strong-code-first-cad
+[ 3/20] gold-03  PASS  cad 3/3   code 2/2   comm 4/3   geo 3/3   route human/human  6.0s
+[ 4/20] gold-04  PASS  cad 2/2   code 1/1   comm 3/3   geo 2/2   route auto /human  7.4s
+[ 5/20] gold-05  PASS  cad 0/0   code 1/0   comm 3/3   geo 0/0   route human/human  22.0s
+[ 6/20] gold-06  PASS  cad 0/0   code 5/5   comm 3/4   geo 0/0   route auto /human  6.8s
+[ 7/20] gold-07  FAIL  cad 2/4*  code 2/2   comm 4/5   geo 5/5   route human/auto   7.2s
+[ 8/20] gold-08  PASS  cad 2/3   code 1/0   comm 3/4   geo 2/2   route auto /human  7.2s
+[ 9/20] gold-09  PASS  cad 2/2   code 2/2   comm 3/3   geo 2/2   route human/human  6.9s
+[10/20] gold-10  PASS  cad 0/1   code 0/1   comm 3/4   geo 0/1   route auto /human  6.4s
+[11/20] gold-11  PASS  cad 4/4   code 1/2   comm 3/3   geo 4/3   route auto /human  7.4s
+[12/20] gold-12  PASS  cad 3/3   code 4/4   comm 3/3   geo 3/3   route human/human  7.0s
+[13/20] gold-13  PASS  cad 0/0   code 5/4   comm 3/4   geo 0/0   route auto /human  6.2s
+[Nest] 36780  - 13/11/2026 20:40:25    WARN [OllamaProvider] Attempt 1/2: invalid model output (Unterminated string in JSON at position 8502 (line 1 column 8503))
+[Nest] 36780  - 13/11/2026 20:40:34     LOG [OllamaProvider] Retry 2 succeeded after corrective feedback
+[14/20] gold-14  FAIL  cad 2/2   code 2/4*  comm 4/4   geo 4/4   route human/human  42.1s
+[15/20] gold-15  PASS  cad 0/1   code 0/0   comm 3/3   geo 1/2   route human/human  8.2s
+[16/20] gold-16  PASS  cad 4/4   code 3/2   comm 3/4   geo 4/5   route human/auto   7.8s
+[17/20] gold-17  PASS  cad 0/0   code 5/4   comm 4/4   geo 0/0   route human/human  5.9s
+[18/20] gold-18  PASS  cad 5/4   code 3/3   comm 5/5   geo 5/4   route human/auto   15.9s
+[19/20] gold-19  PASS  cad 2/2   code 1/1   comm 3/3   geo 2/3   route human/human  8.3s
+[20/20] gold-20  PASS  cad 2/2   code 1/0   comm 4/4   geo 4/4   route human/human  9.0s
+
+Agreement   18/20 pairs pass = 90%
+Without     gold-01, gold-02 (overlap a few-shot example): 16/18 = 89%
+Routing     agent and gold agree on human review for 55% of scored pairs
+Criterion   exact  within  MAE   bias
+  cad         70%    95%   0.35 -0.25
+  code        55%    95%   0.50  0.10
+  comm        60%   100%   0.40 -0.20
+  geo         70%   100%   0.30 -0.10
+
+Report      D:\10_PROJECTS\RECUITE\gauge\docs\results\gate1-golden-2026-11-13-intake-v5.json
