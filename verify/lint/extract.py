@@ -27,7 +27,7 @@ import re
 import uuid
 from collections import namedtuple
 
-VERSION = "extract-5"
+VERSION = "extract-6"
 
 MACHINE = "machine"
 VISUAL = "visual"
@@ -79,6 +79,16 @@ _ADJECTIVES = {
     "diameter": "diameter", "dia": "diameter", "radius": "radius",
 }
 
+# A triple adjacent to one of these is a feature (a pocket or slot inside the part), not
+# the part itself, so it must not be named width/depth/height and compared with the part.
+# Not "hole": a triple does not size a hole, and holes are named all around the part's
+# own size ("Plate with four holes. Dimensions: 60 x 40 x 5 mm").
+# "cut-out" is read as "cutout" (`_words`).
+_FEATURE_NOUNS = frozenset({
+    "pocket", "slot", "groove", "cutout", "notch", "recess", "cavity", "channel",
+    "keyway", "bore", "counterbore", "countersink", "window", "opening",
+})
+
 # Words that scope a quantity to a feature, so "hole diameter" and "shaft diameter" stay
 # separate quantities. Only these words become part of a quantity's label.
 _QUALIFIERS = {
@@ -94,6 +104,9 @@ _QUALIFIERS = {
     "mounting": "mounting", "through": "through",
     "input": "input", "output": "output", "supply": "supply", "load": "load",
     "cutoff": "cutoff",
+    # The feature nouns, so a feature's size keeps its name when read back: a requirement
+    # worded "recess depth of 3 mm" must not read back as the part's depth.
+    **{noun: noun for noun in _FEATURE_NOUNS}, "cut-out": "cutout",
 }
 
 # Things that get counted ("4 holes").
@@ -116,18 +129,10 @@ _COUNT_FILLER = {
 # machine only when it is one of these, or a hole count that is certainly the total.
 SIZE_NOUNS = ("width", "length", "height", "depth", "thickness", "diameter", "radius")
 
-# A triple adjacent to one of these is a feature (a pocket or slot inside the part), not
-# the part itself, so it must not be named width/depth/height and compared with the part.
-# Not "hole": a triple does not size a hole, and holes are named all around the part's
-# own size ("Plate with four holes. Dimensions: 60 x 40 x 5 mm").
-_FEATURE_NOUNS = frozenset({
-    "pocket", "slot", "groove", "cutout", "notch", "recess", "cavity", "channel",
-    "keyway", "bore", "counterbore", "countersink",
-})
-
-# The label `scan` gives a triple that is smaller than another triple in the same text:
-# two different sizes cannot both be the part, so the smaller one is a feature.
-_SMALLER = "smaller triple"
+# The label `scan` gives a triple when another triple in the same text states a different
+# size and neither is named as a feature: which one is the part, if either, is left to the
+# reviewer.
+_RIVAL = "rival triple"
 
 # A clause that is only these and link words ("Dimensions: ...", "Size ...") states the
 # size of the part, so no feature named before the previous break is read into it.
@@ -338,7 +343,7 @@ def _singular(word: str) -> str:
 
 def _qualifiers(run) -> list:
     out = []
-    for word in re.split(r"[\s-]+", (run or "").strip()):
+    for word in re.split(r"[\s-]+", _CUT_OUT.sub(r"\1\2", (run or "").strip())):
         if word:
             canon = _QUALIFIERS.get(_singular(word)) or _QUALIFIERS.get(word.lower())
             if canon:
@@ -391,8 +396,12 @@ def _feature_or_word(word: str) -> str:
     return word
 
 
+# "cut-out" is the noun "cutout"; "cut out" in two words stays the verb.
+_CUT_OUT = re.compile(r"\b(cut)-(outs?)\b", re.IGNORECASE)
+
+
 def _words(text) -> list:
-    return [w.lower() for w in _WORD.findall(text)]
+    return [w.lower() for w in _WORD.findall(_CUT_OUT.sub(r"\1\2", text))]
 
 
 def _subject_head(subject) -> str:
@@ -496,6 +505,28 @@ def _clause_noun(before, after) -> str:
     return ""
 
 
+# A comma or semicolon just before a size: what is sized may be named before it.
+_LIST_BREAK = re.compile(r"[,;]\s*$")
+
+
+def _feature_before(text, start) -> list:
+    """[feature] for a size with no qualifier of its own that opens a clause after a comma
+    or semicolon, when the clause before names a feature: "a 20 x 10 mm pocket, 3 mm deep"
+    and "Pocket 20 x 10 mm, 3 mm deep" size the pocket, the last feature noun there. Else
+    []. Only a feature noun, as for a triple: "Plate 60 mm wide, 5 mm thick" sizes the
+    plate. Not past a sentence end: "Plate with a pocket. 5 mm thick." sizes the plate."""
+    comma = _LIST_BREAK.search(text, 0, start)
+    if not comma:
+        return []
+    breaks = list(_CLAUSE_BREAK.finditer(text, 0, comma.start()))
+    clause = text[breaks[-1].end() if breaks else 0:comma.start()]
+    for word in reversed(_words(clause)):
+        word = _feature_or_word(word)
+        if word in _FEATURE_NOUNS:
+            return [word]
+    return []
+
+
 def _triple_sizes(m) -> tuple:
     """A triple's three sizes in mm."""
     last = m.group("uc") or "mm"
@@ -503,25 +534,17 @@ def _triple_sizes(m) -> tuple:
                  for num, unit in (("a", "ua"), ("b", "ub"), ("c", "uc")))
 
 
-def _smaller_triples(matches, nouns) -> list:
+def _rival_triples(matches, nouns) -> list:
     """The indexes of the triples that would be named as the part but cannot be: one text
-    gives the part one size, so of two different triples neither named as a feature the
-    smaller (by volume) is a feature on it. When the largest size is stated by two
-    different triples (60 x 40 x 5 and 40 x 60 x 5), neither is taken for the part."""
+    gives the part one size, so when two triples neither named as a feature state
+    different sizes, none of them is taken for the part. Not even the largest: an
+    L-bracket's base and upright are both smaller than its box, and so is a plate with a
+    boss or a post standing on it. The same size stated twice, in any unit, is one size."""
     candidates = [i for i, noun in enumerate(nouns)
                   if not (noun and _feature_or_word(noun) in _FEATURE_NOUNS)]
-    sizes = {i: _triple_sizes(matches[i]) for i in candidates}
-    if len(set(sizes.values())) < 2:
+    if len({_triple_sizes(matches[i]) for i in candidates}) < 2:
         return []
-
-    def volume(size):  # sorted, so the same three sizes in any order are one volume
-        a, b, c = sorted(size)
-        return a * b * c
-
-    largest = max(volume(size) for size in sizes.values())
-    part = {size for size in sizes.values() if volume(size) == largest}
-    keep = next(iter(part)) if len(part) == 1 else None
-    return [i for i in candidates if sizes[i] != keep]
+    return candidates
 
 
 def scan(text: str) -> list:
@@ -548,8 +571,8 @@ def scan(text: str) -> list:
                      matches[i + 1].start() if i + 1 < len(matches) else None)
         for i, m in enumerate(matches)
     ]
-    for i in _smaller_triples(matches, nouns):
-        nouns[i] = _SMALLER
+    for i in _rival_triples(matches, nouns):
+        nouns[i] = _RIVAL
     for m, noun in zip(matches, nouns):
         spans.append(m.span())
         last = m.group("uc") or "mm"
@@ -565,7 +588,8 @@ def scan(text: str) -> list:
     for m in _LABEL_FIRST.finditer(text):
         if in_triple(m.start("num")):
             continue
-        label = " ".join(_qualifiers(m.group("mods")) + [_NOUNS[m.group("noun").lower()]])
+        quals = _qualifiers(m.group("mods")) or _feature_before(text, m.start())
+        label = " ".join(quals + [_NOUNS[m.group("noun").lower()]])
         unit = m.group("unit")
         found.append(Found(
             (m.start("num"), 0), LABELLED, label, m.group("num"), unit,
@@ -576,7 +600,8 @@ def scan(text: str) -> list:
     for m in _VALUE_FIRST.finditer(text):
         if m.start("num") in used or in_triple(m.start("num")):
             continue
-        quals = _qualifiers(m.group("post")) or _qualifiers(m.group("pre"))
+        quals = (_qualifiers(m.group("post")) or _qualifiers(m.group("pre"))
+                 or _feature_before(text, m.start()))
         label = " ".join(quals + [_ADJECTIVES[m.group("adj").lower()]])
         unit = m.group("unit")
         found.append(Found(
@@ -658,21 +683,72 @@ def _read(prompt, spec) -> list:
     """Both texts, the spec first: [(source, [(label, find), ...])], each in reading
     order. A triple gets its axis names here, from what the whole task calls its sizes."""
     scans = [("spec", scan(spec)), ("prompt", scan(prompt))]
-    names = axis_names(uses_length(
-        f.label for _, finds in scans for f in finds if f.origin == LABELLED))
-    return [
-        (source, [(_triple_axis(f, names) if f.origin == TRIPLE else f.label, f)
-                  for f in sorted(finds, key=lambda f: f.at)])
-        for source, finds in scans
-    ]
+    with_length = uses_length(
+        f.label for _, finds in scans for f in finds if f.origin == LABELLED)
+    names = axis_names(with_length)
+    out = []
+    for source, finds in scans:
+        overruled = _overruled_triples(finds, with_length)
+        out.append((source, [
+            (f.label if f.origin != TRIPLE
+             else None if f in overruled else _triple_axis(f, names), f)
+            for f in sorted(finds, key=lambda f: f.at)]))
+    return out
 
 
 def _triple_axis(f, names):
     """The axis name for a triple, or None when the triple is a feature (a pocket, slots)
     so it does not compete with the part's own width/depth/height."""
-    if f.label == _SMALLER or (f.label and _feature_or_word(f.label) in _FEATURE_NOUNS):
-        return None
-    return names[f.axis]
+    return names[f.axis] if _names_the_part(f) else None
+
+
+def _names_the_part(f) -> bool:
+    """True when `scan` left a triple's find to be named as the part: neither a feature
+    nor one of two rival sizes."""
+    return not (f.label == _RIVAL
+                or (f.label and _feature_or_word(f.label) in _FEATURE_NOUNS))
+
+
+def _box_axes(with_length: bool) -> dict:
+    """The axis (0, 1, 2) each overall size names, as the verifier reads it
+    (verifiers.py): thickness is the Z size, and so is depth when X is the length."""
+    if with_length:
+        return {"length": 0, "width": 1, "height": 2, "thickness": 2, "depth": 2}
+    return {"width": 0, "depth": 1, "height": 2, "thickness": 2}
+
+
+def _mm(f) -> float:
+    return round(float(f.number) * _UNITS[f.unit][1], 9)
+
+
+def _overruled_triples(finds, with_length) -> set:
+    """The finds of the part triples a text contradicts in words: "Width 80 mm, depth
+    50 mm. Block 60 x 40 x 5 mm" gives the part two widths, and which one is meant is left
+    to the reviewer, so the triple is not named as the part. The words keep their names.
+    Only within one text: a size the other text states differently is a contradiction
+    the value_contradiction rule reports."""
+    axes = _box_axes(with_length)
+    stated = {}  # axis -> the sizes the text gives it in words, in mm
+    for f in finds:
+        if f.origin == LABELLED and _is_length(f.unit):
+            axis = axes.get(box_noun(f.label))
+            if axis is not None:
+                stated.setdefault(axis, set()).add(_mm(f))
+    if not stated:
+        return set()
+    triples = []  # each triple's three finds; `scan` gives them in order, X first
+    for f in finds:
+        if f.origin == TRIPLE:
+            if f.axis == 0:
+                triples.append([])
+            triples[-1].append(f)
+    overruled = set()
+    for triple in triples:
+        if not _names_the_part(triple[0]):
+            continue  # not named as the part anyway
+        if any(stated.get(f.axis, {_mm(f)}) != {_mm(f)} for f in triple):
+            overruled.update(triple)
+    return overruled
 
 
 def stated_quantities(prompt, spec) -> dict:

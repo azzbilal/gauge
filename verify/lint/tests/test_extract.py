@@ -296,26 +296,133 @@ class Triples(unittest.TestCase):
             self.FEATURE + ["15 mm"])
 
     def test_two_different_triples_in_one_text_are_not_both_the_part(self):
-        # Neither "block" nor "plate" is a feature noun; the smaller one is a feature.
+        # Neither "block" nor "plate" is a feature noun, so neither is taken for the part:
+        # the larger one is not always the part (an L-bracket's base and upright).
         part = ["width of 60 mm", "depth of 40 mm", "height of 5 mm"]
-        feature = ["20 mm", "10 mm", "3 mm"]
         self.assertEqual(texts("Plate 60 x 40 x 5 mm. Block 20 x 10 x 3 mm"),
-                         part + feature)
+                         ["60 mm", "40 mm", "5 mm", "20 mm", "10 mm", "3 mm"])
         self.assertEqual(texts("Block 20 x 10 x 3 mm. Plate 60 x 40 x 5 mm"),
-                         feature + part)
+                         ["20 mm", "10 mm", "3 mm", "60 mm", "40 mm", "5 mm"])
         # The same size stated twice, in any unit, is still the part.
         self.assertEqual(texts("Plate 60 x 40 x 5 mm. Plate 60 x 40 x 5 mm"), part)
         self.assertEqual(texts("Plate 6 x 4 x 0.5 cm. Plate 60 x 40 x 5 mm"),
                          ["width of 6 cm", "depth of 4 cm", "height of 0.5 cm"])
-        # Two different sizes of the same volume: neither is taken for the part.
+        # The same three sizes in another order are a different size: the axes differ.
         self.assertEqual(texts("Plate 60 x 40 x 5 mm. Plate 40 x 60 x 5 mm"),
                          ["60 mm", "40 mm", "5 mm"])
-        # Also when the products differ in the last bit (0.7 * 1.1 * 2.5 in floats).
         self.assertEqual(texts("Plate 0.7 x 1.1 x 2.5 mm. Plate 2.5 x 0.7 x 1.1 mm"),
                          ["0.7 mm", "1.1 mm", "2.5 mm"])
         # A triple named as a feature does not compete with the part.
         self.assertEqual(texts("Plate 60 x 40 x 5 mm with a 80 x 50 x 1 mm pocket"),
                          part + ["80 mm", "50 mm", "1 mm"])
+
+    def assertAllManual(self, spec, want):
+        with self.subTest(spec=spec):
+            result = extract("", spec, counter())
+            self.assertEqual([r["text"] for r in result["requirements"]], want)
+            self.assertEqual({r["check_method"] for r in result["requirements"]},
+                             {"manual"})
+            self.assertEqual({i["check_method"] for i in result["rubric_items"]},
+                             {"manual"})
+
+    def test_two_part_triples_both_go_to_the_reviewer(self):
+        # The base is not the bracket's box, and neither is the plate once a boss or a
+        # post stands on it: no triple is machine-checked as the part.
+        self.assertAllManual("L-bracket: base 60 x 40 x 5 mm, upright 40 x 30 x 5 mm",
+                             ["60 mm", "40 mm", "5 mm", "30 mm"])
+        self.assertAllManual("Plate 60 x 40 x 5 mm with a boss 10 x 10 x 8 mm",
+                             ["60 mm", "40 mm", "5 mm", "10 mm", "8 mm"])
+        self.assertAllManual("Plate 60 x 40 x 5 mm with a 10 x 10 x 20 mm post",
+                             ["60 mm", "40 mm", "5 mm", "10 mm", "20 mm"])
+
+    def test_part_sizes_in_words_that_disagree_unname_a_lone_triple(self):
+        self.assertEqual(
+            [(r["text"], r["check_method"]) for r in
+             extract("", "Width 80 mm, depth 50 mm. Block 60 x 40 x 5 mm",
+                     counter())["requirements"]],
+            [("width of 80 mm", "machine"), ("depth of 50 mm", "machine"),
+             ("60 mm", "manual"), ("40 mm", "manual"), ("5 mm", "manual")])
+        # Thickness is the Z size, as the verifier reads it.
+        self.assertEqual(texts("Plate 60 x 40 x 5 mm, thickness 6 mm"),
+                         ["60 mm", "40 mm", "5 mm", "thickness of 6 mm"])
+        # With "length", width is the Y size.
+        self.assertEqual(texts("Plate 80 x 50 x 6 mm, length of 80 mm, width of 60 mm"),
+                         ["80 mm", "50 mm", "6 mm", "length of 80 mm", "width of 60 mm"])
+        # Words that agree keep the triple the part.
+        self.assertEqual(texts("Plate 60 x 40 x 5 mm, 60 mm wide, 5 mm thick"),
+                         ["width of 60 mm", "depth of 40 mm", "height of 5 mm",
+                          "thickness of 5 mm"])
+        # A feature's size is not the part's.
+        self.assertEqual(texts("Plate 60 x 40 x 5 mm, slot width 6 mm")[:3],
+                         ["width of 60 mm", "depth of 40 mm", "height of 5 mm"])
+
+    def test_part_sizes_in_the_other_text_are_a_contradiction_not_an_unnaming(self):
+        self.assertEqual(texts("Plate 60 x 40 x 5 mm", prompt="width of 80 mm"),
+                         ["width of 60 mm", "depth of 40 mm", "height of 5 mm",
+                          "width of 80 mm"])
+        self.assertEqual(
+            contradictions("width of 80 mm", "Plate 60 x 40 x 5 mm"),
+            [("critical", "width: prompt says 80 mm but spec says 60 mm")])
+
+    def test_cut_outs_windows_and_openings_are_features(self):
+        for prompt in ("a 20 x 10 x 3 mm cut-out", "two 20 x 10 x 3 mm cut-outs",
+                       "a cutout of 20 x 10 x 3 mm", "a window 20 x 10 x 3 mm",
+                       "two 20 x 10 x 3 mm windows", "an opening of 20 x 10 x 3 mm",
+                       "Opening, 20 x 10 x 3 mm"):
+            self.assertFeature(prompt)
+        # Beside the part in one text, the plate stays the part.
+        for feature in ("a 20 x 10 x 3 mm cut-out", "a window 20 x 10 x 3 mm",
+                        "an opening of 20 x 10 x 3 mm"):
+            with self.subTest(feature=feature):
+                self.assertEqual(texts(f"Plate 60 x 40 x 5 mm with {feature}"),
+                                 ["width of 60 mm", "depth of 40 mm", "height of 5 mm",
+                                  "20 mm", "10 mm", "3 mm"])
+        # "Cut out" in two words is the verb.
+        self.assertPart("Cut out 80 x 50 x 6 mm plate")
+
+    def test_a_feature_size_after_a_comma_is_the_feature_size(self):
+        part = ["width of 60 mm", "depth of 40 mm", "height of 5 mm"]
+        self.assertEqual(
+            texts("Plate 60 x 40 x 5 mm with a 20 x 10 mm pocket, 3 mm deep"),
+            part + ["10 mm", "pocket depth of 3 mm"])
+        self.assertEqual(texts("Plate 60 x 40 x 5 mm with a pocket, 3 mm deep"),
+                         part + ["pocket depth of 3 mm"])
+        self.assertEqual(texts("Plate 60 x 40 x 5 mm with a pocket, depth 3 mm"),
+                         part + ["pocket depth of 3 mm"])
+        self.assertEqual(texts("Pocket 20 x 10 mm, 3 mm deep"),
+                         ["10 mm", "pocket depth of 3 mm"])
+        self.assertEqual(texts("Plate with a recess; 3 mm deep"), ["recess depth of 3 mm"])
+        self.assertEqual(texts("Plate with a 20 mm cut-out, 3 mm deep"),
+                         ["20 mm", "cutout depth of 3 mm"])
+        # "cut-out" names the size it qualifies, hyphen or not.
+        for text in ("Plate 60 x 40 x 5 mm with a cut-out 3 mm deep",
+                     "Plate 60 x 40 x 5 mm, cut-out depth 3 mm",
+                     "Plate 60 x 40 x 5 mm with a 3 mm deep cut-out",
+                     "Plate 60 x 40 x 5 mm with a cutout 3 mm deep"):
+            with self.subTest(text=text):
+                self.assertEqual(texts(text), part + ["cutout depth of 3 mm"])
+        # The lint scanner reads it the same way.
+        self.assertEqual([q.label for q in extract_quantities("a pocket, 3 mm deep")],
+                         ["pocket depth"])
+        # A part noun before the comma, or a feature before a sentence end, does not.
+        self.assertEqual(texts("Plate 60 mm wide, 5 mm thick"),
+                         ["plate width of 60 mm", "thickness of 5 mm"])
+        self.assertEqual(texts("Plate with four holes, 5 mm thick"),
+                         ["4 holes", "thickness of 5 mm"])
+        self.assertEqual(texts("Plate with a pocket. 5 mm thick."), ["thickness of 5 mm"])
+
+    def test_a_feature_named_before_a_comma_takes_a_part_size_after_it(self):
+        # Known limit: the look-back takes the last feature noun before the comma, so the
+        # plate's width here is read as the slot's. That fails safe: no part check.
+        self.assertEqual(texts("Plate with a slot, 60 mm wide"), ["slot width of 60 mm"])
+
+    def test_a_feature_size_after_and_is_not_looked_back_for(self):
+        # Known limit: only a size right after a comma or semicolon looks back, so the
+        # depth after "and" is read as the part's, and that un-names the plate triple.
+        self.assertEqual(
+            texts("Plate 60 x 40 x 5 mm with a slot 20 mm long, 6 mm wide and 3 mm deep"),
+            ["60 mm", "40 mm", "5 mm", "slot length of 20 mm", "slot width of 6 mm",
+             "depth of 3 mm"])
 
     def test_a_size_heading_does_not_look_back(self):
         for text in ("Plate with a pocket. Dimensions: 80 x 50 x 6 mm",
@@ -616,6 +723,8 @@ SPECS = [
     "Block 80 x 50 x 6 mm, length of 80 mm, slot length 20 mm, fillet radius 2 mm",
     "inside diameter 10 mm, external diameter of 20 mm, wall thickness = 2mm, 6 cm long",
     "2 through holes, 1 hole, holes 5 mm deep, 12 mm, pitch 2 mm",
+    "Plate 60 x 40 x 10 mm with a 20 x 10 mm pocket, 3 mm deep",
+    "Plate 60 x 40 x 10 mm with a recess, depth 3 mm",
 ]
 
 
@@ -648,6 +757,15 @@ class RoundTrip(unittest.TestCase):
         self.assertEqual(len(verdicts), 5)  # width, depth, height, count, diameter
         for verdict in verdicts:
             self.assertEqual(verdict["status"], "pass", verdict["detail"])
+
+    def test_a_feature_depth_after_a_comma_is_not_checked_as_the_part(self):
+        spec = "Plate 60 x 40 x 10 mm with a 20 x 10 mm pocket, 3 mm deep"
+        with mock.patch.dict(os.environ, {"GAUGE_CAD_EXEC": "0"}):
+            verdicts = verify(packet("", spec, PLATE))
+        # The plate's three sizes pass; the pocket depth has no check, so it is not run.
+        self.assertEqual([v["status"] for v in verdicts],
+                         ["pass", "pass", "pass", "not_run"])
+        self.assertIn("pocket depth", verdicts[3]["detail"])
 
     def test_the_verifier_fails_a_wrong_size(self):
         spec = "Plate 60 x 45 x 10 mm with 3 holes."
