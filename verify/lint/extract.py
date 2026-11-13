@@ -27,7 +27,7 @@ import re
 import uuid
 from collections import namedtuple
 
-VERSION = "extract-6"
+VERSION = "extract-7"
 
 MACHINE = "machine"
 VISUAL = "visual"
@@ -527,6 +527,66 @@ def _feature_before(text, start) -> list:
     return []
 
 
+# Words that link a subject to its size: "the pocket is 3 mm deep", "the pocket must be
+# 3 mm deep", "the pocket has a depth of 3 mm".
+_SUBJECT_LINKS = _TRIPLE_LINKS | _MODALS | {"has", "have", "a", "an", "the"}
+_SUBJECT_VERBS = _COPULAS | {"has", "have"}
+
+
+def _feature_subject(text, start, after_previous) -> list:
+    """[feature] for a size with no qualifier of its own whose sentence is about a
+    feature: "The pocket is 3 mm deep", "The pocket has a depth of 3 mm", "a plate with a
+    pocket that is 3 mm deep". Else []. Only the words since the previous size in the
+    same clause are read, so in "The plate is 10 mm thick and the pocket is 3 mm deep"
+    the plate's thickness is not the pocket's. Only a feature noun, as for a triple:
+    "The plate with a pocket is 10 mm thick" sizes the plate."""
+    breaks = list(_CLAUSE_BREAK.finditer(text, 0, start))
+    words = _words(text[max(breaks[-1].end() if breaks else 0, after_previous):start])
+    links = len(words)
+    while links and words[links - 1] in _SUBJECT_LINKS:
+        links -= 1
+    if not _SUBJECT_VERBS & set(words[links:]):
+        return []
+    subject = words[:links]
+    if subject and subject[-1] in _RELATIVES:
+        # "... a pocket that is ...": the noun the pronoun points at.
+        subject = [w for w in subject[:-1] if w not in _NON_NOUNS][-1:]
+    head = _feature_or_word(_subject_head(subject))
+    return [head] if head in _FEATURE_NOUNS else []
+
+
+# Between two sizes of one thing: "a slot 40 mm long and 5 mm wide", "... and is 5 mm
+# wide", "a depth of 3 mm and a width of 20 mm".
+_AND = re.compile(
+    rf"\s*,?\s*and(?:\s+(?:{_alt(_SUBJECT_LINKS)})(?![\w.]))*\s*", re.IGNORECASE)
+
+
+def _size_qualifiers(text, sizes, triples) -> list:
+    """The qualifiers of each labelled size, in the order of `sizes`: its own, or else
+    the feature it is the size of when that is named elsewhere in its clause:
+
+        "a 20 x 10 mm pocket, 3 mm deep"          the feature before a comma
+        "The pocket is 3 mm deep"                 the subject of its sentence
+        "a slot 40 mm long and 5 mm wide"         the size just before it, across "and"
+
+    `sizes` are (match start, match end, own qualifiers) and `triples` the triples'
+    spans. Sizes are read in reading order so a feature carries along a chain ("a slot
+    20 mm long, 6 mm wide and 3 mm deep")."""
+    out = [list(own) for _, _, own in sizes]
+    previous = None  # (end, qualifiers) of the size before, in reading order
+    for i in sorted(range(len(sizes)), key=lambda i: sizes[i][0]):
+        start, end, own = sizes[i]
+        if not own:
+            after = max([e for s, e in triples if e <= start]
+                        + [sizes[j][1] for j in range(len(sizes)) if sizes[j][1] <= start],
+                        default=0)
+            out[i] = _feature_before(text, start) or _feature_subject(text, start, after)
+            if not out[i] and previous and _AND.fullmatch(text, previous[0], start):
+                out[i] = [q for q in previous[1] if q in _FEATURE_NOUNS]
+        previous = (end, out[i])
+    return out
+
+
 def _triple_sizes(m) -> tuple:
     """A triple's three sizes in mm."""
     last = m.group("uc") or "mm"
@@ -585,30 +645,29 @@ def scan(text: str) -> list:
     def in_triple(start: int) -> bool:
         return any(s <= start < e for s, e in triples)
 
+    sizes = []  # (match, own qualifiers, noun) of each labelled size
     for m in _LABEL_FIRST.finditer(text):
         if in_triple(m.start("num")):
             continue
-        quals = _qualifiers(m.group("mods")) or _feature_before(text, m.start())
-        label = " ".join(quals + [_NOUNS[m.group("noun").lower()]])
-        unit = m.group("unit")
-        found.append(Found(
-            (m.start("num"), 0), LABELLED, label, m.group("num"), unit,
-            _tolerance(m, unit)))
+        sizes.append((m, _qualifiers(m.group("mods")), _NOUNS[m.group("noun").lower()]))
         used.add(m.start("num"))
         spans.append(m.span())
 
     for m in _VALUE_FIRST.finditer(text):
         if m.start("num") in used or in_triple(m.start("num")):
             continue
-        quals = (_qualifiers(m.group("post")) or _qualifiers(m.group("pre"))
-                 or _feature_before(text, m.start()))
-        label = " ".join(quals + [_ADJECTIVES[m.group("adj").lower()]])
-        unit = m.group("unit")
-        found.append(Found(
-            (m.start("num"), 0), LABELLED, label, m.group("num"), unit,
-            _tolerance(m, unit)))
+        sizes.append((m, _qualifiers(m.group("post")) or _qualifiers(m.group("pre")),
+                      _ADJECTIVES[m.group("adj").lower()]))
         used.add(m.start("num"))
         spans.append((m.start("num"), m.end()))
+
+    qualifiers = _size_qualifiers(
+        text, [(m.start(), m.end(), own) for m, own, _ in sizes], triples)
+    for (m, _, noun), quals in zip(sizes, qualifiers):
+        unit = m.group("unit")
+        found.append(Found(
+            (m.start("num"), 0), LABELLED, " ".join(quals + [noun]), m.group("num"), unit,
+            _tolerance(m, unit)))
 
     counts = []  # (find, it points back at something already stated)
     for m in _COUNT.finditer(text):
@@ -680,19 +739,22 @@ def _is_length(unit) -> bool:
 
 
 def _read(prompt, spec) -> list:
-    """Both texts, the spec first: [(source, [(label, find), ...])], each in reading
-    order. A triple gets its axis names here, from what the whole task calls its sizes."""
+    """Both texts, the spec first: [(source, [(label, find, name), ...])], each in
+    reading order. A triple gets its axis names here, from what the whole task calls its
+    sizes. `name` is what the find measures and `label` the name it is checked by: None
+    for the sizes `_overruled` leaves to the reviewer, which keep their `name`."""
     scans = [("spec", scan(spec)), ("prompt", scan(prompt))]
     with_length = uses_length(
         f.label for _, finds in scans for f in finds if f.origin == LABELLED)
     names = axis_names(with_length)
     out = []
     for source, finds in scans:
-        overruled = _overruled_triples(finds, with_length)
-        out.append((source, [
-            (f.label if f.origin != TRIPLE
-             else None if f in overruled else _triple_axis(f, names), f)
-            for f in sorted(finds, key=lambda f: f.at)]))
+        overruled = _overruled(finds, with_length)
+        read = []
+        for f in sorted(finds, key=lambda f: f.at):
+            name = f.label if f.origin != TRIPLE else _triple_axis(f, names)
+            read.append((None if f in overruled else name, f, name))
+        out.append((source, read))
     return out
 
 
@@ -721,19 +783,22 @@ def _mm(f) -> float:
     return round(float(f.number) * _UNITS[f.unit][1], 9)
 
 
-def _overruled_triples(finds, with_length) -> set:
-    """The finds of the part triples a text contradicts in words: "Width 80 mm, depth
-    50 mm. Block 60 x 40 x 5 mm" gives the part two widths, and which one is meant is left
-    to the reviewer, so the triple is not named as the part. The words keep their names.
-    Only within one text: a size the other text states differently is a contradiction
-    the value_contradiction rule reports."""
+def _overruled(finds, with_length) -> set:
+    """The finds a text gives the part two sizes with, one in words and one in a triple:
+    "Width 80 mm, depth 50 mm. Block 60 x 40 x 5 mm" gives the part two widths. Which one
+    is meant is left to the reviewer, so neither is named: all three of the triple's
+    finds, and every size in words the triple disagrees with. Words that agree with it
+    keep their names. A feature size in words that lost its feature name ("Plate 60 x 40
+    x 10 mm with a slot. It is 5 mm wide.") lands here too, and is not checked as the
+    part. Only within one text: a size the other text states differently is a
+    contradiction the value_contradiction rule reports."""
     axes = _box_axes(with_length)
-    stated = {}  # axis -> the sizes the text gives it in words, in mm
+    stated = {}  # axis -> {size in mm: the finds that give the axis that size in words}
     for f in finds:
         if f.origin == LABELLED and _is_length(f.unit):
             axis = axes.get(box_noun(f.label))
             if axis is not None:
-                stated.setdefault(axis, set()).add(_mm(f))
+                stated.setdefault(axis, {}).setdefault(_mm(f), []).append(f)
     if not stated:
         return set()
     triples = []  # each triple's three finds; `scan` gives them in order, X first
@@ -746,18 +811,27 @@ def _overruled_triples(finds, with_length) -> set:
     for triple in triples:
         if not _names_the_part(triple[0]):
             continue  # not named as the part anyway
-        if any(stated.get(f.axis, {_mm(f)}) != {_mm(f)} for f in triple):
+        disagree = [words for f in triple
+                    for size, words in stated.get(f.axis, {}).items() if size != _mm(f)]
+        if disagree:
             overruled.update(triple)
+            overruled.update(f for words in disagree for f in words)
     return overruled
 
 
 def stated_quantities(prompt, spec) -> dict:
     """{"spec": [...], "prompt": [...]}: every named quantity each text states, as a
     Quantity labelled with its `quantity_key`, the name the requirements are grouped by.
-    Unlike `extract_quantities` this reads triples, which only have names within a task."""
+    Unlike `extract_quantities` this reads triples, which only have names within a task.
+
+    A size in words that disagrees with the text's own triple is stated all the same:
+    left to the reviewer as a requirement, it can still contradict the other text. The
+    triple it disagrees with is not, since which of the two the part has is unknown."""
     return {
-        source: [_quantity(quantity_key(label), f.number, f.unit)
-                 for label, f in finds if label is not None]
+        source: [_quantity(quantity_key(stated), f.number, f.unit)
+                 for label, f, name in finds
+                 for stated in [name if f.origin != TRIPLE else label]
+                 if stated is not None]
         for source, finds in _read(prompt, spec)
     }
 
@@ -800,7 +874,9 @@ def extract_requirements(prompt, spec, new_id=None) -> list:
     it. The prompt is looser prose, so a value it gives for a noun the spec gives the
     same value for ("a mounting plate 60 mm wide" against "width of 60 mm") is taken as
     the spec's requirement said again, whatever qualifiers the prompt puts on it, and so
-    is a length the prompt gives no name for when the spec states that value.
+    is a length the prompt gives no name for when the spec states that value. A size the
+    spec leaves to the reviewer because its words and its triple disagree is not checked
+    because the prompt says it again.
 
     A hole count one text states twice is two requirements: "1 hole of 5 mm and 1 hole of
     6 mm" is two holes, not one hole said twice. Only a count that points back at another
@@ -823,11 +899,15 @@ def extract_requirements(prompt, spec, new_id=None) -> list:
     in_spec = set()  # loose keys, and (None, value) for every length the spec states
     for source, finds in _read(prompt, spec):
         counted = set()  # the hole counts this text has stated so far
-        for label, found in finds:
+        for label, found, name in finds:
             built = _requirement(found, label)
             if built is None:
                 continue
             key, fields = built
+            if source == "spec" and label is None and name is not None:
+                # A size the spec leaves to the reviewer ("Plate 60 x 40 x 10 mm. Width
+                # 80 mm."): the prompt saying either value again is not a check of it.
+                in_spec.add(loose((quantity_key(name), key[1])))
             again = fields["kind"] == "hole" and key in counted
             if again:
                 # More holes, not the first count said twice: its own requirement.

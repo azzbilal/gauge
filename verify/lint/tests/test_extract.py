@@ -335,19 +335,45 @@ class Triples(unittest.TestCase):
         self.assertAllManual("Plate 60 x 40 x 5 mm with a 10 x 10 x 20 mm post",
                              ["60 mm", "40 mm", "5 mm", "10 mm", "20 mm"])
 
-    def test_part_sizes_in_words_that_disagree_unname_a_lone_triple(self):
+    def test_part_sizes_in_words_that_disagree_send_both_to_the_reviewer(self):
+        self.assertAllManual("Width 80 mm, depth 50 mm. Block 60 x 40 x 5 mm",
+                             ["80 mm", "50 mm", "60 mm", "40 mm", "5 mm"])
+        self.assertAllManual("Plate 60 x 40 x 10 mm. Width 80 mm.",
+                             ["60 mm", "40 mm", "10 mm", "80 mm"])
+        # A feature size that does not keep its name still goes to the reviewer: "it".
+        self.assertAllManual("Plate 60 x 40 x 10 mm with a slot. It is 5 mm wide.",
+                             ["60 mm", "40 mm", "10 mm", "5 mm"])
+        # Thickness is the Z size, as the verifier reads it.
+        self.assertAllManual("Plate 60 x 40 x 5 mm, thickness 6 mm",
+                             ["60 mm", "40 mm", "5 mm", "6 mm"])
+        # With "length", width is the Y size. Only the words that disagree lose their
+        # name: "length of 80 mm" agrees, so it is still checked.
         self.assertEqual(
             [(r["text"], r["check_method"]) for r in
-             extract("", "Width 80 mm, depth 50 mm. Block 60 x 40 x 5 mm",
+             extract("", "Plate 80 x 50 x 6 mm, length of 80 mm, width of 60 mm",
                      counter())["requirements"]],
-            [("width of 80 mm", "machine"), ("depth of 50 mm", "machine"),
-             ("60 mm", "manual"), ("40 mm", "manual"), ("5 mm", "manual")])
-        # Thickness is the Z size, as the verifier reads it.
-        self.assertEqual(texts("Plate 60 x 40 x 5 mm, thickness 6 mm"),
-                         ["60 mm", "40 mm", "5 mm", "thickness of 6 mm"])
-        # With "length", width is the Y size.
-        self.assertEqual(texts("Plate 80 x 50 x 6 mm, length of 80 mm, width of 60 mm"),
-                         ["80 mm", "50 mm", "6 mm", "length of 80 mm", "width of 60 mm"])
+            [("80 mm", "manual"), ("50 mm", "manual"), ("6 mm", "manual"),
+             ("length of 80 mm", "machine"), ("60 mm", "manual")])
+        # A word size equal to another axis of the triple is the same number, unnamed.
+        self.assertAllManual("Plate 60 x 40 x 5 mm, width 40 mm", ["60 mm", "40 mm", "5 mm"])
+        # The prompt saying either size again does not bring a check back.
+        for prompt in ("Plate 80 mm wide", "60 mm wide", "Width of 80 mm"):
+            with self.subTest(prompt=prompt):
+                result = extract(prompt, "Plate 60 x 40 x 10 mm. Width 80 mm.", counter())
+                self.assertEqual([r["text"] for r in result["requirements"]],
+                                 ["60 mm", "40 mm", "10 mm", "80 mm"])
+                self.assertEqual({r["check_method"] for r in result["requirements"]},
+                                 {"manual"})
+        # A size in words left to the reviewer still contradicts the other text.
+        self.assertEqual(
+            contradictions("60 mm wide", "Plate 60 x 40 x 10 mm. Width 80 mm."),
+            [("critical", "width: prompt says 60 mm but spec says 80 mm")])
+        self.assertEqual(
+            contradictions("Plate 80 mm wide", "Plate 60 x 40 x 10 mm. Width 80 mm."), [])
+        # A feature size in words is not the part's, so it does not disagree.
+        self.assertEqual(
+            texts("Plate 60 x 40 x 5 mm. The pocket is 3 mm deep.", prompt="Width 60 mm"),
+            ["width of 60 mm", "depth of 40 mm", "height of 5 mm", "pocket depth of 3 mm"])
         # Words that agree keep the triple the part.
         self.assertEqual(texts("Plate 60 x 40 x 5 mm, 60 mm wide, 5 mm thick"),
                          ["width of 60 mm", "depth of 40 mm", "height of 5 mm",
@@ -416,13 +442,93 @@ class Triples(unittest.TestCase):
         # plate's width here is read as the slot's. That fails safe: no part check.
         self.assertEqual(texts("Plate with a slot, 60 mm wide"), ["slot width of 60 mm"])
 
-    def test_a_feature_size_after_and_is_not_looked_back_for(self):
-        # Known limit: only a size right after a comma or semicolon looks back, so the
-        # depth after "and" is read as the part's, and that un-names the plate triple.
+    def test_a_feature_size_after_and_keeps_the_feature_name(self):
+        part = ["width of 60 mm", "depth of 40 mm", "height of 10 mm"]
+        self.assertEqual(texts("Plate 60 x 40 x 10 mm with a slot 40 mm long and 5 mm wide."),
+                         part + ["slot length of 40 mm", "slot width of 5 mm"])
+        self.assertEqual(texts("Plate 60 x 40 x 10 mm with a groove 2 mm deep and 3 mm wide."),
+                         part + ["groove depth of 2 mm", "groove width of 3 mm"])
+        self.assertEqual(texts("a slot 40 mm long and 5 mm wide"),
+                         ["slot length of 40 mm", "slot width of 5 mm"])
+        self.assertEqual(texts("a groove 2 mm deep and 3 mm wide"),
+                         ["groove depth of 2 mm", "groove width of 3 mm"])
+        # Along a chain, past a comma, and with the noun first.
         self.assertEqual(
-            texts("Plate 60 x 40 x 5 mm with a slot 20 mm long, 6 mm wide and 3 mm deep"),
-            ["60 mm", "40 mm", "5 mm", "slot length of 20 mm", "slot width of 6 mm",
-             "depth of 3 mm"])
+            texts("Plate 60 x 40 x 10 mm with a slot 20 mm long, 6 mm wide and 3 mm deep"),
+            part + ["slot length of 20 mm", "slot width of 6 mm", "slot depth of 3 mm"])
+        self.assertEqual(texts("slot 20 mm long and 6 mm wide, and 3 mm deep"),
+                         ["slot length of 20 mm", "slot width of 6 mm", "slot depth of 3 mm"])
+        self.assertEqual(texts("slot length 20 mm and width 6 mm"),
+                         ["slot length of 20 mm", "slot width of 6 mm"])
+        # With link words after "and".
+        self.assertEqual(texts("The pocket has a depth of 3 mm and a width of 20 mm."),
+                         ["pocket depth of 3 mm", "pocket width of 20 mm"])
+        self.assertEqual(texts("The slot is 40 mm long and is 5 mm wide."),
+                         ["slot length of 40 mm", "slot width of 5 mm"])
+        # The lint scanner reads it the same way.
+        self.assertEqual([q.label for q in extract_quantities("a slot 40 mm long and 5 mm wide")],
+                         ["slot length", "slot width"])
+
+    def test_and_carries_only_a_feature_and_only_from_the_size_just_before(self):
+        # A part size does not carry: these are the plate's.
+        self.assertEqual(texts("Plate 60 mm wide and 40 mm deep"),
+                         ["plate width of 60 mm", "depth of 40 mm"])
+        # Not when "and" starts a new subject.
+        self.assertEqual(texts("a slot 40 mm long and the plate is 5 mm thick"),
+                         ["slot length of 40 mm", "thickness of 5 mm"])
+        # Not across a sentence end.
+        self.assertEqual(texts("A slot 40 mm long. And 5 mm thick."),
+                         ["slot length of 40 mm", "thickness of 5 mm"])
+        # Not across a triple.
+        self.assertEqual(texts("a slot 40 mm long and 60 x 40 x 10 mm and 10 mm thick")[-1],
+                         "thickness of 10 mm")
+
+    def test_a_sentence_about_a_feature_sizes_the_feature(self):
+        part = ["width of 60 mm", "depth of 40 mm", "height of 10 mm"]
+        self.assertEqual(texts("Plate 60 x 40 x 10 mm. The pocket is 3 mm deep."),
+                         part + ["pocket depth of 3 mm"])
+        self.assertEqual(texts("The pocket is 3 mm deep."), ["pocket depth of 3 mm"])
+        for sentence in ("The pocket must be 3 mm deep.", "The pocket shall be 3 mm deep.",
+                         "The pocket in the plate is 3 mm deep.",
+                         "The pocket has a depth of 3 mm.", "The pocket is to be 3 mm deep.",
+                         "The pocket depth is 3 mm.", "The pockets are 3 mm deep.",
+                         "A plate with a pocket that is 3 mm deep."):
+            with self.subTest(sentence=sentence):
+                self.assertEqual(texts(f"Plate 60 x 40 x 10 mm. {sentence}"),
+                                 part + ["pocket depth of 3 mm"])
+        # With "and" after it, both sizes are the pocket's.
+        self.assertEqual(texts("Plate 60 x 40 x 10 mm. The pocket is 3 mm deep and 20 mm wide."),
+                         part + ["pocket depth of 3 mm", "pocket width of 20 mm"])
+        # Mid-sentence, after the triple.
+        self.assertEqual(texts("Plate 60 x 40 x 10 mm and the pocket is 3 mm deep."),
+                         part + ["pocket depth of 3 mm"])
+        # The lint scanner reads it the same way.
+        self.assertEqual([q.label for q in extract_quantities("The pocket is 3 mm deep.")],
+                         ["pocket depth"])
+
+    def test_a_sentence_about_the_part_sizes_the_part(self):
+        self.assertEqual(texts("The plate with a pocket is 10 mm thick."),
+                         ["thickness of 10 mm"])
+        self.assertEqual(texts("A plate that is 10 mm thick with a pocket."),
+                         ["thickness of 10 mm"])
+        self.assertEqual(texts("The plate is 10 mm thick and the pocket is 3 mm deep."),
+                         ["thickness of 10 mm", "pocket depth of 3 mm"])
+        self.assertEqual(texts("The pocket is 3 mm deep and the plate is 10 mm thick."),
+                         ["pocket depth of 3 mm", "thickness of 10 mm"])
+        # The subject is read only in the size's own sentence.
+        self.assertEqual(texts("The pocket is square. 3 mm thick."), ["thickness of 3 mm"])
+
+    def test_a_feature_size_that_keeps_no_name_is_read_as_the_part(self):
+        # Known limits: the subject is read only across link words ("is", "must be",
+        # "has a"), the head of a compound is its last word, and "hole" is not a feature
+        # noun, so these sizes are read as the part's. With a plate triple they disagree
+        # with, both go to the reviewer; with none, nothing catches them.
+        self.assertEqual(texts("The slot is centred and 5 mm wide."), ["width of 5 mm"])
+        self.assertEqual(texts("The pocket floor is 3 mm thick."), ["thickness of 3 mm"])
+        self.assertEqual(texts("Holes 5 mm deep and 3 mm wide"),
+                         ["hole depth of 5 mm", "width of 3 mm"])
+        self.assertAllManual("Plate 60 x 40 x 10 mm. The slot is centred and 5 mm wide.",
+                             ["60 mm", "40 mm", "10 mm", "5 mm"])
 
     def test_a_size_heading_does_not_look_back(self):
         for text in ("Plate with a pocket. Dimensions: 80 x 50 x 6 mm",
@@ -725,6 +831,9 @@ SPECS = [
     "2 through holes, 1 hole, holes 5 mm deep, 12 mm, pitch 2 mm",
     "Plate 60 x 40 x 10 mm with a 20 x 10 mm pocket, 3 mm deep",
     "Plate 60 x 40 x 10 mm with a recess, depth 3 mm",
+    "Plate 60 x 40 x 10 mm. The pocket is 3 mm deep.",
+    "Plate 60 x 40 x 10 mm with a slot 40 mm long and 5 mm wide.",
+    "Plate 60 x 40 x 10 mm with a groove 2 mm deep and 3 mm wide.",
 ]
 
 
@@ -766,6 +875,22 @@ class RoundTrip(unittest.TestCase):
         self.assertEqual([v["status"] for v in verdicts],
                          ["pass", "pass", "pass", "not_run"])
         self.assertIn("pocket depth", verdicts[3]["detail"])
+
+    def test_feature_sizes_in_words_are_not_checked_as_the_part(self):
+        for spec, features in (
+                ("Plate 60 x 40 x 10 mm. The pocket is 3 mm deep.", ["pocket depth"]),
+                ("Plate 60 x 40 x 10 mm with a slot 40 mm long and 5 mm wide.",
+                 ["slot length", "slot width"]),
+                ("Plate 60 x 40 x 10 mm with a groove 2 mm deep and 3 mm wide.",
+                 ["groove depth", "groove width"])):
+            with self.subTest(spec=spec):
+                with mock.patch.dict(os.environ, {"GAUGE_CAD_EXEC": "0"}):
+                    verdicts = verify(packet("", spec, PLATE))
+                # The plate's three sizes pass; the feature sizes have no check.
+                self.assertEqual([v["status"] for v in verdicts],
+                                 ["pass"] * 3 + ["not_run"] * len(features))
+                for verdict, feature in zip(verdicts[3:], features):
+                    self.assertIn(feature, verdict["detail"])
 
     def test_the_verifier_fails_a_wrong_size(self):
         spec = "Plate 60 x 45 x 10 mm with 3 holes."
