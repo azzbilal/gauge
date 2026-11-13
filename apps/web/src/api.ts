@@ -127,6 +127,26 @@ export interface PreviewVerdict {
   detail: string;
 }
 
+/** One stored verifier verdict, as GET /tasks/:id/verification returns it: ids, not names. */
+export interface StoredVerdict {
+  rubric_item_id?: string;
+  requirement_id?: string | null;
+  check?: string;
+  status?: string; // pass | fail | not_run
+  detail?: string;
+  pass?: boolean;
+}
+
+/** The Layer 2 results stored when a task was created (GET /tasks/:id/verification). */
+export interface TaskVerification {
+  taskId: string;
+  lintFindings: LintFinding[];
+  verifierRuns: Array<{ subjectType: string; passed: boolean; results: unknown }>;
+  /** What the stored rows quote by id. Absent from an API older than the Review verifier. */
+  requirements?: Array<{ id: string; text: string }>;
+  rubricItems?: Array<{ id: string; text: string; requirementId: string | null }>;
+}
+
 /** `not_run` means the verify service could not be reached; `note` says why. */
 export interface TaskPreview {
   lint: { status: 'ok' | 'not_run'; findings: LintFinding[]; note?: string };

@@ -404,8 +404,10 @@ export class TaskService {
   }
 
   /**
-   * The stored Layer 2 results for a task: lint findings and verifier runs. A task the viewer
-   * may not see answers like a missing one; a gold clone has its own copy (materialiseGold).
+   * The stored Layer 2 results for a task: lint findings and verifier runs, with the
+   * requirements and rubric items they quote by id, so a reader can name them. A task the
+   * viewer may not see answers like a missing one; a gold clone has its own copy
+   * (materialiseGold).
    */
   async verification(taskId: string, viewer: AuthUser) {
     const task = await this.prisma.task.findUnique({
@@ -415,11 +417,22 @@ export class TaskService {
     if (!task || !visibleTo(task, viewer)) {
       throw new NotFoundException(`Task "${taskId}" not found`);
     }
-    const [lintFindings, verifierRuns] = await Promise.all([
-      this.prisma.lintFinding.findMany({ where: { taskId }, orderBy: { createdAt: 'asc' } }),
-      this.prisma.verifierRun.findMany({ where: { taskId }, orderBy: { createdAt: 'asc' } }),
+    const orderBy = { createdAt: 'asc' } as const;
+    const [lintFindings, verifierRuns, requirements, rubricItems] = await Promise.all([
+      this.prisma.lintFinding.findMany({ where: { taskId }, orderBy }),
+      this.prisma.verifierRun.findMany({ where: { taskId }, orderBy }),
+      this.prisma.requirement.findMany({
+        where: { taskId },
+        orderBy,
+        select: { id: true, text: true },
+      }),
+      this.prisma.rubricItem.findMany({
+        where: { taskId },
+        orderBy,
+        select: { id: true, text: true, requirementId: true },
+      }),
     ]);
-    return { taskId, lintFindings, verifierRuns };
+    return { taskId, lintFindings, verifierRuns, requirements, rubricItems };
   }
 
   /**

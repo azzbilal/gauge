@@ -6,6 +6,7 @@ import { navigate } from '../useHashRoute';
 import { EmptyState } from '../components/EmptyState';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { staggerAt } from '../stagger';
+import { ReviewVerifier } from './ReviewVerifier';
 
 const CRITERIA = ['verifiable', 'unambiguous', 'correct_reference', 'complete_constraints', 'difficulty'] as const;
 type Criterion = (typeof CRITERIA)[number];
@@ -345,6 +346,8 @@ export function ReviewView({ user, taskId }: { user: AuthUser; taskId?: string }
             {selected.reference ? <pre>{selected.reference}</pre> : <p className="muted">No reference</p>}
           </div>
         </div>
+
+        <ReviewVerifier taskId={selected.id} criteria={CRITERIA} />
 
         {mode === 'read' && <p className="muted rv-note">Read only · {stateWord(selected)}</p>}
 

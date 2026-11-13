@@ -209,6 +209,10 @@ textarea { width: 100%; min-height: 72px; resize: vertical; }
 
 .rv-note { margin: 1.5rem 0 0; padding-top: 0.8rem; border-top: 1px solid var(--lo); }
 
+/* machine verification: the Author self-check rows (.au-lint), read-only, above the scores */
+.rv-verify { max-width: 640px; }
+.rv-verify-note { margin: 0.6rem 0 0; font-size: 12px; line-height: 1.5; color: var(--text-2); }
+
 .rv-form {
   margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--lo);
   display: flex; flex-direction: column; gap: 1rem; max-width: 640px;
@@ -395,8 +399,10 @@ textarea { width: 100%; min-height: 72px; resize: vertical; }
   font-size: 13px; font-weight: 400; color: var(--text-2);
 }
 .au-lint ul { list-style: none; margin: 0; padding: 0; }
-.au-check .au-lint li {
-  grid-template-columns: 7px minmax(0, 1fr) auto; column-gap: 0.6rem;
+.au-lint li {
+  display: grid; grid-template-columns: 7px minmax(0, 1fr) auto; column-gap: 0.6rem;
+  align-items: baseline;
+  padding: 0.6rem 0; border-bottom: 1px solid var(--lo);
   color: var(--text-2);
   transition: color var(--t-stroke) var(--ease);
 }
@@ -411,7 +417,11 @@ textarea { width: 100%; min-height: 72px; resize: vertical; }
 .au-lint li[data-state='fail'] { color: var(--hi); }
 .au-lint li[data-state='fail'] i { border-color: var(--hi); }
 .au-lint ul + h3 { margin-top: 1.5rem; }
-.au-lint li p { overflow-wrap: anywhere; }
+.au-lint li p {
+  grid-column: 1 / -1; margin: 0.15rem 0 0;
+  font-size: 13px; line-height: 1.45; color: var(--text-2);
+  overflow-wrap: anywhere;
+}
 
 /* a refused submit: the same hairline rule as .error, with the findings listed under it */
 .au-blocked p { margin: 0; }

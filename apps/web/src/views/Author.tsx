@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { api, AuthUser, Campaign, can, LintFinding, Task, TaskPreview } from '../api';
+import { api, AuthUser, Campaign, can, Task, TaskPreview } from '../api';
 import { notify } from '../toast';
 import { PrimaryButton } from '../components/PrimaryButton';
+import { CheckRows, isBuiltInNoise, isCritical, Row, severityRank, words } from '../components/CheckRows';
 
 // The rubric a reviewer will score this task on (docs/pipeline.md §2), shown to the
 // author as a read-only self-check. Order and names match the backend CRITERIA.
@@ -38,23 +39,6 @@ function loadDraft(): Draft {
   }
 }
 
-// One row of the check column. `state` drives the dot: ring (idle), filled (pass),
-// bright ring (fail). The word says the same thing in text.
-type Row = { state: 'idle' | 'pass' | 'fail'; name: string; word: string; detail?: string | null };
-
-const SEVERITY_ORDER = ['critical', 'warning', 'info'];
-const isCritical = (f: LintFinding) => f.severity === 'critical';
-const words = (s: string) => s.replace(/_/g, ' ');
-
-// Every packet is built with rubric items that name no requirement (the manual criteria),
-// so the linter says so about each one, on every draft, and the author can do nothing about
-// it. Only that one sentence is hidden, and never a critical finding: "requirement Y is not
-// referenced by any rubric item" still shows.
-const isBuiltInNoise = (f: LintFinding) =>
-  f.rule === 'traceability' &&
-  !isCritical(f) &&
-  /^rubric item .+ does not reference any requirement$/.test(f.detail ?? '');
-
 // A check that could not be asked for at all reads the same as one the API could not run.
 function notRun(note: string): TaskPreview {
   return {
@@ -69,13 +53,8 @@ function lintRows(preview: TaskPreview | null): Row[] {
   if (status !== 'ok') return [{ state: 'idle', name: 'Packet lint', word: 'not run', detail: note }];
   const findings = preview.lint.findings.filter((f) => !isBuiltInNoise(f));
   if (findings.length === 0) return [{ state: 'pass', name: 'No findings', word: 'pass' }];
-  // Critical first; a severity this view does not know sorts last.
-  const rank = (f: LintFinding) => {
-    const at = SEVERITY_ORDER.indexOf(f.severity);
-    return at < 0 ? SEVERITY_ORDER.length : at;
-  };
   return [...findings]
-    .sort((a, b) => rank(a) - rank(b))
+    .sort((a, b) => severityRank(a) - severityRank(b))
     .map((f) => ({
       state: isCritical(f) ? 'fail' : 'idle',
       name: words(f.rule),
@@ -105,24 +84,6 @@ function verdictRows(preview: TaskPreview | null): Row[] {
     word: v.status === 'pass' || v.status === 'fail' ? v.status : 'not run',
     detail: [words(v.check), v.detail].filter(Boolean).join(': '),
   }));
-}
-
-function CheckRows({ title, rows }: { title: string; rows: Row[] }) {
-  return (
-    <>
-      <h3>{title}</h3>
-      <ul>
-        {rows.map((r, i) => (
-          <li key={i} data-state={r.state}>
-            <i aria-hidden="true" />
-            <span className="au-lint-name">{r.name}</span>
-            <span className="au-lint-word">{r.word}</span>
-            {r.detail && <p>{r.detail}</p>}
-          </li>
-        ))}
-      </ul>
-    </>
-  );
 }
 
 export function AuthorView({ user }: { user: AuthUser }) {
