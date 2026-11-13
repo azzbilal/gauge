@@ -9,7 +9,10 @@ const DEFAULT_TARGET = 10;
 const MAX_TARGET = 9999;
 
 interface Tally {
+  /** Every task the viewer can see: progress toward the campaign's target. */
   total: number;
+  /** Tasks with a final outcome, accepted or rejected: the accept rate's denominator. */
+  decided: number;
   accepted: number;
 }
 
@@ -54,9 +57,14 @@ export function CampaignsView() {
     if (!tasks) return null;
     const byCampaign = new Map<string, Tally>();
     for (const t of tasks) {
-      const tally = byCampaign.get(t.campaign.id) ?? { total: 0, accepted: 0 };
+      const tally = byCampaign.get(t.campaign.id) ?? { total: 0, decided: 0, accepted: 0 };
       tally.total += 1;
-      if (t.status === 'ACCEPTED') tally.accepted += 1;
+      // A task still in review has no outcome yet, so it is neither accepted nor rejected and
+      // stays out of the rate. (Gold rows always read as in review, so they stay out too.)
+      if (t.reviewState === 'decided') {
+        tally.decided += 1;
+        if (t.status === 'ACCEPTED') tally.accepted += 1;
+      }
       byCampaign.set(t.campaign.id, tally);
     }
     return byCampaign;
@@ -181,10 +189,10 @@ export function CampaignsView() {
       ) : (
         <ul className="cp-grid stagger">
           {campaigns.map((c, i) => {
-            const tally = tallies ? (tallies.get(c.id) ?? { total: 0, accepted: 0 }) : null;
+            const tally = tallies ? (tallies.get(c.id) ?? { total: 0, decided: 0, accepted: 0 }) : null;
             const done = tally ? tally.total : (c._count?.tasks ?? 0);
             const progress = c.targetCount > 0 ? Math.min(1, done / c.targetCount) : 0;
-            const rate = tally && tally.total > 0 ? Math.round((tally.accepted / tally.total) * 100) : null;
+            const rate = tally && tally.decided > 0 ? Math.round((tally.accepted / tally.decided) * 100) : null;
             return (
               <li key={c.id} style={staggerAt(i)}>
                 <a className="cp-card" href={`#/campaigns/${c.id}`}>
@@ -219,7 +227,7 @@ export function CampaignsView() {
                     {rate === null || !tally ? (
                       <span className="num">—</span>
                     ) : (
-                      <span className="num" title={`${tally.accepted} accepted of ${tally.total}`}>
+                      <span className="num" title={`${tally.accepted} accepted of ${tally.decided} decided`}>
                         {rate}%
                       </span>
                     )}

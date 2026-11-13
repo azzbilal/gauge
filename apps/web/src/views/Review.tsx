@@ -32,12 +32,27 @@ const at = (value: number) => ({ '--p': value / MAX }) as CSSProperties;
 
 type Mode = 'read' | 'decided' | 'review' | 'adjudicate';
 
-/** What the signed-in user may do with this task; the API enforces the same roles. */
-function modeOf(task: Task, user: AuthUser): Mode {
+/**
+ * What the signed-in user may do with this task; the API enforces the same rules.
+ * `queued`: the task is in the user's work queue, which the API builds from exactly the tasks
+ * they may act on. A task opened by link from outside the queue (their own, one they already
+ * reviewed, one still waiting on others) is read-only: a form there would only be refused.
+ */
+function modeOf(task: Task, user: AuthUser, queued: boolean): Mode {
   if (task.reviewState === 'decided') return 'decided';
   // The API decides: a conflicted lead or admin may adjudicate only when nobody independent can.
   if (task.reviewState === 'awaiting_adjudication') return task.canAdjudicate ? 'adjudicate' : 'read';
-  return can(user, 'REVIEWER') ? 'review' : 'read';
+  return queued && can(user, 'REVIEWER') ? 'review' : 'read';
+}
+
+const stateWord = (task: Task) => task.reviewState.replace(/_/g, ' ');
+
+/** A task opened by its address from outside the loaded list: the task, or null if not found. */
+interface Linked {
+  id: string;
+  task: Task | null;
+  /** Set when the fetch failed for a reason other than "not found". */
+  error?: string;
 }
 
 /**
@@ -62,6 +77,7 @@ export function ReviewView({ user, taskId }: { user: AuthUser; taskId?: string }
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [linked, setLinked] = useState<Linked | null>(null);
 
   const sliders = useRef<(HTMLInputElement | null)[]>([]);
   const rows = useRef(new Map<string, HTMLButtonElement>());
@@ -80,10 +96,38 @@ export function ReviewView({ user, taskId }: { user: AuthUser; taskId?: string }
 
   useEffect(load, [load]);
 
-  // The address is the selection: '/review/:id'. One task is always open.
-  const selected = tasks.find((t) => t.id === taskId) ?? tasks[0];
+  // The address is the selection: '/review/:id' opens that task and no other. A bare
+  // '/review' opens the head of the list.
+  const listed = taskId ? tasks.find((t) => t.id === taskId) : tasks[0];
+
+  // A linked task outside the list (a decided task, one already reviewed, one opened from a
+  // campaign page) is fetched on its own; the API answers a hidden task like a missing one.
+  // Refetched whenever the list reloads, so it shows the state a submit left it in.
+  useEffect(() => {
+    if (!loaded || !taskId || tasks.some((t) => t.id === taskId)) return;
+    let live = true;
+    api
+      .get<Task>(`/api/tasks/${encodeURIComponent(taskId)}`)
+      .then((task) => {
+        if (live) setLinked({ id: taskId, task });
+      })
+      .catch((e: Error) => {
+        if (!live) return;
+        const missing = /^404:/.test(e.message);
+        setLinked({ id: taskId, task: null, error: missing ? undefined : e.message });
+      });
+    return () => {
+      live = false;
+    };
+  }, [loaded, taskId, tasks]);
+
+  // Only an answer for the address in the bar counts; a stale one for an earlier link does not.
+  const link = !listed && taskId && linked?.id === taskId ? linked : null;
+  const selected = listed ?? link?.task ?? undefined;
+  // Linked but not answered yet: show nothing, rather than another task or an empty queue.
+  const pending = !!taskId && !listed && !link;
   const selectedId = selected?.id;
-  const mode: Mode = selected ? modeOf(selected, user) : 'read';
+  const mode: Mode = selected ? modeOf(selected, user, queued && selected === listed) : 'read';
   const editable = mode === 'review' || mode === 'adjudicate';
   const failed = failing(scores);
   const missingScores = unscored(scores);
@@ -210,12 +254,23 @@ export function ReviewView({ user, taskId }: { user: AuthUser; taskId?: string }
     };
   }, []);
 
-  if (!selected) {
+  // The linked task could not be shown: not found (or hidden), or the request failed.
+  const missing =
+    link && !link.task ? (
+      link.error ? (
+        <p className="error">{link.error}</p>
+      ) : (
+        <EmptyState title="Task not found" body="It may have been removed, or the link is wrong." />
+      )
+    ) : null;
+
+  if (!selected && tasks.length === 0) {
     return (
       <section>
         <h2>Review queue</h2>
         {error && <p className="error">{error}</p>}
-        {loaded && (
+        {missing}
+        {loaded && !taskId && (
           <EmptyState
             title={queued ? 'Nothing to review' : 'No tasks yet'}
             body={queued ? 'There is nothing waiting for you right now.' : 'Tasks authors submit will show up here for review.'}
@@ -225,9 +280,10 @@ export function ReviewView({ user, taskId }: { user: AuthUser; taskId?: string }
     );
   }
 
-  // Reviewer scores are only present once the API releases them.
-  const [first, second] = selected.taskReviews;
-  const peers = mode === 'adjudicate' && first?.scores && second?.scores ? [first.scores, second.scores] : null;
+  // Reviewer scores are only present once the API releases them (split or decided).
+  const [first, second] = selected?.taskReviews ?? [];
+  const released = first?.scores && second?.scores ? [first, second] : null;
+  const peers = mode === 'adjudicate' && released ? released.map((r) => r.scores ?? {}) : null;
 
   return (
     <section className="rv">
@@ -248,7 +304,7 @@ export function ReviewView({ user, taskId }: { user: AuthUser; taskId?: string }
                     else rows.current.delete(t.id);
                   }}
                   className="rv-row"
-                  aria-current={t.id === selected.id ? 'true' : undefined}
+                  aria-current={t.id === selected?.id ? 'true' : undefined}
                   onClick={() => select(t.id)}
                 >
                   <span className="rv-row-prompt">{t.prompt}</span>
@@ -273,6 +329,9 @@ export function ReviewView({ user, taskId }: { user: AuthUser; taskId?: string }
         </ul>
       </aside>
 
+      {!selected ? (
+        <article className="rv-task">{!pending && missing}</article>
+      ) : (
       <article className="rv-task" key={selected.id}>
         <p className="rv-prompt">{selected.prompt}</p>
 
@@ -287,14 +346,9 @@ export function ReviewView({ user, taskId }: { user: AuthUser; taskId?: string }
           </div>
         </div>
 
-        {mode === 'read' && <p className="muted rv-note">Choose who you are (top right) to review.</p>}
+        {mode === 'read' && <p className="muted rv-note">Read only · {stateWord(selected)}</p>}
 
-        {mode === 'decided' && (
-          <p className="muted rv-note">
-            Decided: {selected.status.toLowerCase()}
-            {selected.adjudication?.reason ? ` by adjudication — ${selected.adjudication.reason}` : ''}
-          </p>
-        )}
+        {mode === 'decided' && <Decided task={selected} reviews={released} />}
 
         {editable && (
           <div className="rv-form">
@@ -443,6 +497,60 @@ export function ReviewView({ user, taskId }: { user: AuthUser; taskId?: string }
 
         {!editable && error && <p className="error">{error}</p>}
       </article>
+      )}
     </section>
+  );
+}
+
+/**
+ * A decided task's final state: the outcome, how it was reached (the two reviewers agreed, or
+ * an adjudicator resolved their split, with the reason), and both reviews, released once decided.
+ */
+function Decided({ task, reviews }: { task: Task; reviews: Task['taskReviews'] | null }) {
+  const accepted = task.status === 'ACCEPTED';
+  const adjudicated = !!task.adjudication && task.adjudication.verdict !== 'NEEDS_REVIEW';
+  const scores = reviews?.map((r) => r.scores ?? {}) ?? null;
+  return (
+    <div className="rv-form">
+      <p className={`rv-verdict${accepted ? ' accept' : ''}`}>
+        <b>{accepted ? 'Accepted' : 'Rejected'}</b>
+        <span>{adjudicated ? 'by adjudication' : 'by agreement'}</span>
+      </p>
+      {adjudicated && task.adjudication?.reason && (
+        <p className="muted">Adjudication reason: {task.adjudication.reason}</p>
+      )}
+      {reviews && scores && (
+        <>
+          <p className="muted">
+            {reviews.map((r, i) => `reviewer ${i + 1}: ${r.accepted ? 'accept' : 'reject'}`).join(' · ')}
+          </p>
+          <div className="rv-rubric">
+            {CRITERIA.map((c) => {
+              const disagree = scores[0][c] !== scores[1][c];
+              return (
+                <div key={c} className="rv-crit">
+                  <label>{label(c)}</label>
+                  <div className="rv-ticks" aria-hidden="true">
+                    {STOPS.map((s) => (
+                      <i key={s} className={s === threshold(c) ? 'pass' : undefined} style={at(s)} />
+                    ))}
+                  </div>
+                  <span />
+                  {scores.map((p, r) => (
+                    <div key={r} className={`rv-peer${disagree ? ' disagree' : ''}`}>
+                      <span>reviewer {r + 1}</span>
+                      <div className="rv-peer-track">
+                        <i style={at(p[c] ?? 0)} />
+                      </div>
+                      <b>{p[c] ?? '–'}</b>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
