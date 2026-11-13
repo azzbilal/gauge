@@ -10,7 +10,7 @@ import {
 } from './prompt';
 import { IntakeAssessment, LlmScoringProvider, RawScores, RubricCriterion } from './types';
 
-export const OLLAMA_PROMPT_VERSION = 'intake-v3-fewshot';
+export const OLLAMA_PROMPT_VERSION = 'intake-v4-fewshot';
 
 interface OllamaChatResponse {
   model: string;

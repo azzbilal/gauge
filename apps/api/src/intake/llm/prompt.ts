@@ -15,17 +15,36 @@ export const FEWSHOT_SYSTEM_PROMPT =
   BASE_SYSTEM_PROMPT +
   '\n\nYou will first see worked examples scored by a senior reviewer. Match their calibration:' +
   '\n- Reason criterion by criterion in "reasoning" BEFORE giving scores.' +
-  '\n- Score only what the CV explicitly states; general seniority or hobbies are not evidence.' +
-  '\n- Score the depth the CV demonstrates, not the tools it names. Using a tool is not mastery of it.' +
-  '\n- Use the whole scale. Anchors, consistent with the examples:' +
-  '\n  5 = several years of professional work that matches the criterion exactly, with specific and demanding evidence' +
-  ' (e.g. building a reusable parametric CadQuery library used by a team; GD&T plus tolerance stack-ups on every assembly).' +
-  '\n  4 = strong professional evidence that misses one aspect the posting cares about (e.g. years of GUI CAD but no parametric or code-first work).' +
-  '\n  3 = real but limited: narrow, basic, or hobby-scale (e.g. "basic GD&T"; OpenSCAD hobby models; a few small scripts).' +
-  '\n  2 = some relevant exposure that is shallow or indirect.' +
-  '\n  1 = only an adjacent, transferable skill (e.g. general Python with no CAD use).' +
-  '\n  0 = no evidence, with evidence "no evidence".' +
-  '\n- Scripts that only automate file handling (export, renaming) show little ability to express geometry in code.' +
+  '\n- Score what the CV states and what its stated work clearly requires: a professional role is evidence of the skills that role uses every day.' +
+  ' Do not credit hobbies listed only under interests, and never invent tools or achievements.' +
+  '\n- Score each criterion on its own scale below; a weak fit for the posting on one criterion does not lower the others.' +
+  '\n- cad (CAD domain depth):' +
+  '\n  5 = years of professional parametric CAD with demanding evidence (configurable families, design tables, a code-CAD library).' +
+  '\n  4 = professional engineering work in which CAD models are a daily tool, even if GUI-only, CAM-oriented, surface-based or not naming the tool.' +
+  '\n  3 = real but narrow CAD: long-term 2D drafting, small-shop part modeling, or a hobby library of parametric models.' +
+  '\n  2 = light CAD: hobby or student GUI modeling, or CAD used only at the edge of another profession (BIM, importing models into other software).' +
+  '\n  1 = no CAD, but adjacent 3D or physical making (renders, hand building).' +
+  '\n  0 = nothing related.' +
+  '\n- geo (Geometric reasoning), inside or outside CAD:' +
+  '\n  5 = demanding geometric or dimensional work as the core of the job (tolerance analysis and stack-ups, complex surfaces).' +
+  '\n  4 = professional work that requires reasoning about geometry, constraints or dimensions: machined or sheet-metal parts,' +
+  ' motion and kinematics, structural or load analysis, teaching dimensioning.' +
+  '\n  3 = practical geometry of limited scope: simple parts and enclosures, machining and toolpaths, rebuilding measured parts, parametric hobby models.' +
+  '\n  2 = basic geometry: simple hobby prints, coursework, drawing up plans someone else designed, building by hand from sketches.' +
+  '\n  1 = visual or aesthetic 3D only.' +
+  '\n  0 = nothing related.' +
+  '\n- code (Scripting ability): programming ability in ANY language counts in full; CAD-specific code is not required for a high score.' +
+  '\n  5 = years of professional software engineering, or a reusable code-CAD library used by a team.' +
+  '\n  4 = professional programming as a main part of the job (software, data, robotics or simulation work), or a maintained code-CAD library.' +
+  '\n  3 = regular scripting that supports a non-software job.' +
+  '\n  2 = light or occasional code: macros, small task scripts, analysis scripts, hand-written machine code, a programming course.' +
+  '\n  1 = no code, only design tools or spreadsheet-driven configuration.' +
+  '\n  0 = no computing skill at all, or the CV says there is no code or scripting.' +
+  '\n- comm (Clarity of communication): judge the CV itself and the communication its stated work requires; absence of a writing sample is not a low score.' +
+  '\n  5 = documentation, writing or teaching is an explicit, regular part of the work.' +
+  '\n  4 = an established professional in a technical or design role whose output others build from (drawings, plans, code, models), or occasional public technical writing.' +
+  '\n  3 = a clear CV with no professional technical role: students, hobbyists, trades, non-technical jobs.' +
+  '\n  2 or lower = only when the CV itself is confusing, contradictory or careless.' +
   '\n- "evidence" must be ONE contiguous quote copied verbatim from the CV being scored (no "...", no joined fragments), never from the examples.' +
   '\n- Lower confidence when the CV is thin or the evidence is indirect.' +
   '\n- Return exactly one score per rubric criterion, using the criterion ids given.';
