@@ -9,7 +9,10 @@ import { staggerAt } from '../stagger';
 
 const CRITERIA = ['verifiable', 'unambiguous', 'correct_reference', 'complete_constraints', 'difficulty'] as const;
 type Criterion = (typeof CRITERIA)[number];
-type Scores = Record<string, number>;
+// A criterion is absent until the reviewer scores it: nothing is pre-filled, so a skipped
+// criterion cannot reach the agreement statistic as a score nobody gave.
+type Scores = Partial<Record<Criterion, number>>;
+type Evidence = Partial<Record<Criterion, string>>;
 
 const STOPS = [0, 1, 2, 3, 4, 5];
 const MAX = 5;
@@ -19,8 +22,10 @@ const REVIEWS_REQUIRED = 2;
 // every criterion >= 3 and verifiable >= 4.
 const threshold = (c: Criterion) => (c === 'verifiable' ? 4 : 3);
 const label = (c: Criterion) => c.replace(/_/g, ' ');
-const failing = (scores: Scores) => CRITERIA.filter((c) => (scores[c] ?? 3) < threshold(c));
-const freshScores = (): Scores => Object.fromEntries(CRITERIA.map((c) => [c, 3]));
+const failing = (scores: Scores) =>
+  CRITERIA.filter((c) => scores[c] !== undefined && (scores[c] as number) < threshold(c));
+const unscored = (scores: Scores) => CRITERIA.filter((c) => scores[c] === undefined);
+const unevidenced = (evidence: Evidence) => CRITERIA.filter((c) => !evidence[c]?.trim());
 
 /** Position along the slider track, 0..1, consumed by the CSS as --p. */
 const at = (value: number) => ({ '--p': value / MAX }) as CSSProperties;
@@ -51,7 +56,8 @@ export function ReviewView({ user, taskId }: { user: AuthUser; taskId?: string }
   const queued = hasQueue(user);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [scores, setScores] = useState<Scores>(freshScores);
+  const [scores, setScores] = useState<Scores>({});
+  const [evidence, setEvidence] = useState<Evidence>({});
   const [crit, setCrit] = useState(0);
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
@@ -78,11 +84,21 @@ export function ReviewView({ user, taskId }: { user: AuthUser; taskId?: string }
   const mode: Mode = selected ? modeOf(selected, user) : 'read';
   const editable = mode === 'review' || mode === 'adjudicate';
   const failed = failing(scores);
-  const accepted = failed.length === 0;
-  const canSubmit = editable && !busy && (mode === 'review' || reason.trim().length > 0);
+  const missingScores = unscored(scores);
+  // The adjudication endpoint takes a verdict and a reason; evidence belongs to peer reviews.
+  const missingEvidence = mode === 'review' ? unevidenced(evidence) : [];
+  const scored = missingScores.length === 0;
+  const accepted = scored && failed.length === 0;
+  const canSubmit =
+    editable &&
+    !busy &&
+    scored &&
+    missingEvidence.length === 0 &&
+    (mode === 'review' || reason.trim().length > 0);
 
   useEffect(() => {
-    setScores(freshScores());
+    setScores({});
+    setEvidence({});
     setCrit(0);
     setReason('');
     setError('');
@@ -107,6 +123,7 @@ export function ReviewView({ user, taskId }: { user: AuthUser; taskId?: string }
   }
 
   const setScore = (c: Criterion, value: number) => setScores((s) => ({ ...s, [c]: value }));
+  const setNote = (c: Criterion, text: string) => setEvidence((e) => ({ ...e, [c]: text }));
 
   async function submit() {
     if (!selected || !canSubmit) return;
@@ -122,7 +139,8 @@ export function ReviewView({ user, taskId }: { user: AuthUser; taskId?: string }
         });
         notify('Adjudication saved');
       } else {
-        await api.post(`/api/tasks/${selected.id}/reviews`, { scores });
+        const notes = Object.fromEntries(CRITERIA.map((c) => [c, evidence[c]?.trim() ?? '']));
+        await api.post(`/api/tasks/${selected.id}/reviews`, { scores, evidence: notes });
         notify('Review saved');
       }
       navigate(next ? `/review/${next.id}` : '/review');
@@ -140,7 +158,7 @@ export function ReviewView({ user, taskId }: { user: AuthUser; taskId?: string }
     if (e.altKey) return;
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       e.preventDefault();
-      // A held chord must not walk down the queue submitting defaults.
+      // A held chord must not walk down the queue submitting one review after another.
       if (!e.repeat) void submit();
       return;
     }
@@ -158,7 +176,7 @@ export function ReviewView({ user, taskId }: { user: AuthUser; taskId?: string }
       focusCriterion(crit + (e.key === 'ArrowDown' ? 1 : -1));
       return;
     }
-    if (/^[1-5]$/.test(e.key)) {
+    if (/^[0-5]$/.test(e.key)) {
       e.preventDefault();
       setScore(CRITERIA[crit], Number(e.key));
     }
@@ -261,9 +279,12 @@ export function ReviewView({ user, taskId }: { user: AuthUser; taskId?: string }
 
             <div className="rv-rubric">
               {CRITERIA.map((c, i) => {
-                const value = scores[c] ?? 3;
+                const value = scores[c];
+                const set = value !== undefined;
                 const min = threshold(c);
                 const disagree = peers ? peers[0][c] !== peers[1][c] : false;
+                const commit = (e: { currentTarget: HTMLInputElement }) =>
+                  setScore(c, Number(e.currentTarget.value));
                 return (
                   <div key={c} className={`rv-crit${i === crit ? ' focus' : ''}`}>
                     <label htmlFor={`rv-${c}`}>{label(c)}</label>
@@ -274,13 +295,22 @@ export function ReviewView({ user, taskId }: { user: AuthUser; taskId?: string }
                           sliders.current[i] = el;
                         }}
                         type="range"
+                        // Unscored, the thumb still has to rest somewhere; it is drawn hollow.
+                        className={set ? undefined : 'unset'}
                         min={0}
                         max={MAX}
                         step={1}
-                        value={value}
-                        aria-valuetext={`${value} of ${MAX}, passes at ${min}`}
+                        value={value ?? 0}
+                        aria-valuetext={
+                          set ? `${value} of ${MAX}, passes at ${min}` : `not scored, passes at ${min}`
+                        }
                         onFocus={() => setCrit(i)}
-                        onChange={(e) => setScore(c, Number(e.target.value))}
+                        onChange={commit}
+                        // Pressing the value the thumb already shows fires no change event, so
+                        // without this an unscored slider could not take its resting value.
+                        // Not onClick: activating the <label> synthesises a click, which would
+                        // score the criterion without the reviewer choosing a value.
+                        onPointerUp={commit}
                       />
                       <div className="rv-ticks" aria-hidden="true">
                         {STOPS.map((s) => (
@@ -288,9 +318,21 @@ export function ReviewView({ user, taskId }: { user: AuthUser; taskId?: string }
                         ))}
                       </div>
                     </div>
-                    <output htmlFor={`rv-${c}`} className={value >= min ? 'ok' : undefined}>
-                      {value}
+                    <output htmlFor={`rv-${c}`} className={set && value >= min ? 'ok' : undefined}>
+                      {set ? value : '–'}
                     </output>
+                    {mode === 'review' && (
+                      <textarea
+                        className="rv-evidence"
+                        aria-label={`${label(c)} evidence`}
+                        placeholder="Evidence: what in the task justifies this score (required)"
+                        rows={2}
+                        required
+                        value={evidence[c] ?? ''}
+                        onFocus={() => setCrit(i)}
+                        onChange={(e) => setNote(c, e.target.value)}
+                      />
+                    )}
                     {peers?.map((p, r) => (
                       <div key={r} className={`rv-peer${disagree ? ' disagree' : ''}`}>
                         <span>reviewer {r + 1}</span>
@@ -319,16 +361,30 @@ export function ReviewView({ user, taskId }: { user: AuthUser; taskId?: string }
             )}
 
             <p className={`rv-verdict${accepted ? ' accept' : ''}`} aria-live="polite">
-              <b>{accepted ? 'Accept' : 'Reject'}</b>
-              {failed.map((c) => (
-                <span key={c}>
-                  {label(c)}{' '}
-                  <span className="num">
-                    {scores[c] ?? 3} &lt; {threshold(c)}
-                  </span>
-                </span>
-              ))}
+              {scored ? (
+                <>
+                  <b>{accepted ? 'Accept' : 'Reject'}</b>
+                  {failed.map((c) => (
+                    <span key={c}>
+                      {label(c)}{' '}
+                      <span className="num">
+                        {scores[c]} &lt; {threshold(c)}
+                      </span>
+                    </span>
+                  ))}
+                </>
+              ) : (
+                <>
+                  <b>Not scored</b>
+                  {missingScores.map((c) => (
+                    <span key={c}>{label(c)}</span>
+                  ))}
+                </>
+              )}
             </p>
+            {missingEvidence.length > 0 && (
+              <p className="rv-missing">Evidence needed: {missingEvidence.map(label).join(', ')}</p>
+            )}
 
             {error && <p className="error">{error}</p>}
 
@@ -336,10 +392,16 @@ export function ReviewView({ user, taskId }: { user: AuthUser; taskId?: string }
               <PrimaryButton
                 disabled={!canSubmit}
                 onClick={() => void submit()}
-                label={mode === 'adjudicate' ? `${accepted ? 'Accept' : 'Reject'} task` : 'Submit review'}
+                label={
+                  mode === 'adjudicate'
+                    ? scored
+                      ? `${accepted ? 'Accept' : 'Reject'} task`
+                      : 'Score every criterion'
+                    : 'Submit review'
+                }
               />
               <span className="rv-keys">
-                <kbd>1</kbd>–<kbd>5</kbd> score · <kbd>↑</kbd>
+                <kbd>0</kbd>–<kbd>5</kbd> score · <kbd>↑</kbd>
                 <kbd>↓</kbd> criterion · <kbd>J</kbd>
                 <kbd>K</kbd> task · <kbd>Ctrl</kbd>
                 <kbd>Enter</kbd> submit

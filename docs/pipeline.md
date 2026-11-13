@@ -37,7 +37,10 @@ Every task is scored 0–5 on five criteria, each with an evidence quote from th
 ### 2.1 Review protocol
 
 Scores are whole numbers. Each review yields a verdict (accept / reject) from the acceptance
-bar; the reviewer never sets the verdict directly.
+bar; the reviewer never sets the verdict directly. A review must score every criterion and
+give a non-empty evidence note for each; the API refuses a review with any criterion unscored
+or without evidence, and the form pre-fills nothing, so a skipped criterion never enters the
+agreement statistic as a default score.
 
 | Reviews in | Task status | What happens |
 |------------|-------------|--------------|

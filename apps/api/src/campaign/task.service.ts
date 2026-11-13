@@ -548,6 +548,7 @@ export class TaskService {
           reviewerId: reviewerId,
           reviewerExpertId: reviewerId,
           scores: dto.scores as Prisma.InputJsonValue,
+          evidence: dto.evidence as Prisma.InputJsonValue,
           accepted,
         },
       });
@@ -617,6 +618,7 @@ export class TaskService {
         reviewerId: reviewerId,
         reviewerExpertId: reviewerId,
         scores: dto.scores as Prisma.InputJsonValue,
+        evidence: dto.evidence as Prisma.InputJsonValue,
         accepted,
       },
     });

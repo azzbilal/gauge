@@ -9,6 +9,8 @@ export { ACCEPTANCE_MIN, VERIFIABLE_MIN, isAccepted } from '../review-protocol';
 // a real identity cannot be paired, calibrated, or kept independent of the author.
 export interface CreateTaskReviewDto {
   scores: Scores;
+  /** Per criterion, the reviewer's note on what in the task justifies the score. */
+  evidence: Record<string, string>;
 }
 
 export interface AdjudicateTaskDto {
@@ -30,21 +32,33 @@ function requiredString(value: unknown, name: string): string {
   return value.trim();
 }
 
-export function parseCreateTaskReviewDto(body: unknown): CreateTaskReviewDto {
-  const { scores } = asObject(body);
-  if (!scores || typeof scores !== 'object' || Array.isArray(scores)) {
-    throw new BadRequestException('scores must be an object');
+function objectField(value: unknown, name: string): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new BadRequestException(`${name} must be an object`);
   }
-  const s = scores as Record<string, unknown>;
+  return value as Record<string, unknown>;
+}
+
+/**
+ * Every criterion must be scored and carry evidence (docs/pipeline.md §2). Nothing is
+ * defaulted: a criterion the reviewer skipped would otherwise enter the agreement
+ * statistic as a score nobody gave.
+ */
+export function parseCreateTaskReviewDto(body: unknown): CreateTaskReviewDto {
+  const { scores, evidence } = asObject(body);
+  const s = objectField(scores, 'scores');
+  const e = objectField(evidence, 'evidence');
   for (const c of CRITERIA) {
     const v = s[c];
     // Whole numbers only: the rubric is a 0-5 scale and agreement is measured on it.
     if (typeof v !== 'number' || !Number.isInteger(v) || v < 0 || v > 5) {
       throw new BadRequestException(`scores.${c} must be a whole number from 0 to 5`);
     }
+    requiredString(e[c], `evidence.${c}`);
   }
   return {
     scores: Object.fromEntries(CRITERIA.map((c) => [c, s[c] as number])),
+    evidence: Object.fromEntries(CRITERIA.map((c) => [c, (e[c] as string).trim()])),
   };
 }
 

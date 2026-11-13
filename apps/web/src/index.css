@@ -260,6 +260,16 @@ textarea { width: 100%; min-height: 72px; resize: vertical; }
 }
 .rv-crit.focus .rv-slider input[type='range']::-webkit-slider-thumb { border-color: var(--hi); }
 .rv-crit.focus .rv-slider input[type='range']::-moz-range-thumb { border-color: var(--hi); }
+/* not scored yet: a hollow, dashed thumb, so its resting place does not read as a value */
+.rv-slider input[type='range'].unset::-webkit-slider-thumb { border-style: dashed; border-color: var(--mid); background: transparent; }
+.rv-slider input[type='range'].unset::-moz-range-thumb { border-style: dashed; border-color: var(--mid); background: transparent; }
+
+/* evidence note under its criterion, under the slider and value columns */
+.rv-crit > .rv-evidence {
+  grid-column: 2 / -1; margin-top: 0.35rem; min-height: 2.8rem;
+  font-size: 13px; line-height: 1.45;
+}
+.rv-form > p.rv-missing { font-size: 13px; color: var(--text-2); }
 
 /* stops under the track; the thumb centre travels inset by half its width */
 .rv-ticks, .rv-peer-track { position: relative; }

@@ -36,6 +36,7 @@ type Review = {
   reviewerId: string;
   reviewerExpertId: string | null;
   scores: unknown;
+  evidence?: unknown;
   accepted: boolean;
   createdAt: Date;
 };
@@ -298,6 +299,9 @@ const scores = {
   complete_constraints: 5,
   difficulty: 5,
 };
+const evidence = Object.fromEntries(Object.keys(scores).map((c) => [c, `${c}: quoted from the spec`]));
+/** A complete review body: every criterion scored, every criterion with evidence. */
+const body = { scores, evidence };
 
 /** Everything a client can see, with the ids and times that differ between two tasks removed. */
 function shape(view: Record<string, unknown>) {
@@ -404,7 +408,7 @@ describe('gold clone: written for one reviewer when gold falls due', () => {
     expect(cloneId).toBeDefined();
     const reviewed: string[] = [];
     for (const id of first.filter((x) => x !== cloneId).slice(0, 3)) {
-      await db.service.review(id, { scores }, rita);
+      await db.service.review(id, body, rita);
       reviewed.push(id);
       const now = ids(await db.service.list(rita, undefined, true));
       // The same rows in the same order, less the ones reviewed: nothing moved.
@@ -483,7 +487,7 @@ describe('gold clone: reviewed like any task, and scored on the gold', () => {
     const countsBefore = await db.campaigns.list(rita);
     const listBefore = ids(await db.service.list(rita));
 
-    const res = await db.service.review(cloneId, { scores }, rita);
+    const res = await db.service.review(cloneId, body, rita);
     expect(res).toMatchObject({ taskId: cloneId, taskStatus: TaskStatus.IN_REVIEW });
     expect(JSON.stringify(res)).not.toContain(sourceId);
 
@@ -493,14 +497,19 @@ describe('gold clone: reviewed like any task, and scored on the gold', () => {
     const clone = db.tasks.find((t) => t.id === cloneId) as Row;
     expect(clone.taskReviews.map((r) => r.reviewerExpertId)).toEqual([rita.expertId]);
     expect(clone.goldOpenFor).toBeNull();
+    // Evidence is stored on the clone exactly as on a normal review.
+    expect(clone.taskReviews[0].evidence).toEqual(evidence);
 
     // Still there, read as a normal task after one review; out of the queue; same counts.
     const view = (await db.service.get(cloneId, rita)) as Record<string, unknown>;
     expect(view).toMatchObject({ status: TaskStatus.IN_REVIEW, reviewState: 'awaiting_reviews' });
     // A normal task of the same campaign after rita's one review reads the same.
     const peer = db.tasks.find((t) => !t.isGold && t.campaignId === clone.campaignId) as Row;
-    await db.service.review(peer.id, { scores }, rita);
+    await db.service.review(peer.id, body, rita);
     const normal = (await db.service.get(peer.id, rita)) as Record<string, unknown>;
+    expect(peer.taskReviews.at(-1)?.evidence).toEqual(evidence);
+    // While the task is open, neither view carries the evidence (nor the scores).
+    for (const v of [view, normal]) expect(JSON.stringify(v)).not.toContain('quoted from the spec');
     const strip = (v: Record<string, unknown>) => {
       const { taskReviews, ...rest } = shape(v);
       const reviews = (taskReviews as Array<Record<string, unknown>>).map((r) => {
@@ -521,8 +530,8 @@ describe('gold clone: reviewed like any task, and scored on the gold', () => {
     const [rita] = dueNow(1).map((r) => user(r));
     const [cloneId] = fresh(await db.service.list(rita));
     // Every backlog gold is deliberately broken (expected reject); rita accepts it.
-    await db.service.review(cloneId, { scores }, rita);
-    await db.service.review('n0', { scores }, rita);
+    await db.service.review(cloneId, body, rita);
+    await db.service.review('n0', body, rita);
     const [row] = (await db.service.calibration()).filter((r) => r.reviewerId === rita.expertId);
     expect(row).toMatchObject({ totalReviews: 2, goldReviews: 1, correct: 0, falseAccepts: 1 });
   });
@@ -542,7 +551,7 @@ describe('gold clone: reviewed like any task, and scored on the gold', () => {
         expect(seen.has(source)).toBe(false);
         seen.add(source);
       }
-      await db.service.review(pick, { scores }, rita);
+      await db.service.review(pick, body, rita);
     }
     expect(seen.size).toBeGreaterThan(0);
   });
@@ -571,7 +580,7 @@ describe('gold rate: one review in five, whatever the backlog', () => {
         for (let k = 0; k < 20; k++) {
           const [head] = ids(await db.service.list(rita, undefined, true));
           gold.push((db.tasks.find((t) => t.id === head) as Row).isGold);
-          await db.service.review(head, { scores }, rita);
+          await db.service.review(head, body, rita);
         }
         for (let block = 0; block < 4; block++) {
           expect(gold.slice(block * 5, block * 5 + 5).filter(Boolean)).toHaveLength(1);
@@ -592,7 +601,7 @@ describe('visibility: a hidden gold id answers like a missing one, on every endp
   const endpoints = (s: TaskService, id: string, viewer: AuthUser) => [
     () => s.get(id, viewer),
     () => s.verification(id, viewer),
-    () => s.review(id, { scores }, viewer),
+    () => s.review(id, body, viewer),
     () => s.adjudicate(id, { verdict: 'accept', reason: 'x' }, viewer),
   ];
 
@@ -624,7 +633,7 @@ describe('visibility: a hidden gold id answers like a missing one, on every endp
     expect(list).toEqual(expect.arrayContaining(goldIds));
     expect(list).not.toContain(cloneId);
     // Gold is reviewed only through a clone, never directly.
-    await expect(db.service.review('g0', { scores }, admin)).rejects.toBeInstanceOf(
+    await expect(db.service.review('g0', body, admin)).rejects.toBeInstanceOf(
       ConflictException,
     );
   });

@@ -198,6 +198,9 @@ model TaskReview {
   // protocol; those rows are ignored by consensus, IAA and calibration.
   reviewerExpertId String?
   scores     Json
+  // Per criterion, the reviewer's evidence note. Required for every new review; null
+  // only on rows written before evidence was collected.
+  evidence   Json?
   accepted   Boolean  @default(false)
   createdAt  DateTime @default(now())
 
