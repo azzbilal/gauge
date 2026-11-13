@@ -33,6 +33,13 @@ export class TaskController {
     return this.tasks.calibration(campaignId || undefined);
   }
 
+  /** Gate 2: the verifier's pass/fail on decided tasks against the human accept/reject. */
+  @Get('verifier-agreement')
+  @Roles(Role.ADMIN)
+  verifierAgreement(@Query('campaignId') campaignId?: string) {
+    return this.tasks.verifierAgreement(campaignId || undefined);
+  }
+
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.tasks.get(id, user);

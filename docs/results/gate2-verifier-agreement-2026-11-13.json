@@ -1,0 +1,627 @@
+{
+  "set": {
+    "name": "Layer 2 verifier golden set",
+    "version": 1,
+    "file": "apps/api/prisma/verifier-golden-set.json",
+    "tasks": 10
+  },
+  "measuredAt": "2026-11-13T20:04:45.788Z",
+  "campaignId": "cmwfelh1p0000w9qombavrfda",
+  "environment": {
+    "verifierVersion": "m8-static-cad",
+    "verifyServiceUrl": "http://localhost:4000",
+    "execMode": "executed (geometry_cad)",
+    "cadqueryVersion": "2.7.0 on Python 3.10.11"
+  },
+  "report": {
+    "campaignId": "cmwfelh1p0000w9qombavrfda",
+    "decidedTasks": 10,
+    "compared": 10,
+    "unverified": 0,
+    "agreed": 8,
+    "agreementRate": 0.8,
+    "cohenKappa": 0.5833333333333334,
+    "confusion": {
+      "acceptedPassed": 3,
+      "acceptedFailed": 1,
+      "rejectedPassed": 1,
+      "rejectedFailed": 5
+    },
+    "falsePassRate": 0.16666666666666666,
+    "falseFailRate": 0.25,
+    "disagreements": [
+      {
+        "taskId": "cmwfelh8w001nw9qoqsw1klmx",
+        "campaignId": "cmwfelh1p0000w9qombavrfda",
+        "prompt": "Model a flange plate 120 x 80 x 6 mm with 6 holes of 6 mm diameter.",
+        "kind": "false_fail",
+        "humanDecision": "accepted",
+        "decidedBy": "consensus",
+        "reviews": [
+          {
+            "reviewerId": "cmwfelh2h0003w9qorv1xph8c",
+            "accepted": true
+          },
+          {
+            "reviewerId": "cmwfelh240002w9qoo8y3y1rw",
+            "accepted": true
+          }
+        ],
+        "adjudication": null,
+        "verifierPassed": false,
+        "verifierRunId": "cmwfelh99001vw9qoj1shsxfj",
+        "verifierVersion": "m8-static-cad",
+        "verdicts": [
+          {
+            "requirement": "width of 120 mm",
+            "check": "geometry_cad",
+            "status": "pass",
+            "detail": "width 120 mm matches spec, measured on the executed solid `result`"
+          },
+          {
+            "requirement": "depth of 80 mm",
+            "check": "geometry_cad",
+            "status": "pass",
+            "detail": "depth 80 mm matches spec, measured on the executed solid `result`"
+          },
+          {
+            "requirement": "height of 6 mm",
+            "check": "geometry_cad",
+            "status": "pass",
+            "detail": "height 6 mm matches spec, measured on the executed solid `result`"
+          },
+          {
+            "requirement": "6 holes",
+            "check": "static_cad",
+            "status": "not_run",
+            "detail": "hole count: hole pattern is not statically resolvable in the reference (loop, selector or computed point list)"
+          },
+          {
+            "requirement": "hole diameter of 6 mm",
+            "check": "static_cad",
+            "status": "pass",
+            "detail": "hole diameter 6 mm matches spec"
+          }
+        ]
+      },
+      {
+        "taskId": "cmwfelhfj0045w9qoh0stkjrl",
+        "campaignId": "cmwfelh1p0000w9qombavrfda",
+        "prompt": "Model a rectangular plate 60 x 40 x 10 mm with 4 holes of 5 mm diameter.",
+        "kind": "false_pass",
+        "humanDecision": "rejected",
+        "decidedBy": "consensus",
+        "reviews": [
+          {
+            "reviewerId": "cmwfelh2h0003w9qorv1xph8c",
+            "accepted": false
+          },
+          {
+            "reviewerId": "cmwfelh240002w9qoo8y3y1rw",
+            "accepted": false
+          }
+        ],
+        "adjudication": null,
+        "verifierPassed": true,
+        "verifierRunId": "cmwfelhfw004dw9qozwwav1l2",
+        "verifierVersion": "m8-static-cad",
+        "verdicts": [
+          {
+            "requirement": "width of 60 mm",
+            "check": "geometry_cad",
+            "status": "pass",
+            "detail": "width 60 mm matches spec, measured on the executed solid `result`"
+          },
+          {
+            "requirement": "depth of 40 mm",
+            "check": "geometry_cad",
+            "status": "pass",
+            "detail": "depth 40 mm matches spec, measured on the executed solid `result`"
+          },
+          {
+            "requirement": "height of 10 mm",
+            "check": "geometry_cad",
+            "status": "pass",
+            "detail": "height 10 mm matches spec, measured on the executed solid `result`"
+          },
+          {
+            "requirement": "4 holes",
+            "check": "static_cad",
+            "status": "pass",
+            "detail": "hole count 4 matches spec"
+          },
+          {
+            "requirement": "hole diameter of 5 mm",
+            "check": "static_cad",
+            "status": "pass",
+            "detail": "hole diameter 5 mm matches spec"
+          }
+        ]
+      }
+    ],
+    "unverifiedTaskIds": []
+  },
+  "tasks": [
+    {
+      "goldenId": "ok-plate-4-holes",
+      "category": "correct",
+      "taskId": "cmwfelh3u0005w9qoaur5521b",
+      "createdThisRun": false,
+      "expectedHuman": "accept",
+      "humanDecision": "accept",
+      "verifierPassed": true,
+      "agrees": true,
+      "lint": [
+        "warning:traceability",
+        "warning:traceability",
+        "warning:traceability",
+        "warning:traceability"
+      ],
+      "verdicts": [
+        {
+          "requirement": "width of 60 mm",
+          "check": "geometry_cad",
+          "status": "pass",
+          "detail": "width 60 mm matches spec, measured on the executed solid `result`"
+        },
+        {
+          "requirement": "depth of 40 mm",
+          "check": "geometry_cad",
+          "status": "pass",
+          "detail": "depth 40 mm matches spec, measured on the executed solid `result`"
+        },
+        {
+          "requirement": "height of 10 mm",
+          "check": "geometry_cad",
+          "status": "pass",
+          "detail": "height 10 mm matches spec, measured on the executed solid `result`"
+        },
+        {
+          "requirement": "4 holes",
+          "check": "static_cad",
+          "status": "pass",
+          "detail": "hole count 4 matches spec"
+        },
+        {
+          "requirement": "hole diameter of 5 mm",
+          "check": "static_cad",
+          "status": "pass",
+          "detail": "hole diameter 5 mm matches spec"
+        }
+      ]
+    },
+    {
+      "goldenId": "ok-block-2-holes",
+      "category": "correct",
+      "taskId": "cmwfelh5z000nw9qookjyutf4",
+      "createdThisRun": false,
+      "expectedHuman": "accept",
+      "humanDecision": "accept",
+      "verifierPassed": true,
+      "agrees": true,
+      "lint": [
+        "warning:traceability",
+        "warning:traceability",
+        "warning:traceability",
+        "warning:traceability"
+      ],
+      "verdicts": [
+        {
+          "requirement": "width of 80 mm",
+          "check": "geometry_cad",
+          "status": "pass",
+          "detail": "width 80 mm matches spec, measured on the executed solid `result`"
+        },
+        {
+          "requirement": "depth of 50 mm",
+          "check": "geometry_cad",
+          "status": "pass",
+          "detail": "depth 50 mm matches spec, measured on the executed solid `result`"
+        },
+        {
+          "requirement": "height of 20 mm",
+          "check": "geometry_cad",
+          "status": "pass",
+          "detail": "height 20 mm matches spec, measured on the executed solid `result`"
+        },
+        {
+          "requirement": "2 holes",
+          "check": "static_cad",
+          "status": "pass",
+          "detail": "hole count 2 matches spec"
+        },
+        {
+          "requirement": "hole diameter of 8 mm",
+          "check": "static_cad",
+          "status": "pass",
+          "detail": "hole diameter 8 mm matches spec"
+        }
+      ]
+    },
+    {
+      "goldenId": "ok-cover-1-hole",
+      "category": "correct",
+      "taskId": "cmwfelh7i0015w9qoatugmibm",
+      "createdThisRun": false,
+      "expectedHuman": "accept",
+      "humanDecision": "accept",
+      "verifierPassed": true,
+      "agrees": true,
+      "lint": [
+        "warning:traceability",
+        "warning:traceability",
+        "warning:traceability",
+        "warning:traceability"
+      ],
+      "verdicts": [
+        {
+          "requirement": "width of 100 mm",
+          "check": "geometry_cad",
+          "status": "pass",
+          "detail": "width 100 mm matches spec, measured on the executed solid `result`"
+        },
+        {
+          "requirement": "depth of 100 mm",
+          "check": "geometry_cad",
+          "status": "pass",
+          "detail": "depth 100 mm matches spec, measured on the executed solid `result`"
+        },
+        {
+          "requirement": "height of 8 mm",
+          "check": "geometry_cad",
+          "status": "pass",
+          "detail": "height 8 mm matches spec, measured on the executed solid `result`"
+        },
+        {
+          "requirement": "1 hole",
+          "check": "static_cad",
+          "status": "pass",
+          "detail": "hole count 1 matches spec"
+        },
+        {
+          "requirement": "hole diameter of 20 mm",
+          "check": "static_cad",
+          "status": "pass",
+          "detail": "hole diameter 20 mm matches spec"
+        }
+      ]
+    },
+    {
+      "goldenId": "ok-flange-6-holes-comprehension",
+      "category": "correct",
+      "taskId": "cmwfelh8w001nw9qoqsw1klmx",
+      "createdThisRun": false,
+      "expectedHuman": "accept",
+      "humanDecision": "accept",
+      "verifierPassed": false,
+      "agrees": false,
+      "lint": [
+        "warning:traceability",
+        "warning:traceability",
+        "warning:traceability",
+        "warning:traceability"
+      ],
+      "verdicts": [
+        {
+          "requirement": "width of 120 mm",
+          "check": "geometry_cad",
+          "status": "pass",
+          "detail": "width 120 mm matches spec, measured on the executed solid `result`"
+        },
+        {
+          "requirement": "depth of 80 mm",
+          "check": "geometry_cad",
+          "status": "pass",
+          "detail": "depth 80 mm matches spec, measured on the executed solid `result`"
+        },
+        {
+          "requirement": "height of 6 mm",
+          "check": "geometry_cad",
+          "status": "pass",
+          "detail": "height 6 mm matches spec, measured on the executed solid `result`"
+        },
+        {
+          "requirement": "6 holes",
+          "check": "static_cad",
+          "status": "not_run",
+          "detail": "hole count: hole pattern is not statically resolvable in the reference (loop, selector or computed point list)"
+        },
+        {
+          "requirement": "hole diameter of 6 mm",
+          "check": "static_cad",
+          "status": "pass",
+          "detail": "hole diameter 6 mm matches spec"
+        }
+      ]
+    },
+    {
+      "goldenId": "wrong-width",
+      "category": "wrong_dimension",
+      "taskId": "cmwfelhab0025w9qosmw4mcxp",
+      "createdThisRun": false,
+      "expectedHuman": "reject",
+      "humanDecision": "reject",
+      "verifierPassed": false,
+      "agrees": true,
+      "lint": [
+        "warning:traceability",
+        "warning:traceability",
+        "warning:traceability",
+        "warning:traceability"
+      ],
+      "verdicts": [
+        {
+          "requirement": "width of 60 mm",
+          "check": "geometry_cad",
+          "status": "fail",
+          "detail": "width: spec requires 60 mm but the executed solid `result` measures 65 mm along X"
+        },
+        {
+          "requirement": "depth of 40 mm",
+          "check": "geometry_cad",
+          "status": "pass",
+          "detail": "depth 40 mm matches spec, measured on the executed solid `result`"
+        },
+        {
+          "requirement": "height of 10 mm",
+          "check": "geometry_cad",
+          "status": "pass",
+          "detail": "height 10 mm matches spec, measured on the executed solid `result`"
+        },
+        {
+          "requirement": "4 holes",
+          "check": "static_cad",
+          "status": "pass",
+          "detail": "hole count 4 matches spec"
+        },
+        {
+          "requirement": "hole diameter of 5 mm",
+          "check": "static_cad",
+          "status": "pass",
+          "detail": "hole diameter 5 mm matches spec"
+        }
+      ]
+    },
+    {
+      "goldenId": "wrong-hole-diameter",
+      "category": "wrong_dimension",
+      "taskId": "cmwfelhbn002nw9qovvja8k2y",
+      "createdThisRun": false,
+      "expectedHuman": "reject",
+      "humanDecision": "reject",
+      "verifierPassed": false,
+      "agrees": true,
+      "lint": [
+        "warning:traceability",
+        "warning:traceability",
+        "warning:traceability",
+        "warning:traceability"
+      ],
+      "verdicts": [
+        {
+          "requirement": "width of 80 mm",
+          "check": "geometry_cad",
+          "status": "pass",
+          "detail": "width 80 mm matches spec, measured on the executed solid `result`"
+        },
+        {
+          "requirement": "depth of 50 mm",
+          "check": "geometry_cad",
+          "status": "pass",
+          "detail": "depth 50 mm matches spec, measured on the executed solid `result`"
+        },
+        {
+          "requirement": "height of 20 mm",
+          "check": "geometry_cad",
+          "status": "pass",
+          "detail": "height 20 mm matches spec, measured on the executed solid `result`"
+        },
+        {
+          "requirement": "2 holes",
+          "check": "static_cad",
+          "status": "pass",
+          "detail": "hole count 2 matches spec"
+        },
+        {
+          "requirement": "hole diameter of 8 mm",
+          "check": "static_cad",
+          "status": "fail",
+          "detail": "hole diameter: spec requires 8 mm but reference has 6 mm"
+        }
+      ]
+    },
+    {
+      "goldenId": "wrong-hole-count",
+      "category": "wrong_hole_count",
+      "taskId": "cmwfelhcy0035w9qo7ere8loe",
+      "createdThisRun": false,
+      "expectedHuman": "reject",
+      "humanDecision": "reject",
+      "verifierPassed": false,
+      "agrees": true,
+      "lint": [
+        "warning:traceability",
+        "warning:traceability",
+        "warning:traceability",
+        "warning:traceability"
+      ],
+      "verdicts": [
+        {
+          "requirement": "width of 60 mm",
+          "check": "geometry_cad",
+          "status": "pass",
+          "detail": "width 60 mm matches spec, measured on the executed solid `result`"
+        },
+        {
+          "requirement": "depth of 40 mm",
+          "check": "geometry_cad",
+          "status": "pass",
+          "detail": "depth 40 mm matches spec, measured on the executed solid `result`"
+        },
+        {
+          "requirement": "height of 10 mm",
+          "check": "geometry_cad",
+          "status": "pass",
+          "detail": "height 10 mm matches spec, measured on the executed solid `result`"
+        },
+        {
+          "requirement": "4 holes",
+          "check": "static_cad",
+          "status": "fail",
+          "detail": "hole count: spec requires 4 but reference has 3"
+        },
+        {
+          "requirement": "hole diameter of 5 mm",
+          "check": "static_cad",
+          "status": "pass",
+          "detail": "hole diameter 5 mm matches spec"
+        }
+      ]
+    },
+    {
+      "goldenId": "dead-code",
+      "category": "dead_code",
+      "taskId": "cmwfelhe9003nw9qo9j9ebg24",
+      "createdThisRun": false,
+      "expectedHuman": "reject",
+      "humanDecision": "reject",
+      "verifierPassed": false,
+      "agrees": true,
+      "lint": [
+        "warning:traceability",
+        "warning:traceability",
+        "warning:traceability",
+        "warning:traceability"
+      ],
+      "verdicts": [
+        {
+          "requirement": "width of 60 mm",
+          "check": "geometry_cad",
+          "status": "fail",
+          "detail": "width: spec requires 60 mm but the executed solid `result` measures 10 mm along X"
+        },
+        {
+          "requirement": "depth of 40 mm",
+          "check": "geometry_cad",
+          "status": "fail",
+          "detail": "depth: spec requires 40 mm but the executed solid `result` measures 10 mm along Y"
+        },
+        {
+          "requirement": "height of 10 mm",
+          "check": "geometry_cad",
+          "status": "pass",
+          "detail": "height 10 mm matches spec, measured on the executed solid `result`"
+        },
+        {
+          "requirement": "4 holes",
+          "check": "static_cad",
+          "status": "pass",
+          "detail": "hole count 4 matches spec"
+        },
+        {
+          "requirement": "hole diameter of 5 mm",
+          "check": "static_cad",
+          "status": "pass",
+          "detail": "hole diameter 5 mm matches spec"
+        }
+      ]
+    },
+    {
+      "goldenId": "holes-in-dead-code",
+      "category": "dead_code",
+      "taskId": "cmwfelhfj0045w9qoh0stkjrl",
+      "createdThisRun": false,
+      "expectedHuman": "reject",
+      "humanDecision": "reject",
+      "verifierPassed": true,
+      "agrees": false,
+      "lint": [
+        "warning:traceability",
+        "warning:traceability",
+        "warning:traceability",
+        "warning:traceability"
+      ],
+      "verdicts": [
+        {
+          "requirement": "width of 60 mm",
+          "check": "geometry_cad",
+          "status": "pass",
+          "detail": "width 60 mm matches spec, measured on the executed solid `result`"
+        },
+        {
+          "requirement": "depth of 40 mm",
+          "check": "geometry_cad",
+          "status": "pass",
+          "detail": "depth 40 mm matches spec, measured on the executed solid `result`"
+        },
+        {
+          "requirement": "height of 10 mm",
+          "check": "geometry_cad",
+          "status": "pass",
+          "detail": "height 10 mm matches spec, measured on the executed solid `result`"
+        },
+        {
+          "requirement": "4 holes",
+          "check": "static_cad",
+          "status": "pass",
+          "detail": "hole count 4 matches spec"
+        },
+        {
+          "requirement": "hole diameter of 5 mm",
+          "check": "static_cad",
+          "status": "pass",
+          "detail": "hole diameter 5 mm matches spec"
+        }
+      ]
+    },
+    {
+      "goldenId": "cut-in-half",
+      "category": "cut_part",
+      "taskId": "cmwfelhgw004nw9qoxxmylwvm",
+      "createdThisRun": false,
+      "expectedHuman": "reject",
+      "humanDecision": "reject",
+      "verifierPassed": false,
+      "agrees": true,
+      "lint": [
+        "warning:traceability",
+        "warning:traceability",
+        "warning:traceability",
+        "warning:traceability"
+      ],
+      "verdicts": [
+        {
+          "requirement": "width of 100 mm",
+          "check": "geometry_cad",
+          "status": "fail",
+          "detail": "width: spec requires 100 mm but the executed solid `result` measures 50 mm along X"
+        },
+        {
+          "requirement": "depth of 100 mm",
+          "check": "geometry_cad",
+          "status": "pass",
+          "detail": "depth 100 mm matches spec, measured on the executed solid `result`"
+        },
+        {
+          "requirement": "height of 8 mm",
+          "check": "geometry_cad",
+          "status": "pass",
+          "detail": "height 8 mm matches spec, measured on the executed solid `result`"
+        },
+        {
+          "requirement": "1 hole",
+          "check": "static_cad",
+          "status": "not_run",
+          "detail": "hole count: reference uses cut; hole count cannot be resolved statically"
+        },
+        {
+          "requirement": "hole diameter of 20 mm",
+          "check": "static_cad",
+          "status": "pass",
+          "detail": "hole diameter 20 mm matches spec"
+        }
+      ]
+    }
+  ],
+  "problems": []
+}

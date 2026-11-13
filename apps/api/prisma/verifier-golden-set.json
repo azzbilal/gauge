@@ -1,0 +1,88 @@
+{
+  "name": "Layer 2 verifier golden set",
+  "version": 1,
+  "description": "Ten CAD tasks with a known human verdict, to measure verifier agreement with human verdicts (Gate 2, docs/PRD.md). Each reference is in prisma/verifier-golden/. The label is what a careful reviewer decides from the prompt and the reference; it was fixed before the verifier was run and is not tuned to its result.",
+  "campaign": "Verifier golden set v1",
+  "tasks": [
+    {
+      "id": "ok-plate-4-holes",
+      "category": "correct",
+      "prompt": "Model a rectangular plate 60 x 40 x 10 mm with 4 holes of 5 mm diameter.",
+      "reference": "ok_plate_4_holes.py",
+      "expectedAccept": true,
+      "why": "60 x 40 x 10 mm plate with four 5 mm through holes on a 40 x 20 mm pattern: matches the prompt."
+    },
+    {
+      "id": "ok-block-2-holes",
+      "category": "correct",
+      "prompt": "Model a mounting block 80 x 50 x 20 mm with 2 holes of 8 mm diameter.",
+      "reference": "ok_block_2_holes.py",
+      "expectedAccept": true,
+      "why": "80 x 50 x 20 mm block with two 8 mm through holes: matches the prompt."
+    },
+    {
+      "id": "ok-cover-1-hole",
+      "category": "correct",
+      "prompt": "Model a square cover plate 100 x 100 x 8 mm with 1 hole of 20 mm diameter.",
+      "reference": "ok_cover_1_hole.py",
+      "expectedAccept": true,
+      "why": "100 x 100 x 8 mm plate with one central 20 mm through hole: matches the prompt."
+    },
+    {
+      "id": "ok-flange-6-holes-comprehension",
+      "category": "correct",
+      "prompt": "Model a flange plate 120 x 80 x 6 mm with 6 holes of 6 mm diameter.",
+      "reference": "ok_flange_6_holes_comprehension.py",
+      "expectedAccept": true,
+      "why": "120 x 80 x 6 mm plate with six 6 mm through holes in two rows of three: matches the prompt. The hole positions are built with a list comprehension."
+    },
+    {
+      "id": "wrong-width",
+      "category": "wrong_dimension",
+      "prompt": "Model a rectangular plate 60 x 40 x 10 mm with 4 holes of 5 mm diameter.",
+      "reference": "wrong_width.py",
+      "expectedAccept": false,
+      "why": "The plate is 65 mm wide, not 60 mm."
+    },
+    {
+      "id": "wrong-hole-diameter",
+      "category": "wrong_dimension",
+      "prompt": "Model a mounting block 80 x 50 x 20 mm with 2 holes of 8 mm diameter.",
+      "reference": "wrong_hole_diameter.py",
+      "expectedAccept": false,
+      "why": "The holes are 6 mm, not 8 mm."
+    },
+    {
+      "id": "wrong-hole-count",
+      "category": "wrong_hole_count",
+      "prompt": "Model a rectangular plate 60 x 40 x 10 mm with 4 holes of 5 mm diameter.",
+      "reference": "wrong_hole_count.py",
+      "expectedAccept": false,
+      "why": "Three holes, not four."
+    },
+    {
+      "id": "dead-code",
+      "category": "dead_code",
+      "prompt": "Model a rectangular plate 60 x 40 x 10 mm with 4 holes of 5 mm diameter.",
+      "reference": "dead_code.py",
+      "expectedAccept": false,
+      "why": "The plate is written inside `if False:`; the script builds a 10 mm sphere."
+    },
+    {
+      "id": "holes-in-dead-code",
+      "category": "dead_code",
+      "prompt": "Model a rectangular plate 60 x 40 x 10 mm with 4 holes of 5 mm diameter.",
+      "reference": "holes_in_dead_code.py",
+      "expectedAccept": false,
+      "why": "The plate is built, but the holes are drilled inside a branch that never runs: the part has no holes."
+    },
+    {
+      "id": "cut-in-half",
+      "category": "cut_part",
+      "prompt": "Model a square cover plate 100 x 100 x 8 mm with 1 hole of 20 mm diameter.",
+      "reference": "cut_in_half.py",
+      "expectedAccept": false,
+      "why": "The plate is built and then half of it is cut away: the part is 50 x 100 x 8 mm with half a hole on its edge."
+    }
+  ]
+}

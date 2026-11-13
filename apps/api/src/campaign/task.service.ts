@@ -41,6 +41,7 @@ import {
   placeInQueue,
 } from './review-protocol';
 import { isGoldClone, isGoldSource, visibleTo } from './task-visibility';
+import { disagreementOf, verifierAgreementStats } from './verifier-agreement';
 
 // ReviewDecision is polymorphic; for a task it is the adjudication record.
 const TASK_SUBJECT = 'task';
@@ -51,6 +52,23 @@ const VERIFIER_VERSION = 'm8-static-cad';
 
 function message(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/** The verdicts a stored VerifierRun holds (`results`), read defensively: it is JSON. */
+function storedVerdicts(results: Prisma.JsonValue) {
+  if (!Array.isArray(results)) return [];
+  return results.flatMap((v) => {
+    if (typeof v !== 'object' || v === null || Array.isArray(v)) return [];
+    const r = v as Record<string, unknown>;
+    return [
+      {
+        requirement_id: typeof r.requirement_id === 'string' ? r.requirement_id : null,
+        check: String(r.check ?? ''),
+        status: String(r.status ?? ''),
+        detail: String(r.detail ?? ''),
+      },
+    ];
+  });
 }
 
 /** The task as the adjudication rule reads it: who wrote it, who reviewed it. */
@@ -785,6 +803,90 @@ export class TaskService {
           : null,
       })),
     ).map((row) => ({ ...row, reviewerName: names.get(row.reviewerId) ?? null }));
+  }
+
+  /**
+   * Verifier agreement with human verdicts (Gate 2). Over decided normal tasks, the human
+   * decision (the task's ACCEPTED / REJECTED status, from consensus or adjudication) against
+   * the verifier's overall result on the reference: the latest stored REFERENCE_SOLUTION run.
+   * Gold rows are never decided, so they never enter. A decided task without a run is listed
+   * as unverified and left out of the rate (see verifier-agreement.ts).
+   *
+   * Each disagreement carries what a reader needs to judge it: the prompt, the reviews'
+   * verdicts, any adjudication, and every verdict of the run with its requirement named.
+   */
+  async verifierAgreement(campaignId?: string) {
+    const tasks = await this.prisma.task.findMany({
+      where: {
+        isGold: false,
+        status: { in: [TaskStatus.ACCEPTED, TaskStatus.REJECTED] },
+        ...(campaignId ? { campaignId } : {}),
+      },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        campaignId: true,
+        prompt: true,
+        status: true,
+        taskReviews: {
+          where: { reviewerExpertId: { not: null } },
+          orderBy: { createdAt: 'asc' },
+          select: { reviewerExpertId: true, accepted: true },
+        },
+        verifierRuns: {
+          where: { subjectType: VerifySubjectType.REFERENCE_SOLUTION },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { id: true, verifierVersion: true, passed: true, results: true, createdAt: true },
+        },
+        requirements: { select: { id: true, text: true } },
+      },
+    });
+    const adjudications = await this.adjudicationsFor(tasks.map((t) => t.id));
+
+    const rows = tasks.map((t) => ({
+      taskId: t.id,
+      humanAccepted: t.status === TaskStatus.ACCEPTED,
+      verifierPassed: t.verifierRuns[0]?.passed ?? null,
+    }));
+
+    const disagreements = tasks.flatMap((t, i) => {
+      const kind = disagreementOf(rows[i]);
+      if (kind === null) return [];
+      const run = t.verifierRuns[0];
+      const requirement = new Map(t.requirements.map((r) => [r.id, r.text]));
+      const adjudication = adjudications.get(t.id);
+      return [
+        {
+          taskId: t.id,
+          campaignId: t.campaignId,
+          prompt: t.prompt,
+          kind,
+          humanDecision: t.status === TaskStatus.ACCEPTED ? 'accepted' : 'rejected',
+          decidedBy: adjudication && adjudication.verdict !== Verdict.NEEDS_REVIEW ? 'adjudication' : 'consensus',
+          reviews: t.taskReviews.map((r) => ({ reviewerId: r.reviewerExpertId, accepted: r.accepted })),
+          adjudication: adjudication
+            ? { verdict: adjudication.verdict, reason: adjudication.reason }
+            : null,
+          verifierPassed: run.passed,
+          verifierRunId: run.id,
+          verifierVersion: run.verifierVersion,
+          verdicts: storedVerdicts(run.results).map((v) => ({
+            requirement: v.requirement_id ? (requirement.get(v.requirement_id) ?? v.requirement_id) : null,
+            check: v.check,
+            status: v.status,
+            detail: v.detail,
+          })),
+        },
+      ];
+    });
+
+    return {
+      campaignId: campaignId ?? null,
+      ...verifierAgreementStats(rows),
+      disagreements,
+      unverifiedTaskIds: rows.filter((r) => r.verifierPassed === null).map((r) => r.taskId),
+    };
   }
 
   // ------------------------------------------------------------------ helpers

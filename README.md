@@ -17,7 +17,7 @@ the review rules are [docs/pipeline.md](./docs/pipeline.md).
 | Phase | Days | Builds | State |
 |---|---|---|---|
 | 1 · Front door | 1–6 | App, auth, intake agent (M1), task campaign + review protocol (M2) | **built**; not deployed (no live URL yet) |
-| 2 · Verification (Layer 2) | 7–13 | Packet Lint (M7), Verifier Pack (M8), Probe Gate (M9), wired into authoring | **built** except: probe not called by the API, verdicts not on the Review screen, CAD only (no PCB/circuit checks), verifier agreement not measured |
+| 2 · Verification (Layer 2) | 7–13 | Packet Lint (M7), Verifier Pack (M8), Probe Gate (M9), wired into authoring | **built** except: probe not called by the API, verdicts not on the Review screen, CAD only (no PCB/circuit checks); verifier agreement measured on a 10-task golden set only (8/10) |
 | 3 · Data backbone | 14–19 | Dagster ingestion, dbt warehouse, read-only MCP semantic layer (M4) | planned (`data/` holds placeholders) |
 | 4 · Model loop | 20–28 | cad-spec release, synthetic generator, training runs, held-out benchmark (M5) | planned (`model/` holds a placeholder) |
 
@@ -163,6 +163,11 @@ A task is a prompt, a machine-checkable spec and a CadQuery reference. The full 
 - **Wiring.** The Author view's "Run check" calls `POST /tasks/preview` (lint + verify,
   nothing stored). `POST /tasks` lints before inserting and refuses a task with a critical
   finding; then verifies and stores the results, readable at `GET /tasks/:id/verification`.
+- **Verifier agreement (Gate 2).** `GET /tasks/verifier-agreement` (admin, `?campaignId=`)
+  sets the stored verifier result against the human accept/reject on decided tasks: rate,
+  Cohen's kappa, confusion matrix, and every disagreement with its verdicts. `npm run
+  verifier-golden` seeds the 10-task Layer 2 golden set through the real create and review
+  path and reports it: **8/10 (kappa 0.58)** with cadquery execution; see `docs/results/`.
 
 ## Quickstart
 
@@ -204,6 +209,7 @@ python -m unittest discover -s verify/lint/tests
 python -m unittest discover -s verify/verifiers/tests   # geometry tests skip without cadquery
 python -m unittest discover -s verify/probe/tests
 npm run golden      # Gate 1 harness (needs the model)
+cd apps/api && npm run verifier-golden   # Gate 2 harness (needs the database and the verify service)
 ```
 
 CI runs typecheck, the API tests, both builds and the three Python suites on every push to
@@ -236,4 +242,4 @@ gauge/
 Built in weeks and used by a handful of people. It proves the **loop** and the quality
 machinery around it, not production operation, scale, people management or deep RL. Not yet
 done: deployment (no live URL, no AWS), the data backbone, the model loop, the probe in the
-API, verifier agreement, and an intake agreement rate worth defending.
+API, verifier agreement beyond a 10-task golden set, and an intake agreement rate worth defending.

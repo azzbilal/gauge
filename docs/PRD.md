@@ -46,7 +46,7 @@ seven days to make room for verification.
 | | published pipeline spec | `docs/pipeline.md` |
 | | ≥ 1 contributor task submitted | depends on the live database; not recorded here |
 | **2 (day 13)** | M7–M9 built and wired into submission and review | pre-submit check, server-side lint gate and stored verdicts built; verdicts are not shown on the Review screen; the probe is a service endpoint the API does not call yet |
-| | verifier agreement with human verdicts | not measured |
+| | verifier agreement with human verdicts | **measured on the 10-task Layer 2 golden set: 8/10 = 80 %**, kappa 0.58 (`npm run verifier-golden`; see below) |
 | **3 (day 19)** | all dbt tests pass, dashboard on the semantic layer, retro with real campaign numbers | not started |
 | **4 (day 28)** | held-out scores before and after training, with a failure analysis | not started |
 
@@ -65,6 +65,28 @@ that repeat a few-shot example.
 The gold labels credit communication and general programming that the intake prompt's anchors
 tell the model not to credit. The rubric definition has to be reconciled (labels or prompt)
 before the number means much. Full output: `docs/results/`.
+
+**Gate 2 harness.** `GET /tasks/verifier-agreement` (admin) compares, over decided normal
+tasks, the latest stored verifier run on the reference (`passed`: every machine verdict passed)
+with the human decision (ACCEPTED / REJECTED, by consensus or adjudication). A decided task
+with no verifier run is counted apart, never as a fail. `npm run verifier-golden` (from
+`apps/api`) seeds the golden set (`apps/api/prisma/verifier-golden-set.json`, references in
+`prisma/verifier-golden/`): ten CAD tasks, four correct references and six broken ones (wrong
+dimension, wrong hole size, wrong hole count, dead code twice, a part cut in half). Each goes
+through the real create path (extract, lint, verify, store) and gets two peer reviews whose
+rubric scores give its label. Labels were fixed from prompt and reference before the verifier
+ran.
+
+**Gate 2 result.** Verifier `m8-static-cad` with executed geometry (cadquery 2.7.0): 8/10 =
+80 %, Cohen's kappa 0.58. Confusion (human × verifier): accept/pass 3, accept/no pass 1,
+reject/pass 1, reject/no pass 5. Both disagreements are documented gaps of M8. A **false
+pass**: holes drilled in a branch that never runs; sizes are measured on the executed solid,
+but holes are still read statically. A **false fail**: a correct flange whose hole points come
+from a list comprehension; the static hole count is `not_run`, and `not_run` is not a pass.
+Ten tasks is a smoke test of the measurement, not an estimate of the verifier's accuracy.
+Without cadquery the size checks fall back to static reading, and the dead-code and cut-part
+cases would measure nothing real; the harness records the mode it ran in. Full output:
+`docs/results/gate2-verifier-agreement-2026-11-13.*`.
 
 ## Architecture (one paragraph)
 

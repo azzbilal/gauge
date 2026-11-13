@@ -1,0 +1,38 @@
+Gate 2: verifier agreement with human verdicts
+Layer 2 verifier golden set v1 (10 tasks), measured 2026-11-13T20:04:45.788Z
+verifier m8-static-cad; executed (geometry_cad); cadquery 2.7.0 on Python 3.10.11
+
+Agreement: 8/10 = 80 %   Cohen's kappa 0.58
+Decided tasks 10, compared 10, without a verifier run 0
+False pass rate (human reject, verifier pass) 17 %; false fail rate (human accept, verifier no pass) 25 %
+
+Confusion matrix (rows: human, columns: verifier)
+                 verifier pass   verifier no pass
+  human accept               3                  1
+  human reject               1                  5
+
+Per task
+  agree  ok-plate-4-holes                 correct          human accept verifier pass  [pass pass pass pass pass]
+  agree  ok-block-2-holes                 correct          human accept verifier pass  [pass pass pass pass pass]
+  agree  ok-cover-1-hole                  correct          human accept verifier pass  [pass pass pass pass pass]
+  DISAG  ok-flange-6-holes-comprehension  correct          human accept verifier no pass  [pass pass pass not_run pass]
+  agree  wrong-width                      wrong_dimension  human reject verifier no pass  [fail pass pass pass pass]
+  agree  wrong-hole-diameter              wrong_dimension  human reject verifier no pass  [pass pass pass pass fail]
+  agree  wrong-hole-count                 wrong_hole_count human reject verifier no pass  [pass pass pass fail pass]
+  agree  dead-code                        dead_code        human reject verifier no pass  [fail fail pass pass pass]
+  DISAG  holes-in-dead-code               dead_code        human reject verifier pass  [pass pass pass pass pass]
+  agree  cut-in-half                      cut_part         human reject verifier no pass  [fail pass pass not_run pass]
+
+Disagreements
+  false_fail  ok-flange-6-holes-comprehension  (human accepted by consensus, verifier no pass)
+    pass    geometry_cad    width 120 mm matches spec, measured on the executed solid `result`
+    pass    geometry_cad    depth 80 mm matches spec, measured on the executed solid `result`
+    pass    geometry_cad    height 6 mm matches spec, measured on the executed solid `result`
+    not_run static_cad      hole count: hole pattern is not statically resolvable in the reference (loop, selector or computed point list)
+    pass    static_cad      hole diameter 6 mm matches spec
+  false_pass  holes-in-dead-code  (human rejected by consensus, verifier pass)
+    pass    geometry_cad    width 60 mm matches spec, measured on the executed solid `result`
+    pass    geometry_cad    depth 40 mm matches spec, measured on the executed solid `result`
+    pass    geometry_cad    height 10 mm matches spec, measured on the executed solid `result`
+    pass    static_cad      hole count 4 matches spec
+    pass    static_cad      hole diameter 5 mm matches spec
