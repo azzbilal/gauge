@@ -1,0 +1,37 @@
+cad-spec benchmark  cad-spec-1.0  model/data/synthetic-seed0-n100.json
+candidate ollama:qwen3.5:9b-q4_K_M  split heldout  20 tasks x 1 rollout(s)  scoring executed
+
+Solve rate: 0/20 = 0 %   (failed 20, of which no code 0; unjudged 0 = 0 %; not run 0; cut off at num_predict 3)
+generation {"endpoint": "/api/generate", "num_ctx": 16384, "num_predict": 4096, "temperature": 0.0, "think": false}
+
+By family                solved  not scored by the verifier
+  box          0/4      0 %   wall thickness, open top, hole positions
+  bracket      0/4      0 %   plate thickness, upright position, hole positions
+  cutout       0/4      0 %   the cutout (size and presence)
+  plate        0/4      0 %   hole positions
+  rounded      0/4      0 %   fillet radius (and presence), hole positions
+
+Per task
+  plate-002     failed     reference raised NameError: name 'i' is not defined
+  cutout-002    failed     reference raised AttributeError: 'Face' object has no attribute 'normal'
+  rounded-003   failed     reference code does not parse (line 76: expected an indented block after 'else' statement on line 65)
+  plate-004     failed     reference raised AttributeError: 'Workplane' object has no attribute 'moved'
+  box-004       failed     reference raised AttributeError: 'Workplane' object has no attribute 'toLine'
+  bracket-004   failed*    reference raised AttributeError: 'Workplane' object has no attribute 'moved'
+  box-005       failed     reference raised TypeError: __init__(): incompatible constructor arguments. The following argument types are s
+  bracket-007   failed*    reference raised AttributeError: 'Workplane' object has no attribute 'moved'
+  rounded-007   failed     reference raised AttributeError: 'Workplane' object has no attribute 'Edges'
+  box-010       failed     reference raised AttributeError: 'Workplane' object has no attribute 'toLine'
+  bracket-010   failed     reference raised TypeError: Workplane.moveTo() takes from 1 to 3 positional arguments but 4 were given
+  plate-011     failed     reference raised AttributeError: 'Face' object has no attribute 'normal'
+  cutout-012    failed     reference raised ValueError: Null TopoDS_Shape object
+  rounded-012   failed     reference raised AttributeError: 'Face' object has no attribute 'normal'
+  box-013       failed     reference raised TypeError: __init__(): incompatible constructor arguments. The following argument types are s
+  cutout-013    failed     reference raised ValueError: Null TopoDS_Shape object
+  plate-015     failed     reference raised AttributeError: 'Face' object has no attribute 'normal'
+  cutout-015    failed     reference raised ValueError: Cannot convert object type <class 'cadquery.occ_impl.shapes.Solid'> to vector.
+  rounded-015   failed*    reference raised AttributeError: 'Edge' object has no attribute 'Vector'
+  bracket-017   failed     reference raised TypeError: Workplane.box() got an unexpected keyword argument 'moved'
+
+* the answer was cut off at num_predict (done_reason length).
+Solved covers overall size, hole diameter and hole count only (model/SPEC.md, 'Solved').

@@ -19,6 +19,9 @@ A task is a row in `tasks` with three required pieces:
 | `spec` | Precise requirements: target shape, dimensions, constraints, tolerances | Must be machine-checkable |
 | `reference` | A working reference solution (CadQuery) | Must actually satisfy the spec |
 
+The stored, versioned form of a task (these fields plus its rubric) is the cad-spec release,
+[model/SPEC.md](../model/SPEC.md); this section is the authoring rule, that file is the format.
+
 **Hard rule:** a task without a verifiable reference solution is not a task. The reference is
 what makes the task checkable by the cad-spec verifier (M5) later.
 

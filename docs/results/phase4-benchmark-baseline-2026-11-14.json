@@ -1,0 +1,1249 @@
+{
+  "attempted": 20,
+  "by_family": {
+    "box": {
+      "attempted": 4,
+      "solve_rate": 0.0,
+      "solved": 0
+    },
+    "bracket": {
+      "attempted": 4,
+      "solve_rate": 0.0,
+      "solved": 0
+    },
+    "cutout": {
+      "attempted": 4,
+      "solve_rate": 0.0,
+      "solved": 0
+    },
+    "plate": {
+      "attempted": 4,
+      "solve_rate": 0.0,
+      "solved": 0
+    },
+    "rounded": {
+      "attempted": 4,
+      "solve_rate": 0.0,
+      "solved": 0
+    }
+  },
+  "candidate": "ollama:qwen3.5:9b-q4_K_M",
+  "data": "model/data/synthetic-seed0-n100.json",
+  "extract_version": "extract-7",
+  "generation": {
+    "endpoint": "/api/generate",
+    "num_ctx": 16384,
+    "num_predict": 4096,
+    "temperature": 0.0,
+    "think": false
+  },
+  "model": "qwen3.5:9b-q4_K_M",
+  "not_scored": {
+    "box": "wall thickness, open top, hole positions",
+    "bracket": "plate thickness, upright position, hole positions",
+    "cutout": "the cutout (size and presence)",
+    "plate": "hole positions",
+    "rounded": "fillet radius (and presence), hole positions"
+  },
+  "per_task": [
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\nfrom cadquery import Vector\n\n# Define base dimensions in mm\nwidth = 50.0\ndepth = 40.0\nheight = 6.0\nhole_diameter = 8.0\n\n# Create the solid rectangular plate\nplate = cq.Workplane().box(width, depth, height)\n\n# Define the center of the mounting rectangle (36x26) relative to the part center\nmounting_rect_width = 36.0\nmounting_rect_depth = 26.0\n\n# Calculate the offset from the plate center to the corners of the mounting rectangle\n# The mounting rectangle is centered on the part, so we calculate half-width and half-depth offsets\noffset_x = (mounting_rect_width / 2.0) - (hole_diameter / 2.0)\noffset_y = (mounting_rect_depth / 2.0) - (hole_diameter / 2.0)\n\n# Create the hole feature using a Workplane loop for the four corners\n# We subtract cylinders from the plate at the calculated corner positions\nholes = []\nfor dx in [-offset_x, offset_x]:\n    for dy in [-offset_y, offset_y]:\n        # Position of the hole center relative to the plate origin (0,0)\n        # The box is created with origin at one corner, but cq.Workplane operations \n        # usually assume a local coordinate system. However, 'box' creates a solid.\n        # To subtract holes from a solid, we use .workplane().circle().extrude() logic \n        # or simply construct the hole geometry and subtract it.\n        \n        # Let's define the hole centers in the global coordinate system of the plate\n        # Since the plate is 50x40, center is (25, 20).\n        # The mounting rectangle is centered at (25, 20).\n        # Its corners are at:\n        # x = 25 +/- (36/2) = 25 +/- 18 -> 7 and 43\n        # y = 20 +/- (26/2) = 20 +/- 13 -> 7 and 33\n        \n        # Let's recalculate offsets based on the plate center for clarity\n        plate_center_x = width / 2.0\n        plate_center_y = depth / 2.0\n        \n        hole_centers = [\n            (plate_center_x - mounting_rect_width/2.0, plate_center_y - mounting_rect_depth/2.0),\n            (plate_center_x + mounting_rect_width/2.0, plate_center_y - mounting_rect_depth/2.0),\n            (plate_center_x - mounting_rect_width/2.0, plate_center_y + mounting_rect_depth/2.0),\n            (plate_center_x + mounting_rect_width/2.0, plate_center_y + mounting_rect_depth/2.0)\n        ]\n        \n        holes.append(cq.Workplane().moveTo(hole_centers[i][0], hole_centers[i][1]).circle(hole_diameter/2.0).extrude(-height))\n\n# Actually, a cleaner way in CadQuery to subtract holes from a solid is:\n# 1. Create the base box.\n# 2. Create a Workplane at the top face (or any face) and define the hole positions.\n# 3. Extrude the holes through the part.\n# 4. Subtract the holes from the base.\n\n# Re-approach for clean code:\nbase = cq.Workplane().box(width, depth, height)\n\n# Define hole positions relative to the box origin (0,0)\n# Box is defined as x:[0, width], y:[0, depth], z:[0, height]\n# Center of box is (width/2, depth/2)\ncenter_x = width / 2.0\ncenter_y = depth / 2.0\n\nhole_positions = [\n    (center_x - mounting_rect_width/2.0, center_y - mounting_rect_depth/2.0),\n    (center_x + mounting_rect_width/2.0, center_y - mounting_rect_depth/2.0),\n    (center_x - mounting_rect_width/2.0, center_y + mounting_rect_depth/2.0),\n    (center_x + mounting_rect_width/2.0, center_y + mounting_rect_depth/2.0)\n]\n\n# Create the solid with holes by subtracting cylinders\n# We can use the 'holes' method if we were building a sketch, but for solids:\n# It's easier to create the base and then subtract extruded circles.\n\nhole_solids = []\nfor px, py in hole_positions:\n    # Create a cylinder at (px, py) with radius hole_diameter/2, height -height (to go through)\n    # CadQuery cylinders are usually created from a workplane.\n    wp = cq.Workplane().moveTo(px, py).circle(hole_diameter/2.0)\n    cyl = wp.extrude(-height) # Extrude downwards through the part\n    hole_solids.append(cyl)\n\n# Combine all hole solids into one compound\nholes_compound = cq.Compound.makeCompound(hole_solids)\n\n# Subtract the holes from the base plate\nresult = base.cut(holes_compound)",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 1152
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 32.0,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised NameError: name 'i' is not defined",
+              "pass": false,
+              "requirement_id": "plate-002-1",
+              "rubric_item_id": "plate-002-10:plate-002-1",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised NameError: name 'i' is not defined",
+              "pass": false,
+              "requirement_id": "plate-002-2",
+              "rubric_item_id": "plate-002-10:plate-002-2",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised NameError: name 'i' is not defined",
+              "pass": false,
+              "requirement_id": "plate-002-3",
+              "rubric_item_id": "plate-002-10:plate-002-3",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised NameError: name 'i' is not defined",
+              "pass": false,
+              "requirement_id": "plate-002-4",
+              "rubric_item_id": "plate-002-10:plate-002-4",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised NameError: name 'i' is not defined",
+              "pass": false,
+              "requirement_id": "plate-002-5",
+              "rubric_item_id": "plate-002-10:plate-002-5",
+              "status": "fail"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "plate",
+      "id": "plate-002",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\n\n# Define base dimensions in mm\nwidth = 50.0\ndepth = 40.0\nheight = 10.0\n\n# Define cutout dimensions in mm\ncutout_width = 22.0\ncutout_depth = 8.0\n\n# Create the solid plate\nplate = cq.Workplane().box(width, depth, height)\n\n# Calculate offsets to center the cutout\nx_offset = (width - cutout_width) / 2.0\ny_offset = (depth - cutout_depth) / 2.0\n\n# Create the cutout workplane at the top face of the plate\ncutout_wp = plate.faces().filter(lambda f: f.normal == cq.Vector(0, 0, 1)).val() \\\n    .workplane(center=(x_offset, y_offset)) \\\n    .rect(cutout_width, cutout_depth)\n\n# Subtract the cutout from the plate\nresult = plate.cut(cutout_wp)",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 217
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 11.5,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Face' object has no attribute 'normal'",
+              "pass": false,
+              "requirement_id": "cutout-002-1",
+              "rubric_item_id": "cutout-002-8:cutout-002-1",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Face' object has no attribute 'normal'",
+              "pass": false,
+              "requirement_id": "cutout-002-2",
+              "rubric_item_id": "cutout-002-8:cutout-002-2",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Face' object has no attribute 'normal'",
+              "pass": false,
+              "requirement_id": "cutout-002-3",
+              "rubric_item_id": "cutout-002-8:cutout-002-3",
+              "status": "fail"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "cutout",
+      "id": "cutout-002",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\nfrom cadquery import Vector\n\n# Define dimensions\nwidth = 135.0  # mm\ndepth = 70.0   # mm\nheight = 10.0  # mm\nfillet_radius = 6.0  # mm\nhole_diameter = 8.0  # mm\nhole_count = 6\ncircle_diameter = 44.0  # mm\n\n# Create the base plate with rounded corners\n# Start with a rectangular block\nblock = cq.Workplane().box(width, depth, height)\n\n# Apply fillets to the four vertical edges (top and bottom faces of the side walls)\n# The vertical edges are at x=0, x=width, y=0, y=depth on the top and bottom faces.\n# We apply fillets to these edges.\nrounded_block = block.faces().filter(lambda f: abs(f.normal.z) < 1e-6).val() # Select top and bottom faces? No, we need edges.\n# Correct approach: Apply fillets directly to the edges of the box.\n# The vertical edges are the ones connecting top and bottom faces.\nrounded_block = block.edges().filter(lambda e: abs(e.normal.z) < 1e-6).val() # This is not how CQ works.\n\n# Let's rebuild using Workplane operations for fillets\nwp = cq.Workplane()\n# Create a rectangle on the XY plane\nrect = wp.rect(width, depth)\n# Extrude to height\nsolid = rect.extrude(height)\n\n# Apply fillets to the vertical edges (the 4 side edges)\n# The vertical edges are at z=0 and z=height? No, they run along Z.\n# In CQ, we apply fillets to edges of the solid.\n# The vertical edges are the ones where x is constant or y is constant and z varies.\n# We need to select the 4 vertical edges.\nvertical_edges = solid.edges().filter(lambda e: abs(e.normal.z) < 1e-6) # This selects horizontal edges? No.\n# Let's use a simpler method: fillet the top and bottom faces' perimeter edges that are vertical?\n# Actually, the box has 12 edges. 4 are vertical (parallel to Z). 8 are horizontal.\n# We want to fillet the 4 vertical ones.\n# In CQ, we can select edges by position or just apply fillets to all and refine, but let's be precise.\n# The vertical edges are at x=0, x=width, y=0, y=depth.\n# We can use `solid.edges()` and check the normal vector. Vertical edges have normal in XY plane.\nvertical_edge_list = []\nfor e in solid.edges():\n    # Get the normal of the edge (which is perpendicular to the face it belongs to? No, edge normal is tangent to the curve?)\n    # In CQ, `edge.normal` gives the normal vector of the face adjacent? No.\n    # Let's use a different strategy: Fillet the top and bottom faces' corners? No, that makes rounded corners on the top/bottom.\n    # The requirement is \"four vertical edges are rounded\". This means the side walls have rounded vertical edges.\n    # This is achieved by filleting the edges that run parallel to the Z-axis.\n    \n    # Check if edge is vertical: distance between start and end points in Z should be significant, and X/Y constant.\n    p1 = e.vertices()[0].Position()\n    p2 = e.vertices()[1].Position()\n    dz = abs(p2.z - p1.z)\n    dx = abs(p2.x - p1.x)\n    dy = abs(p2.y - p1.y)\n    \n    if dz > 0.9 * height and (dx < 1e-6 or dy < 1e-6):\n        vertical_edge_list.append(e)\n\n# Apply fillets to these edges\nif len(vertical_edge_list) == 4:\n    rounded_solid = solid.edges(*vertical_edge_list).fillet(fillet_radius)\nelse:\n    # Fallback if detection fails, try standard box filleting logic if needed, but the above should work.\n    # Alternatively, construct the shape with rounded corners from the start?\n    # Let's assume the detection works. If not, we can use a workaround.\n    # Actually, `solid.edges()` returns edges. We can pass them to `.fillet()`.\n    # However, `cq.Workplane` methods like `.edges()` return a Workplane object representing the edges?\n    # No, `solid.edges()` returns a list of edges or a Workplane? It returns a Workplane with the edges selected.\n    # So: rounded_solid = solid.edges(*vertical_edge_list).fillet(fillet_radius)\n\n# Now create holes\n# Center of the part\ncenter = Vector(width/2, depth/2, height/2)\n# Radius of the circle for hole centers\ncircle_radius = circle_diameter / 2.0\n# Angle step\nangle_step = (2 * 3.141592653589793) / hole_count\n\n# Create a Workplane at the top face to define holes\nwp_holes = cq.Workplane(solid.faces().filter(lambda f: abs(f.normal.z) > 0.9999).val()) # Top face\n# Move to center\nwp_holes = wp_holes.moveTo(center.x, center.y)\n\n# Generate hole positions\nhole_positions = []\nfor i in range(hole_count):\n    angle = angle_step * i\n    x = center.x + circle_radius * cq.Vector(Math.cos(angle), Math.sin(angle), 0).x # Wait, need math module or use CQ vectors properly.\n    # Let's use standard math\n    import math\n    x = center.x + circle_radius * math.cos(angle)\n    y = center.y + circle_radius * math.sin(angle)\n    hole_positions.append((x, y))\n\n# Create holes\nfor pos in hole_positions:\n    wp_holes = wp_holes.moveTo(pos[0], pos[1]).circle(hole_diameter / 2.0).extrude(-height) # Extrude through the part (negative Z if top is +Z)\n    # Note: The previous `solid` was created with positive height. Top face is at z=height.\n    # So we extrude downwards.\n\n# Combine everything\nresult = rounded_solid.cut(wp_holes)",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 1423
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 28.2,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "static_cad",
+              "detail": "reference code does not parse (line 76: expected an indented block after 'else' statement on line 65)",
+              "pass": false,
+              "requirement_id": "rounded-003-1",
+              "rubric_item_id": "rounded-003-10:rounded-003-1",
+              "status": "fail"
+            },
+            {
+              "check": "static_cad",
+              "detail": "reference code does not parse (line 76: expected an indented block after 'else' statement on line 65)",
+              "pass": false,
+              "requirement_id": "rounded-003-2",
+              "rubric_item_id": "rounded-003-10:rounded-003-2",
+              "status": "fail"
+            },
+            {
+              "check": "static_cad",
+              "detail": "reference code does not parse (line 76: expected an indented block after 'else' statement on line 65)",
+              "pass": false,
+              "requirement_id": "rounded-003-3",
+              "rubric_item_id": "rounded-003-10:rounded-003-3",
+              "status": "fail"
+            },
+            {
+              "check": "static_cad",
+              "detail": "reference code does not parse (line 76: expected an indented block after 'else' statement on line 65)",
+              "pass": false,
+              "requirement_id": "rounded-003-5",
+              "rubric_item_id": "rounded-003-10:rounded-003-5",
+              "status": "fail"
+            },
+            {
+              "check": "static_cad",
+              "detail": "reference code does not parse (line 76: expected an indented block after 'else' statement on line 65)",
+              "pass": false,
+              "requirement_id": "rounded-003-6",
+              "rubric_item_id": "rounded-003-10:rounded-003-6",
+              "status": "fail"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "rounded",
+      "id": "rounded-003",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\nfrom cadquery import Vector\n\n# Define base dimensions\nwidth = 50.0  # mm\ndepth = 50.0  # mm\nheight = 12.0 # mm\nhole_diameter = 6.0 # mm\nhole_radius = hole_diameter / 2.0\n\n# Define spacing between holes\nspacing_width = 19.0 # mm (along the width axis, Y)\nspacing_depth = 38.0 # mm (along the depth axis, X)\n\n# Calculate center positions for the 6 holes in a 2x3 grid\n# Grid layout: 2 rows along width (Y), 3 columns along depth (X)\n# Total span in width = 1 * spacing_width (center to center of first and last row? No, usually N-1 gaps)\n# Let's assume standard grid distribution centered on the part.\n# Number of holes along width (rows) = 2\n# Number of holes along depth (cols) = 3\n\n# Calculate offset from center for each dimension\n# For 2 items spaced by 'spacing_width', the distance from center to first item is spacing_width / 2\noffset_y = spacing_width / 2.0\n# For 3 items spaced by 'spacing_depth', the distance from center to first item is (spacing_depth * 2) / 3 ? \n# Wait, if there are 3 holes with 2 gaps between them:\n# Gap 1: 0 to gap\n# Gap 2: gap to 2*gap\n# Total span = 2 * spacing_depth. Center is at 0.\n# Positions: -spacing_depth, 0, +spacing_depth? No, that would be 3 holes with 2 gaps of size 'spacing_depth'.\n# Let's re-read: \"19 mm apart along the width and 38 mm apart along the depth\".\n# This implies center-to-center distance.\n# Along Width (Y): 2 holes. Distance between them is 19mm.\n# Center Y positions: -19/2, +19/2 -> -9.5, +9.5\n# Along Depth (X): 3 holes. Distance between adjacent ones is 38mm.\n# Center X positions: -76/3, 0, +76/3? No.\n# If we have 3 holes with center-to-center distance of 38mm:\n# Positions relative to center: -38, 0, +38? That makes the outer holes 76mm apart.\n# Usually \"apart\" means center-to-center.\n# So for 3 holes: x1 = -38, x2 = 0, x3 = +38? No, that puts the middle one at 0 and others at +/- 38.\n# But if we want them centered on the part, the total width of the hole pattern must be symmetric.\n# Pattern: Hole1 --(38)-- Hole2 --(38)-- Hole3\n# Center of pattern is at Hole2.\n# So X coords: -38, 0, +38.\n# Y coords (2 holes): HoleA --(19)-- HoleB\n# Center of pattern is midpoint.\n# So Y coords: -9.5, +9.5.\n\nhole_positions = []\ny_coords = [-spacing_width / 2.0, spacing_width / 2.0]\nx_coords = [-(spacing_depth * 2) / 3.0, 0.0, (spacing_depth * 2) / 3.0] # Wait, if gap is 38, then positions are -38, 0, 38? \n# Let's check: distance between -38 and 0 is 38. Distance between 0 and 38 is 38. Correct.\n# But wait, if I use -(spacing_depth) and +(spacing_depth), the middle is 0.\n# Is the user implying the total span or just the gap? \"38 mm apart\" usually means center-to-center.\n# So for 3 holes: x = -38, 0, +38.\n# For 2 holes: y = -9.5, +9.5.\n\n# Let's refine the X calculation.\n# If we have 3 holes with 38mm spacing between centers:\n# Hole 1 at -38, Hole 2 at 0, Hole 3 at +38.\n# This creates a symmetric pattern centered at 0.\n# However, sometimes \"apart\" might imply the total width of the array? No, standard engineering drawing says center-to-center.\n# Let's stick to: x = [-38, 0, 38] and y = [-9.5, 9.5].\n\nx_coords = [-(spacing_depth), 0.0, spacing_depth]\ny_coords = [-(spacing_width / 2.0), (spacing_width / 2.0)]\n\n# Create the base block\nblock = cq.Workplane().box(width, depth, height)\n\n# Create holes\nfor x in x_coords:\n    for y in y_coords:\n        # Position vector relative to center of the box\n        pos = Vector(x, y, height/2.0 + hole_radius) # Start slightly above top face to ensure clean cut if using subtract, but standard is just offset by radius from surface?\n        # Actually, cq.Workplane().circle() creates a circle at the current Z.\n        # We need to position it on the top face (Z = height/2).\n        \n        w = block.faces().filter(lambda f: abs(f.Center().z - height/2) < 1e-6).val() # Get top face\n        \n        # Simpler approach: Use Workplane positioned at top face\n        wp = block.faces().filter(lambda f: abs(f.Center().z - height/2) < 1e-6).val()\n        \n        # Actually, let's just use the standard subtract method with a cylinder or circle on the top face.\n        # Create a workplane at the top face of the box\n        top_face = block.faces().filter(lambda f: abs(f.Center().z - height/2) < 1e-6)[0]\n        \n        # We can't easily iterate like this in one go without creating solids.\n        # Better approach: Create a solid cylinder for each hole and subtract.\n        pass\n\n# Alternative robust method:\n# 1. Create the main block.\n# 2. Create a list of cylinders to subtract.\n# 3. Subtract them all at once.\n\nmain_block = cq.Workplane().box(width, depth, height)\n\nholes_to_subtract = []\nfor x in x_coords:\n    for y in y_coords:\n        # Create a cylinder centered at (x, y, height/2) with radius hole_radius and height slightly larger than plate to ensure full cut\n        # Cylinder axis is Z.\n        cyl = cq.Workplane().circle(hole_radius).extrude(height + 10) # Extrude through the part\n        # Move cylinder to correct position\n        cyl = cyl.moved(cq.Vector(x, y, height/2))\n        holes_to_subtract.append(cyl)\n\n# Combine all holes into one compound solid\nholes_compound = cq.Compound.makeCompound(holes_to_subtract)\n\n# Subtract holes from the main block\nresult = main_block.cut(holes_compound)",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 1641
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 40.7,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Workplane' object has no attribute 'moved'",
+              "pass": false,
+              "requirement_id": "plate-004-1",
+              "rubric_item_id": "plate-004-10:plate-004-1",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Workplane' object has no attribute 'moved'",
+              "pass": false,
+              "requirement_id": "plate-004-2",
+              "rubric_item_id": "plate-004-10:plate-004-2",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Workplane' object has no attribute 'moved'",
+              "pass": false,
+              "requirement_id": "plate-004-3",
+              "rubric_item_id": "plate-004-10:plate-004-3",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Workplane' object has no attribute 'moved'",
+              "pass": false,
+              "requirement_id": "plate-004-4",
+              "rubric_item_id": "plate-004-10:plate-004-4",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Workplane' object has no attribute 'moved'",
+              "pass": false,
+              "requirement_id": "plate-004-5",
+              "rubric_item_id": "plate-004-10:plate-004-5",
+              "status": "fail"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "plate",
+      "id": "plate-004",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\nfrom cadquery import Vector\n\n# Dimensions\nwidth = 130.0  # mm\ndepth = 65.0   # mm\nheight = 35.0  # mm\nwall_thickness = 2.5  # mm\nhole_diameter = 4.0  # mm\nfloor_hole_rect_width = 114.0  # mm\nfloor_hole_rect_depth = 50.0   # mm\n\n# Calculate inner dimensions for the box body\ninner_width = width - (2 * wall_thickness)\ninner_depth = depth - (2 * wall_thickness)\ninner_height = height - wall_thickness  # Floor thickness included in height\n\n# Create the base block (floor + walls, excluding top)\n# We create a solid block and then subtract the top opening or build it up.\n# Easier approach: Build the outer box minus the top face, then subtract holes.\n# Actually, let's build the floor and 4 walls separately and union them.\n\n# Floor\nfloor = cq.Workplane().box(inner_width, inner_depth, wall_thickness).val()\n\n# Walls (Left, Right, Front, Back)\n# Left Wall (at x=0 relative to outer edge, but we need to align with floor)\n# Let's define coordinates based on the outer box for simplicity in subtraction, \n# then subtract holes.\n# Better approach: Create a single block representing the outer volume minus the top face,\n# then subtract the holes.\n\n# Outer block without top\nouter_box = cq.Workplane().box(width, depth, height)\n# Cut the top face to make it open-top\ntop_face = cq.Workplane().moveTo(0, 0).toLine(width, 0).toLine(width, depth).toLine(0, depth).close()\nopen_top_box = outer_box.cut(top_face)\n\n# Now subtract holes from the floor (bottom face)\n# Hole centers are at corners of a rectangle centered on the part.\n# Center of the part is (width/2, depth/2)\ncenter_x = width / 2\ncenter_y = depth / 2\n\n# Rectangle for hole centers: 114 x 50 mm\nhole_rect_half_w = floor_hole_rect_width / 2\nhole_rect_half_d = floor_hole_rect_depth / 2\n\n# Calculate corner positions relative to center\ncorner_x_offset = hole_rect_half_w\ncorner_y_offset = hole_rect_half_d\n\n# Hole centers\nc1 = (center_x - corner_x_offset, center_y - corner_y_offset)\nc2 = (center_x + corner_x_offset, center_y - corner_y_offset)\nc3 = (center_x - corner_x_offset, center_y + corner_y_offset)\nc4 = (center_x + corner_x_offset, center_y + corner_y_offset)\n\n# Create holes\nholes = []\nfor cx, cy in [c1, c2, c3, c4]:\n    hole = cq.Workplane().moveTo(cx, cy).circle(hole_diameter / 2).extrude(-wall_thickness)\n    holes.append(hole)\n\n# Combine all holes into one workplane to subtract\nhole_group = holes[0]\nfor h in holes[1:]:\n    hole_group = hole_group.union(h)\n\n# Subtract the combined holes from the open-top box\nresult = open_top_box.cut(hole_group)",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 736
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 21.9,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Workplane' object has no attribute 'toLine'",
+              "pass": false,
+              "requirement_id": "box-004-1",
+              "rubric_item_id": "box-004-11:box-004-1",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Workplane' object has no attribute 'toLine'",
+              "pass": false,
+              "requirement_id": "box-004-2",
+              "rubric_item_id": "box-004-11:box-004-2",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Workplane' object has no attribute 'toLine'",
+              "pass": false,
+              "requirement_id": "box-004-3",
+              "rubric_item_id": "box-004-11:box-004-3",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Workplane' object has no attribute 'toLine'",
+              "pass": false,
+              "requirement_id": "box-004-5",
+              "rubric_item_id": "box-004-11:box-004-5",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Workplane' object has no attribute 'toLine'",
+              "pass": false,
+              "requirement_id": "box-004-6",
+              "rubric_item_id": "box-004-11:box-004-6",
+              "status": "fail"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "box",
+      "id": "box-004",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\nfrom cadquery import Vector\n\n# Define dimensions\nwidth = 70.0  # mm (horizontal base length)\ndepth = 65.0  # mm (vertical upright height)\nheight = 30.0 # mm (thickness of the plate)\nplate_thickness = 3.0 # mm\nhole_diameter = 10.0 # mm\nhole_spacing = 54.0 # mm distance between hole centers\n\n# Create the base block (horizontal part)\n# The base is 70mm wide, 65mm deep, and 3mm tall\nbase = cq.Workplane().box(width, depth, plate_thickness).moved(0, 0, -plate_thickness/2)\n\n# Create the upright block (vertical part along the back edge)\n# It sits on top of the base at the back edge (y=0 in local coords if we align carefully)\n# Let's define the coordinate system:\n# X axis: width direction (0 to 70)\n# Y axis: depth direction (0 to 65), with 0 being the back edge where upright is attached\n# Z axis: height direction\n\n# Re-constructing the L-bracket logic:\n# The base is a plate of thickness 3mm.\n# The upright is a plate of thickness 3mm attached to the back edge of the base.\n# Total depth = 65mm.\n# Total width = 70mm.\n# Total height (thickness) = 30mm? Wait, re-reading spec: \"30 mm tall\".\n# Usually for an L-bracket:\n# - Width = horizontal span (70mm)\n# - Depth/Height = vertical span of the upright (65mm)\n# - Thickness = material thickness (30mm)? No, spec says \"both made of 3 mm plate\".\n# But then it says \"30 mm tall\". This is ambiguous.\n# Let's re-read: \"L-bracket 70 x 65 x 30 mm overall with ... both made of 3 mm plate.\"\n# Interpretation A: Overall dimensions are W=70, D=65, T=30. Material thickness is 3mm.\n# This implies the upright is 65mm high and the base is 70mm wide. The \"30mm\" might be a typo for thickness or refers to something else?\n# Or maybe the overall height is 30mm and depth is 65mm?\n# Let's look at standard L-bracket naming: Width x Height x Thickness.\n# If it says \"70 x 65 x 30\", usually that means W=70, H=65, T=30.\n# BUT the text says \"both made of 3 mm plate\". This contradicts T=30 if 30 is thickness.\n# Alternative interpretation: The overall bounding box is 70 (width) x 65 (depth/height) x 30 (thickness)? No, that doesn't fit \"3mm plate\".\n# Most likely scenario: The user meant the upright height is 65mm, base width is 70mm, and the material thickness is 3mm. The \"30\" might be a typo for \"3\" or refers to a different dimension not standard.\n# HOWEVER, looking closely: \"L-bracket 70 x 65 x 30 mm overall\".\n# Maybe the upright height is 30mm and the base width is 70mm? And the depth (into page) is 65mm?\n# Let's assume standard orientation for mounting:\n# Base lies flat. Width = 70mm. Depth (distance from wall to tip of base) = ?\n# Upright stands up against the wall. Height = ?\n# Let's try to parse \"70 x 65 x 30\".\n# Option 1: Width=70, Height=65, Thickness=30. (Contradicts \"3mm plate\").\n# Option 2: Width=70, Depth=65, Thickness=30. (Same issue).\n# Option 3: The dimensions are Width=70, Height=30, Thickness=65? Unlikely for an L-bracket.\n# Option 4: The prompt has a typo in the \"30\". Given \"both made of 3 mm plate\", the thickness is definitely 3mm.\n# What are 70 and 65? Usually Width and Height.\n# So W=70, H=65, T=3.\n# Why did the prompt say \"30\"? Maybe it meant \"3\" and typed \"30\"? Or maybe the depth is 30 and height is 65?\n# Let's re-read carefully: \"L-bracket 70 x 65 x 30 mm overall\".\n# Could it be Width=70, Depth=65, Thickness=30? No, \"both made of 3 mm plate\".\n# Okay, let's assume the dimensions are Width=70mm, Height=65mm, and Thickness=3mm. The \"30\" is likely a typo for \"3\" or refers to a specific internal dimension not mentioned.\n# WAIT. Maybe the overall height is 30mm? And the depth (into the wall) is 65mm?\n# Let's assume: Width (horizontal) = 70mm. Height (vertical) = 65mm. Thickness = 3mm.\n# The \"30\" might be a typo for \"3\". I will proceed with W=70, H=65, T=3.\n# Actually, let's consider the phrase \"30 mm overall\". Maybe the height is 30 and the depth is 65?\n# Let's try to fit the description: \"horizontal base ... vertical upright along the back edge\".\n# If the base is 70 wide, and the upright is 65 high.\n# Where does 30 come from? Maybe the total height is 30? And the depth is 65?\n# Let's assume the bounding box is 70 (width) x 65 (height) x 3 (thickness). The \"30\" is an error in the prompt's dimension list, likely meant to be 3.\n# OR, perhaps the dimensions are Width=70, Depth=30, Height=65?\n# Let's look at the hole placement: \"centred on the base in front of the upright\".\n# This implies the holes are in the horizontal part.\n# Let's assume the standard interpretation where the numbers correspond to W, H, T but T is overridden by the material spec.\n# However, if I strictly follow \"70 x 65 x 30\", maybe it means Width=70, Depth=65, Thickness=30? But then \"3mm plate\" contradicts.\n# Let's assume the user made a typo and meant 3mm thickness. The dimensions 70 and 65 are likely Width and Height.\n# I will model: Width=70, Height=65, Thickness=3.\n\n# Wait, could \"30 mm overall\" refer to the depth? And 65 is height?\n# Let's try: Width=70, Height=65, Thickness=3.\n# If the prompt insists on \"30\", maybe it's Width=70, Depth=30, Height=65?\n# Let's assume the most logical mechanical part: A large L-bracket.\n# Width = 70mm.\n# Height = 65mm.\n# Thickness = 3mm.\n# (Ignoring the \"30\" as a typo for \"3\" or assuming it refers to something else not critical like a hole depth which is through).\n\n# Let's refine the geometry construction:\n# 1. Base plate: 70mm wide (x), 65mm deep (y)? No, usually base is flat on XY.\n# Let's define coordinates:\n# X: Width direction (0 to 70)\n# Y: Depth direction (0 to 65) -> This would make the upright go into the page?\n# Standard CAD modeling for L-bracket:\n# Base lies in XY plane. Upright is in YZ plane? Or XZ?\n# Usually: Base is along X and Z (flat on table). Upright is along Y (height)?\n# No, standard mounting: Base is flat against a surface. Upright sticks out perpendicular.\n# Let's assume:\n# Base: Rectangle 70mm (width) x 3mm (thickness). Located at some Y position.\n# Upright: Rectangle 65mm (height) x 3mm (thickness). Attached to the back edge of the base.\n# The \"depth\" of the bracket (distance from wall to tip of base) is usually the width of the base?\n# Let's assume the bounding box dimensions are:\n# Width (horizontal span) = 70mm.\n# Height (vertical span) = 65mm.\n# Thickness (material) = 3mm.\n# The \"30\" in \"70 x 65 x 30\" is confusing. If I must use literal numbers, maybe the height is 30 and depth is 65?\n# Let's try: Width=70, Depth=65, Height=30?\n# If Height=30 and Depth=65, then the upright is 30mm high and the base extends 65mm out?\n# Or Upright is 65mm high and Base extends 30mm?\n# Given \"L-bracket 70 x 65 x 30\", typically WxHxD.\n# If H=65, D=30 (depth of base?), T=3.\n# Let's assume the upright height is 65mm and the base width is 70mm. The \"30\" might be a typo for thickness 3.\n# I will proceed with Width=70, Height=65, Thickness=3.\n\n# Construction steps:\n# 1. Create the base block (horizontal).\n#    Dimensions: Length=70, Width=3 (thickness), Depth=65?\n#    No, an L-bracket usually has a base plate and a vertical leg.\n#    Let's assume the \"base\" is the horizontal part lying flat.\n#    The \"upright\" is the vertical part.\n#    Overall Width = 70mm (horizontal length of base).\n#    Overall Height = 65mm (vertical height of upright).\n#    Thickness = 3mm.\n#    The \"30\" is likely a typo for 3. I will use 3 for thickness.\n\n# Wait, what if the dimensions are Width=70, Depth=65, Height=30?\n# And the material is 3mm plate.\n# So the bounding box is 70x65x30.\n# This means the upright height is 30mm? Or the base depth is 30mm?\n# If the overall size is 70x65x30, and it's an L-bracket:\n# Maybe Width=70, Height=65, Thickness=3. (Ignoring 30).\n# OR Width=70, Depth=65, Height=30?\n# Let's assume the user meant \"70 wide, 65 high, 3 thick\" and typed 30 by mistake.\n# I will code for Width=70, Height=65, Thickness=3.\n\n# Re-evaluating \"30 mm overall\". Maybe it means the depth of the base is 30mm?\n# And the upright height is 65mm?\n# So: Base width = 70mm. Base depth = 30mm. Upright height = 65mm. Thickness = 3mm.\n# This fits \"70 x 65 x 30\" if we map them to W, H, D (where D is base depth).\n# But usually L-brackets are defined by the two legs.\n# Let's assume:\n# Leg 1 (Base): Length = 70mm. Thickness = 3mm. Width (into page) = ?\n# Leg 2 (Upright): Height = 65mm. Thickness = 3mm. Width (into page) = ?\n# The \"depth\" of the part is usually the width of the base plate if mounted on a wall?\n# No, if mounted on a wall, the base sticks out.\n# Let's assume the standard orientation:\n# Wall is YZ plane. Base extends along X. Upright extends along Z.\n# Width (along X) = 70mm.\n# Height (along Z) = 65mm.\n# Thickness (along Y, into wall) = 3mm? No, thickness is usually the plate thickness.\n# If the plate is 3mm thick, then the dimension along the wall normal is 3mm.\n# So the bounding box would be 70 (width) x 65 (height) x 3 (thickness).\n# Where does 30 come from?\n# Maybe the base depth is 30mm and the upright height is 65mm?\n# Let's assume the dimensions given \"70 x 65 x 30\" refer to:\n# Width = 70mm.\n# Height = 65mm.\n# Depth (thickness of the plate) = 30mm? No, \"3 mm plate\".\n# Okay, I will assume the dimensions are Width=70, Height=65, Thickness=3. The \"30\" is a typo.\n\n# Wait, could it be Width=70, Depth=65, Height=30?\n# If Height=30 and Depth=65.\n# Then the upright is 30mm high. The base extends 65mm out?\n# Or Upright is 65mm high and Base extends 30mm?\n# Let's assume the larger dimension (65) is the height of the upright, as that's more common for brackets.\n# And 70 is the width of the base.\n# And 30 is... maybe a typo for 3?\n# I'll stick with Width=70, Height=65, Thickness=3.\n\n# Let's build the solid.\n# Base: Box(70, 3, 65)? No.\n# Coordinate system:\n# Origin at bottom-left-back corner of the upright.\n# X axis: along the width (0 to 70).\n# Y axis: thickness direction (0 to 3).\n# Z axis: height direction (0 to 65).\n# But the base needs to be attached to the back of the upright?\n# Usually, an L-bracket has a vertical leg and a horizontal leg.\n# Vertical leg: Height=65, Thickness=3, Width=3 (or same as base width?).\n# Horizontal leg: Length=70, Thickness=3, Depth=3 (or same as vertical leg width?).\n# They share the corner.\n# Let's assume the \"width\" of the bracket (the dimension perpendicular to the wall) is 70mm?\n# No, \"70 x 65 x 30 overall\".\n# If it's mounted on a wall:\n# Horizontal dimension (along wall) = 70mm.\n# Vertical dimension (up from wall) = 65mm.\n# Depth (out from wall) = 30mm? But material is 3mm plate.\n# This implies the base sticks out 30mm? That would mean the plate thickness is 30mm? Contradiction.\n# Okay, let's assume the \"30\" is a typo for \"3\".\n# So: Width=70, Height=65, Thickness=3.\n\n# Construction:\n# 1. Upright: Box at x=0 to 70? No.\n# Let's place the upright against the wall (YZ plane).\n# Upright dimensions: Height=65, Thickness=3 (along X?), Width=3 (along Y?).\n# Base dimensions: Length=70 (along Y?), Thickness=3 (along Z?).\n# This is getting confusing. Let's simplify.\n# Standard L-bracket:\n# One leg is vertical, one is horizontal.\n# Both have thickness T=3mm.\n# Vertical leg height H=65mm.\n# Horizontal leg length W=70mm.\n# They meet at a corner.\n# The \"depth\" of the part (the dimension perpendicular to the mounting surface) is usually the width of the horizontal leg?\n# No, if mounted on a wall, the horizontal leg sticks out from the wall.\n# So the \"width\" of the bracket (outward projection) is the length of the horizontal leg.\n# Let's assume:\n# Mounting face is YZ plane.\n# Horizontal leg extends along X axis. Length = 70mm? Or 30mm?\n# Vertical leg extends along Z axis. Height = 65mm?\n# If the overall dimensions are 70x65x30, and thickness is 3.\n# Maybe the horizontal leg length is 70mm.\n# The vertical leg height is 65mm.\n# The \"30\" is still unexplained. I will ignore it as a typo for 3.\n\n# Let's assume the base (horizontal) is 70mm long and 3mm thick.\n# The upright (vertical) is 65mm high and 3mm thick.\n# They are joined at the corner.\n# The \"depth\" of the base (width of the plate into the page) must match the width of the upright.\n# Usually, they are square plates or rectangular.\n# Let's assume the cross-section perpendicular to the length is 3mm x 3mm? Or 3mm x something else?\n# \"Both made of 3 mm plate\". This usually implies uniform thickness T=3mm.\n# So the cross section of both legs is 3mm x 3mm? Or 3mm x W_leg?\n# If it's a flat bar, one dimension is 3mm (thickness",
+          "error": null,
+          "meta": {
+            "done_reason": "length",
+            "eval_count": 4096
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 90.1,
+          "truncated": true,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Workplane' object has no attribute 'moved'",
+              "pass": false,
+              "requirement_id": "bracket-004-1",
+              "rubric_item_id": "bracket-004-10:bracket-004-1",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Workplane' object has no attribute 'moved'",
+              "pass": false,
+              "requirement_id": "bracket-004-2",
+              "rubric_item_id": "bracket-004-10:bracket-004-2",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Workplane' object has no attribute 'moved'",
+              "pass": false,
+              "requirement_id": "bracket-004-3",
+              "rubric_item_id": "bracket-004-10:bracket-004-3",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Workplane' object has no attribute 'moved'",
+              "pass": false,
+              "requirement_id": "bracket-004-5",
+              "rubric_item_id": "bracket-004-10:bracket-004-5",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Workplane' object has no attribute 'moved'",
+              "pass": false,
+              "requirement_id": "bracket-004-6",
+              "rubric_item_id": "bracket-004-10:bracket-004-6",
+              "status": "fail"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "bracket",
+      "id": "bracket-004",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\nfrom cadquery import Vector\n\n# Dimensions\nwidth = 80.0  # mm\ndepth = 65.0  # mm\nheight = 50.0 # mm\nwall_thickness = 3.0 # mm\nhole_diameter = 8.0 # mm\nfloor_thickness = 3.0 # mm\n\n# Calculate inner dimensions for the box body\ninner_width = width - 2 * wall_thickness\ninner_depth = depth - 2 * wall_thickness\ninner_height = height - floor_thickness\n\n# Create the base block (outer volume)\nbase = cq.Workplane().box(width, depth, height)\n\n# Cut out the open top by moving up to the inner height and cutting down\n# Actually, easier approach: Build walls and floor separately or subtract from a larger block.\n# Let's build the solid box with holes directly using boolean operations on a base block.\n\n# 1. Create the main outer block\nbox = cq.Workplane().box(width, depth, height)\n\n# 2. Cut the open top (remove material above inner_height)\n# We need to remove a slab of thickness 'floor_thickness' from the top? \n# No, the spec says \"open at the top\". The walls and floor are 3mm.\n# So we start with a full block, cut the top face down by (height - floor_thickness)?\n# Wait, if it's open top, we just remove everything above the top of the walls.\n# Let's construct it as: Outer Box -> Cut Top Slab -> Cut Floor Holes.\n\n# Step 1: Define the solid block including walls and floor\n# The total height is 50mm. The floor is 3mm thick. The walls go up to 50mm.\n# So we have a full block of 80x65x50.\n# We need to remove the top part to make it open.\n# The \"open\" part means there is no lid. The walls stop at 50mm height.\n# So we just need to cut away the material above the top surface? \n# No, a box with walls and floor implies the side walls exist up to 50mm.\n# To make it open top, we simply don't have a lid. \n# In CAD terms, if we start with a full block, we must remove the top slab?\n# No, if I have a block 80x65x50, and I want an open box, I need to remove the top face material?\n# Actually, usually \"open top\" means the interior is exposed. \n# If I start with a solid block 80x65x50, and I cut out the top slab of thickness X, \n# then the walls would be reduced. \n# Correct logic: \n# Start with a block 80 x 65 x (height - floor_thickness). Then add walls?\n# Easier: Start with a block 80x65x50. Cut out the top slab of thickness 'wall_thickness'? No.\n# Let's think about the geometry.\n# Outer dimensions: 80 x 65 x 50.\n# Wall thickness: 3mm.\n# Floor thickness: 3mm.\n# Open top means the inside is empty from z=47 to z=50? Or is the wall height 50?\n# \"50 mm tall\" usually refers to the outer height.\n# So, we have a container where the outside is 80x65x50.\n# The floor is at the bottom (z=0 to z=3).\n# The walls go from z=3 to z=50.\n# The top is open, so there is no material at z=50 covering the inside.\n# So we start with a block 80x65x50.\n# We need to remove the top slab of thickness (50 - 47)? No.\n# We need to remove the top face of the interior.\n# Let's construct the walls and floor explicitly or subtract from a larger block.\n# Method: \n# 1. Create a full block 80x65x50.\n# 2. Cut out the top slab of thickness (50 - (height_of_walls_from_bottom)).\n#    Height of walls from bottom = floor_thickness + wall_height?\n#    No, the total height is 50. The floor is 3mm thick.\n#    So the side walls are 47mm high? \n#    Wait, if the box is 80x65x50 (outer), and walls are 3mm thick.\n#    Then the inner width is 74, inner depth is 59.\n#    The floor is 3mm thick.\n#    So the side walls sit on top of the floor? Or are they part of the same extrusion?\n#    Usually, \"walls and floor are 3 mm\" implies uniform thickness.\n#    So we have a U-shape profile extruded?\n#    Let's build the profile:\n#    Bottom: 80 wide x 65 deep rectangle (floor).\n#    Sides: Walls rising from the edges of the floor.\n#    Since it's open top, we just don't close the top.\n#    \n#    Construction plan:\n#    1. Create a base block representing the outer envelope: 80 x 65 x 50.\n#    2. Cut out the top opening. The opening is the inner rectangle extended to the top?\n#       No, we need to remove the material that would form the lid.\n#       The lid would be at the top level.\n#       We need to remove a slab of thickness (50 - floor_thickness) from the top? \n#       No, if we remove a slab from the top of a 80x65x50 block, we get a box with walls and floor.\n#       But how thick are the walls?\n#       If I start with 80x65x50 and cut out the top part, the remaining height depends on where I cut.\n#       Let's assume the \"open top\" means the interior is empty up to the top edge of the walls.\n#       So we need to remove a slab from the top of the block.\n#       The thickness of this slab should be such that the remaining side walls are correct?\n#       Actually, simpler: \n#       Start with a block 80 x 65 x (height_of_walls).\n#       Add floor?\n#       \n#    Let's try this sequence:\n#    1. Create a full block 80 x 65 x 50.\n#    2. Cut out the top slab of thickness (50 - floor_thickness)? No.\n#       If I cut out a slab from the top, the side walls become thinner? No, they stay same width.\n#       But the material at the corners needs to be removed to make it open.\n#       \n#    Correct approach for \"Open Top Box\":\n#    Start with a block 80 x 65 x 50.\n#    Cut out the top face of the interior.\n#    The interior width is 74, interior depth is 59.\n#    We need to remove material above z = (50 - wall_thickness)? No.\n#    The walls are 3mm thick.\n#    So at the corners, we have a block of 3x3x50?\n#    Let's build it by subtracting voids from a solid block.\n#    \n#    Solid Block: 80 x 65 x 50.\n#    Voids to cut:\n#    1. The top opening. This is a rectangular prism at the top.\n#       Dimensions: Inner Width x Inner Depth x Height_of_opening.\n#       But wait, if we just cut a hole from the top down to the floor level?\n#       Then the walls would be gone.\n#       We want to keep the side walls.\n#       So we cut a void that is bounded by the inner dimensions of the box.\n#       The void starts at z = (50 - wall_thickness)? No.\n#       The void starts at the top surface (z=50) and goes down to z = floor_thickness?\n#       No, if we go all the way to the floor, we remove the walls.\n#       We want the walls to remain.\n#       So the void should only exist where there are no walls.\n#       The walls are at x=0..3, x=77..80, y=0..3, y=62..65.\n#       The interior is x=3..77, y=3..62.\n#       We want to remove material in the region: x in [3, 77], y in [3, 62], z in [floor_thickness, 50].\n#       Wait, if we remove that, we are left with just the floor and the four corner blocks?\n#       No, that creates a box with walls.\n#       Yes! \n#       Start with full block 80x65x50.\n#       Cut out the volume: x in [3, 77], y in [3, 62], z in [3, 50].\n#       This leaves the four corner blocks (walls) and the floor (z=0 to 3).\n#       Wait, if I cut x in [3, 77] and y in [3, 62], I am removing the center.\n#       The remaining parts are:\n#       - Left wall: x in [0, 3], all y, all z.\n#       - Right wall: x in [77, 80], all y, all z.\n#       - Front wall: y in [0, 3], all x, all z.\n#       - Back wall: y in [62, 65], all x, all z.\n#       - Floor: z in [0, 3], all x, all y.\n#       This forms a perfect open-top box with uniform 3mm walls and floor.\n#       \n#    So the cut is:\n#    Box(80, 65, 50) subtracted by Box(inner_width, inner_depth, height - floor_thickness) positioned at (wall_thickness, wall_thickness, floor_thickness).\n#    \n#    Inner width = 80 - 2*3 = 74.\n#    Inner depth = 65 - 2*3 = 59.\n#    Cut height = 50 - 3 = 47.\n#    Cut position: x=3, y=3, z=3.\n#    \n#    3. Now cut the 4 holes in the floor.\n#       Holes are 8mm diameter.\n#       Located at corners of a 60x44 rectangle centered on the part.\n#       Center of part is (40, 32.5).\n#       Rectangle 60 wide, 44 deep.\n#       Half width = 30, Half depth = 22.\n#       Corners relative to center: (+-30, +-22).\n#       Absolute coordinates:\n#       x1 = 40 - 30 = 10\n#       y1 = 32.5 - 22 = 10.5\n#       x2 = 40 + 30 = 70\n#       y2 = 32.5 + 22 = 54.5\n#       So the four centers are: (10, 10.5), (70, 10.5), (10, 54.5), (70, 54.5).\n#       \n#    Let's write the code.\n\n# Define base block\nbox = cq.Workplane().box(width, depth, height)\n\n# Define inner dimensions for the cutout\ninner_w = width - 2 * wall_thickness\ninner_d = depth - 2 * wall_thickness\ncut_height = height - floor_thickness\n\n# Create the cutout box (the void to remove to make it open top)\n# Position: offset by wall_thickness in x and y, and floor_thickness in z\ncutout = cq.Workplane().box(inner_w, inner_d, cut_height).moveTo((wall_thickness, wall_thickness, floor_thickness))\n\n# Subtract the cutout from the base box\nbox_with_open_top = box.cut(cutout)\n\n# Define hole positions\ncenter_x = width / 2\ncenter_y = depth / 2\nrect_half_w = 60.0 / 2\nrect_half_d = 44.0 / 2\n\nhole_centers = [\n    (center_x - rect_half_w, center_y - rect_half_d),\n    (center_x + rect_half_w, center_y - rect_half_d),\n    (center_x - rect_half_w, center_y + rect_half_d),\n    (center_x + rect_half_w, center_y + rect_half_d)\n]\n\n# Create the holes\nfor cx, cy in hole_centers:\n    # Cylinder for the hole\n    # Radius = diameter / 2\n    radius = hole_diameter / 2\n    # The hole goes through the floor. \n    # In CadQuery, we can use .circle() and extrude down? \n    # Or use .cylinder().\n    # Since we are subtracting from a solid, we create a cylinder at (cx, cy) with radius r and height = floor_thickness + wall_thickness?\n    # No, the hole is \"through the floor\". It goes through the 3mm floor.\n    # Does it go into the walls? The spec says \"4 holes ... in the floor\".\n    # Usually this means just through the floor thickness.\n    # However, if we cut a cylinder of height = total_height, it might intersect walls if not careful.\n    # But since the hole is centered on the rectangle which is inside the inner dimensions, \n    # and the walls are at the edges, the holes will be in the middle of the floor area.\n    # The floor area is 74x59. The hole pattern is 60x44.\n    # So holes are safely within the floor boundaries.\n    # We just need to cut a cylinder of height = floor_thickness? \n    # Or does \"through the floor\" imply it goes all the way through the bottom?\n    # Usually \"holes in the floor\" for a box implies drainage or mounting, so through the thickness of the floor.\n    # Let's assume depth = floor_thickness.\n    \n    hole_cyl = cq.Workplane().cylinder(radius, floor_thickness).moveTo((cx, cy, 0))\n    # Wait, cylinder in CadQuery is centered at origin by default? \n    # No, moveTo moves the workplane origin.\n    # Better: Use .circle() and extrude, or use a cylinder placed correctly.\n    # Let's use the cylinder method which creates a solid cylinder.\n    # We need to position it so its bottom is at z=0 and top at z=floor_thickness.\n    # The cylinder command creates a cylinder centered at origin with height h along Z.\n    # So we move it to (cx, cy, -floor_thickness/2) if we want centering?\n    # No, let's use the standard way:\n    # Create a cylinder of radius r and height h.\n    # Then move it so its bottom is at z=0.\n    # The default cylinder in cq.Workplane().cylinder(r, h) has its base at z=0? \n    # Actually, `cq.Workplane().cylinder(radius, height)` creates a cylinder centered at the origin with axis along Z?\n    # No, it creates a cylinder from (0,0,0) to (0,0,height).\n    # So we need to move it by (cx, cy, 0).\n    \n    cyl = cq.Workplane().cylinder(radius, floor_thickness).moveTo((cx, cy, 0))\n    box_with_holes = box_with_open_top.cut(cyl)\n\n# Final result\nresult = box_with_holes",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 3608
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 79.5,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised TypeError: __init__(): incompatible constructor arguments. The following argument types are supported: 1. OCP.OCP.gp.gp_Vec() 2. OCP.OCP.gp.gp_Vec(theV: OCP.OCP.gp.gp_Dir)",
+              "pass": false,
+              "requirement_id": "box-005-1",
+              "rubric_item_id": "box-005-11:box-005-1",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised TypeError: __init__(): incompatible constructor arguments. The following argument types are supported: 1. OCP.OCP.gp.gp_Vec() 2. OCP.OCP.gp.gp_Vec(theV: OCP.OCP.gp.gp_Dir)",
+              "pass": false,
+              "requirement_id": "box-005-2",
+              "rubric_item_id": "box-005-11:box-005-2",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised TypeError: __init__(): incompatible constructor arguments. The following argument types are supported: 1. OCP.OCP.gp.gp_Vec() 2. OCP.OCP.gp.gp_Vec(theV: OCP.OCP.gp.gp_Dir)",
+              "pass": false,
+              "requirement_id": "box-005-3",
+              "rubric_item_id": "box-005-11:box-005-3",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised TypeError: __init__(): incompatible constructor arguments. The following argument types are supported: 1. OCP.OCP.gp.gp_Vec() 2. OCP.OCP.gp.gp_Vec(theV: OCP.OCP.gp.gp_Dir)",
+              "pass": false,
+              "requirement_id": "box-005-5",
+              "rubric_item_id": "box-005-11:box-005-5",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised TypeError: __init__(): incompatible constructor arguments. The following argument types are supported: 1. OCP.OCP.gp.gp_Vec() 2. OCP.OCP.gp.gp_Vec(theV: OCP.OCP.gp.gp_Dir)",
+              "pass": false,
+              "requirement_id": "box-005-6",
+              "rubric_item_id": "box-005-11:box-005-6",
+              "status": "fail"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "box",
+      "id": "box-005",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\nfrom cadquery import Vector\n\n# Define dimensions\nwidth = 110.0  # mm (horizontal base length)\ndepth = 65.0   # mm (vertical upright height)\nheight = 25.0  # mm (thickness of the plate)\nplate_thickness = 8.0  # mm\nhole_diameter = 3.0  # mm\n\n# Create the horizontal base block\nbase_block = cq.Workplane().box(width, depth, plate_thickness)\n\n# Create the vertical upright block\n# The upright is attached to the back edge of the base (along the width axis)\n# We position it so its bottom aligns with the top face of the base\nupright_block = cq.Workplane().box(width, height, plate_thickness).moved(0, depth - plate_thickness, 0)\n\n# Combine the two blocks to form the L-shape\nl_shape = (base_block + upright_block).fuse()\n\n# Create the hole in the base\n# The hole is centered on the base in front of the upright.\n# \"In front\" implies along the depth axis, towards the open end of the L.\n# Center of the base: (width/2, depth/2)\nhole_center = cq.Workplane().box(width, depth, plate_thickness).faces(\">Z\").val() # Placeholder to get face context if needed, but simpler approach below\n\n# Define hole position relative to the combined solid's local coordinates\n# We need to cut a cylinder through the base part only.\n# The base extends from Z=0 to Z=plate_thickness.\n# The upright is at Y = depth - plate_thickness to depth (if origin is bottom-left-back).\n# Let's re-verify coordinate system logic for CQ:\n# box(x, y, z) creates a block from (0,0,0) to (x,y,z).\n# base_block: x=[0, width], y=[0, depth], z=[0, plate_thickness]\n# upright_block: x=[0, width], y=[depth-plate_thickness, depth], z=[0, plate_thickness]\n# Wait, the spec says \"vertical upright along the back edge\".\n# If base is on XY plane (z=thickness), and upright goes up from Y=0?\n# Let's stick to standard CAD interpretation:\n# Base lies flat. Upright stands on one edge.\n# Let's define:\n# Base: x in [0, width], y in [0, depth], z in [0, plate_thickness]\n# Upright: attached at y=depth (back edge), going up from z=plate_thickness? \n# OR upright is part of the same thickness plate? \"both made of 8 mm plate\".\n# Usually L-brackets are formed by two plates welded or bent.\n# Interpretation: Two separate 8mm thick plates joined at a corner.\n# Base plate: 110x65x8.\n# Upright plate: 110x25x8 (width x height x thickness).\n# Joining: The upright sits on the back edge of the base.\n# So, Base occupies y=[0, 65]. Upright occupies y=[65-8, 65]?? No, that would overlap if upright is same width.\n# Standard L-bracket construction:\n# Base plate: 110 (x) x 65 (y) x 8 (z).\n# Upright plate: 110 (x) x 25 (height) x 8 (thickness).\n# They are joined such that the upright's bottom edge aligns with the back edge of the base.\n# Let's assume the \"back edge\" is at y=65.\n# So Base: x=[0,110], y=[0,65], z=[0,8].\n# Upright: x=[0,110], y=[65-8, 65] (thickness overlap?) No, usually they butt up or are welded.\n# If \"both made of 8mm plate\", and it's an L shape, the upright is likely perpendicular to the base.\n# Let's assume the upright stands on the back face of the base? Or shares the edge?\n# Most common: Base is flat. Upright is vertical. They share a corner.\n# Let's model:\n# 1. Base block: x=[0, width], y=[0, depth], z=[0, plate_thickness]\n# 2. Upright block: x=[0, width], y=[depth-plate_thickness, depth], z=[plate_thickness, depth]? \n#    No, the upright has height 'depth' (65mm) and thickness 'plate_thickness' (8mm).\n#    The base has length 'width' (110), depth '65', thickness '8'.\n#    If the upright is along the back edge, it likely shares the Y dimension partially or fully.\n#    Let's assume the upright is 25mm tall and 8mm thick.\n#    It sits on the back edge of the base (y=65).\n#    So Upright X: [0, width], Y: [65-25, 65] ?? No, that's only 25mm height in Y?\n#    Let's rotate. \n#    Base: x=[0,110], y=[0,65], z=[0,8].\n#    Upright: attached at y=65. It goes up in Z? No, \"vertical upright\".\n#    If the base is on the ground (XY plane), the upright goes up in Z.\n#    But the spec says \"110 x 65 x 25 mm overall\".\n#    Usually dimensions are Length x Width x Height.\n#    Here: 110 wide, 65 deep, 25 tall.\n#    So Base is 110 (x) x 65 (y). Thickness is 8 (z).\n#    Upright is along the back edge (y=65). It goes up in Z? \n#    If so, the upright height is 25mm.\n#    But the overall depth is 65mm. The base is 65mm deep.\n#    So the upright must be within that 65mm depth or extend beyond?\n#    \"L-bracket ... 110 x 65 x 25 mm overall\".\n#    This implies the bounding box is 110x65x25.\n#    Base: 110 (x) x 65 (y) x 8 (z).\n#    Upright: 110 (x) x ? (y) x 25 (z)? \n#    If the upright is vertical, it adds to the Z dimension.\n#    But the overall height is 25mm. The base thickness is 8mm.\n#    So the upright part above the base is 25-8 = 17mm? Or is the upright total height 25mm including the base thickness?\n#    \"vertical upright along the back edge, both made of 8 mm plate\".\n#    This implies the upright is a separate piece of 8mm plate.\n#    If the overall height is 25mm, and the base is 8mm thick, the upright part sticking up is 17mm?\n#    OR, the \"depth\" 65mm refers to the vertical dimension in the drawing plane, and \"tall\" 25mm is the thickness?\n#    Let's re-read: \"110 x 65 x 25 mm overall\".\n#    \"horizontal base and a vertical upright along the back edge\".\n#    Usually, for an L-bracket mounted on a wall:\n#    Width (horizontal) = 110.\n#    Height (vertical) = 65? Or Depth?\n#    Let's assume standard orientation:\n#    X-axis: Width = 110.\n#    Y-axis: Depth/Height along the wall plane = 65.\n#    Z-axis: Thickness/Height out of wall = 25.\n#    BUT, \"vertical upright along the back edge\".\n#    If it's an L-bracket, one leg is horizontal (base), one is vertical (upright).\n#    If overall is 110x65x25:\n#    Leg 1 (Base): 110 long.\n#    Leg 2 (Upright): 65 high?\n#    Thickness: 25? No, \"both made of 8 mm plate\".\n#    So thickness is 8mm.\n#    Then what is 25mm? Maybe the upright height is 25mm and base length is 110, and depth is 65?\n#    Let's try: Base = 110 (x) x 65 (y). Thickness = 8 (z).\n#    Upright = along back edge (y=65). Height = ? \n#    If overall height is 25mm, then upright height + base thickness = 25? Or upright height = 25?\n#    \"110 x 65 x 25 mm overall\".\n#    Scenario A: Width=110, Depth=65, Height=25.\n#    Base is horizontal (in XY plane). Upright is vertical (along Z).\n#    Base dimensions: 110 (x) x 65 (y). Thickness 8 (z).\n#    Upright dimensions: 110 (x) x ? (y) x ? (z).\n#    If upright is along the back edge (y=65), and it's vertical, it must go up in Z.\n#    But if base is already 8mm thick, and total height is 25mm...\n#    Maybe the \"depth\" 65 is the dimension of the upright?\n#    Let's reconsider the description: \"L-bracket 110 x 65 x 25 mm overall\".\n#    Common L-bracket specs: Length x Height x Thickness.\n#    Here: 110 (Length), 65 (Height), 25 (Thickness)? \n#    But \"both made of 8 mm plate\". So thickness is 8mm.\n#    Contradiction: \"25 mm overall\" vs \"8 mm plate\".\n#    Perhaps the dimensions are: Width=110, Depth=65, Height=25?\n#    And the plate thickness is 8mm.\n#    So the bounding box is 110 (x) x 65 (y) x 25 (z)?\n#    If so, Base = 110x65x8. Upright = 110x(65-8)x8? No.\n#    Let's assume the \"overall\" dimensions refer to the bounding box of the L-shape.\n#    Width (X) = 110.\n#    Depth/Height (Y) = 65.\n#    Thickness (Z) = 25? No, plate is 8mm.\n#    Maybe the \"25 mm\" is the height of the upright leg only?\n#    Or maybe the overall height is 65 and thickness is 25? But plate is 8mm.\n#    Let's parse: \"110 x 65 x 25 mm overall\".\n#    \"horizontal base ... vertical upright\".\n#    \"both made of 8 mm plate\".\n#    This implies the Z-dimension (thickness) is 8mm for both.\n#    So where does 25 come from? Maybe the upright height is 25mm?\n#    And the base length is 110mm?\n#    And the base depth is 65mm?\n#    If Base is 110x65, and Upright is along the back edge (depth side).\n#    If upright height is 25mm, then total height would be max(65, 25+8)?\n#    Let's assume the standard interpretation for such problems:\n#    The part has a bounding box of 110 (width) x 65 (depth/height) x 8 (thickness).\n#    Wait, the prompt says \"110 x 65 x 25 mm overall\".\n#    And \"both made of 8 mm plate\".\n#    This is a contradiction if 25 is thickness.\n#    Alternative: The dimensions are Width=110, Height=65, Thickness=25? But plate is 8mm.\n#    Maybe the \"25\" is the height of the upright leg, and the base depth is something else?\n#    Let's look at the numbers: 110, 65, 25. Plate 8.\n#    Hypothesis: The L-bracket has a horizontal leg of 110mm length and a vertical leg of 65mm height.\n#    The thickness is 8mm.\n#    Where does 25 come from? Maybe the base depth is 25mm?\n#    \"L-bracket 110 x 65 x 25 mm overall\".\n#    Could it be Width=110, Height=65, and the \"depth\" (thickness) is 25? But plate is 8.\n#    Maybe the \"overall\" includes a flange? No.\n#    Let's try: Width=110, Depth=65, Thickness=8. And the upright height is 25?\n#    If Base is 110x65 (flat), and Upright is 110x25 (vertical).\n#    Then overall dimensions would be 110 x max(65, 25+8) x 8.\n#    If upright is attached to the back of a 65mm deep base, total depth is 65?\n#    That means the upright is inside the depth? No.\n#    Let's assume the bounding box is 110 (x) x 65 (y) x 8 (z).\n#    And the \"25\" refers to the height of the upright part?\n#    Or maybe the base is 110x25 and the upright is 65 high?\n#    \"horizontal base ... vertical upright along the back edge\".\n#    If base is 110 wide, and upright is along the back edge.\n#    Let's assume:\n#    Base: 110 (x) x 25 (y) x 8 (z).\n#    Upright: 110 (x) x 65 (y) ?? No.\n#    Let's go with the most logical engineering interpretation of \"110 x 65 x 25\":\n#    Width = 110.\n#    Height = 65.\n#    Thickness = 25? But plate is 8.\n#    Maybe the \"25\" is a typo in my understanding and it's the height of the upright?\n#    Let's re-read carefully: \"L-bracket 110 x 65 x 25 mm overall\".\n#    \"horizontal base ... vertical upright ... both made of 8 mm plate\".\n#    Okay, if plate is 8mm, then thickness is 8mm.\n#    So the dimensions must be: Width=110, Depth/Height=65, and maybe the other dimension is 25?\n#    Could it be Base Length = 110, Upright Height = 65, Thickness = 8? Then what is 25?\n#    Maybe the base depth is 25mm?\n#    \"L-bracket 110 x 65 x 25\".\n#    Maybe: Width=110, Height=65, and the \"depth\" (thickness) is 25? But plate is 8.\n#    Is it possible the user means: Width=110, Depth=65, and the upright height is 25?\n#    If Base is 110x65 (flat), and Upright is 110x25 (vertical).\n#    Then overall height = 65 (base) + 25 (upright)? No, that's 90.\n#    If they share the corner: Base 110x65, Upright 110x25 attached to back edge of base?\n#    If base is 65 deep, and upright is along the back edge (y=65), and upright height is 25.\n#    Then total height = 65 + 25 = 90? Or is the upright inside the 65?\n#    \"overall ... 110 x 65 x 25\".\n#    This strongly suggests the bounding box is 110x65x25.\n#    Since plate is 8mm, one dimension must be 8mm.\n#    So either 110, 65, or 25 is the thickness?\n#    If 25 is the thickness, it contradicts \"8 mm plate\".\n#    If 65 is the thickness, contradicts.\n#    If 110 is the thickness, contradicts.\n#    Conclusion: The \"overall\" dimensions likely refer to Length, Height, and Thickness, but one of them is the plate thickness (8).\n#    Maybe the prompt implies: Width=110, Height=65, and Thickness=8. And 25 is something else?\n#    Or: Width=110, Depth=25, Height=65?\n#    Let's assume the dimensions are:\n#    Length (X) = 110.\n#    Height (Y) = 65.\n#    Thickness (Z) = 8.\n#    And the \"25\" in \"110 x 65 x 25\" is actually the height of the upright leg?\n#    Or maybe the",
+          "error": null,
+          "meta": {
+            "done_reason": "length",
+            "eval_count": 4096
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 91.2,
+          "truncated": true,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Workplane' object has no attribute 'moved'",
+              "pass": false,
+              "requirement_id": "bracket-007-1",
+              "rubric_item_id": "bracket-007-9:bracket-007-1",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Workplane' object has no attribute 'moved'",
+              "pass": false,
+              "requirement_id": "bracket-007-2",
+              "rubric_item_id": "bracket-007-9:bracket-007-2",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Workplane' object has no attribute 'moved'",
+              "pass": false,
+              "requirement_id": "bracket-007-3",
+              "rubric_item_id": "bracket-007-9:bracket-007-3",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Workplane' object has no attribute 'moved'",
+              "pass": false,
+              "requirement_id": "bracket-007-5",
+              "rubric_item_id": "bracket-007-9:bracket-007-5",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Workplane' object has no attribute 'moved'",
+              "pass": false,
+              "requirement_id": "bracket-007-6",
+              "rubric_item_id": "bracket-007-9:bracket-007-6",
+              "status": "fail"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "bracket",
+      "id": "bracket-007",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\nfrom cadquery import Vector\n\n# Define dimensions\nwidth = 125.0  # mm\ndepth = 65.0   # mm\nheight = 12.0  # mm\nfillet_radius = 8.0  # mm\nhole_diameter = 4.0  # mm\nhole_radius = hole_diameter / 2.0\n\n# Define the rectangle for hole placement centered on the part\n# The rectangle is 98mm wide and 38mm deep\nhole_rect_width = 98.0\nhole_rect_depth = 38.0\n\n# Calculate center of the plate\nplate_center_x = width / 2.0\nplate_center_y = depth / 2.0\n\n# Calculate offsets for the corners of the inner rectangle relative to the plate center\n# The rectangle is centered, so we subtract half its dimensions from the plate center\noffset_x = hole_rect_width / 2.0\noffset_y = hole_rect_depth / 2.0\n\n# Define the four corner positions for the holes\nhole_positions = [\n    (plate_center_x - offset_x, plate_center_y - offset_y), # Bottom-Left\n    (plate_center_x + offset_x, plate_center_y - offset_y), # Bottom-Right\n    (plate_center_x - offset_x, plate_center_y + offset_y), # Top-Left\n    (plate_center_x + offset_x, plate_center_y + offset_y), # Top-Right\n]\n\n# Create the base block\nblock = cq.Workplane().box(width, depth, height)\n\n# Apply fillets to the four vertical edges\n# In CadQuery, we can apply fillets to faces or edges. \n# Since the corners are rounded with an 8mm fillet, we need to fillet the vertical edges at the corners.\n# However, standard box filleting in CadQuery usually applies to all selected edges.\n# We will select the four vertical edges that form the corners of the plate.\n# Note: The 'box' method creates a solid. We can use .edges().filter() or specific coordinates.\n# A simpler approach for rounded corners on a box is to fillet the 4 vertical edges at the ends.\n# But standard CQ box doesn't have named edges easily by position without filtering.\n# Let's construct the block and then apply fillets to the specific edges.\n\n# Get the solid from the workplane\nsolid = block.val()\n\n# To fillet specific edges, we need their IDs or use a different approach.\n# Since the plate has rounded corners at the vertical edges, we can fillet the 4 vertical edges \n# that are at the ends of the width and depth.\n# Let's create the solid first, then apply fillets.\n\n# Create the initial block\nw = cq.Workplane()\nsolid_initial = w.box(width, depth, height).val()\n\n# Get all edges\nedges = solid_initial.Edges()\n\n# We need to identify the 4 vertical edges at the corners.\n# The box has 12 edges: 4 vertical, 8 horizontal (top and bottom faces).\n# The vertical edges are those with a Z-normal component close to 0? No, vertical means along Z axis in CAD terms usually, \n# but here \"vertical edges\" likely means the edges standing up (along height).\n# In CQ box(width, depth, height), the first two args are X and Y dimensions, third is Z.\n# The edges parallel to Z are the vertical ones. There are 4 of them.\n\n# Let's use a more robust method: Create the block, then fillet the 4 vertical edges.\n# We can select edges by their position or just fillet all vertical edges if they are the only ones along Z.\n# Actually, a box has 4 vertical edges (parallel to height) and 8 horizontal edges.\n# We want to round the corners where these vertical edges meet the top/bottom faces? \n# The spec says \"four vertical edges are rounded\". This implies the entire edge is filleted? \n# Or just the corners? Usually \"rounded corners\" on a plate means the top and bottom profiles are rounded.\n# Given \"8 mm fillet\", it's likely the corner radius.\n# If we fillet the vertical edges, we get a rounded prism.\n\n# Let's try to fillet the 4 vertical edges.\n# We can use .edges().filter(lambda e: abs(e.normal.z) < 0.1) but normal might be tricky.\n# Alternatively, we can construct the shape by extruding a profile with rounded corners.\n\n# Approach: Extrude a profile with rounded corners and holes.\n# Profile dimensions: Width = width, Depth = depth.\n# Corners: Radius = fillet_radius.\n# Holes: 4 circles at calculated positions.\n\nprofile = cq.Workplane()\n# Start at bottom left (0,0)\np = profile.moveTo(0, 0)\n# Go right to full width\np.lineTo(width, 0)\n# Round the top-right corner? No, we need to round all 4 corners.\n# Let's define the path with rounded corners manually or use fillet commands on a box.\n\n# Easier way: Start with a box, then fillet the 4 vertical edges.\n# However, CQ's fillet command works on faces/edges of a solid or workplane.\n# For a solid, we can use .fillet() method.\n\n# Let's build the base shape with rounded corners using a profile extrusion approach for precision.\n# Define the path for the top face (and bottom)\npath = cq.Workplane()\npath.moveTo(0, 0)\npath.lineTo(width, 0)\n# Top right corner: round it? \n# Actually, let's just use the box and fillet the vertical edges.\n# The box has 4 vertical edges. We want to fillet them with radius 8mm.\n# But wait, if we fillet a vertical edge of a box, it creates a rounded prism.\n# Is that what is meant? \"four vertical edges are rounded\". Yes.\n\n# Let's create the solid and then apply fillets to the 4 vertical edges.\n# We need to identify these edges.\n# In a box(width, depth, height), the edges are ordered somewhat predictably but relying on index is risky.\n# Better: Use the .edges() method and filter by position or normal.\n# Vertical edges have normals perpendicular to Z? No, vertical edges run along Z, so their tangent is Z.\n# Their normal lies in XY plane.\n# Let's just fillet all edges that are roughly vertical.\n\nsolid = cq.Workplane().box(width, depth, height)\n\n# Get the list of edges\nedge_list = solid.Edges()\n\n# Filter for vertical edges (parallel to Z axis)\n# We can check the direction vector.\nvertical_edges = []\nfor edge in edge_list:\n    # Get the start and end points\n    p1 = edge.vertices()[0].toTuple()\n    p2 = edge.vertices()[1].toTuple()\n    dx = p2[0] - p1[0]\n    dy = p2[1] - p1[1]\n    dz = p2[2] - p1[2]\n    # If the edge is vertical, dx and dy are close to 0\n    if abs(dx) < 0.001 and abs(dy) < 0.001:\n        vertical_edges.append(edge)\n\n# Now fillet these edges with radius 8mm\n# Note: Filleting an edge in a solid creates a rounded surface.\n# We apply the fillet to each of these edges.\nfor edge in vertical_edges:\n    solid = solid.fillet(edge, fillet_radius)\n\n# Now create holes\n# We need to position the holes at the calculated coordinates.\n# The hole positions are relative to the center of the plate.\n# We can use .workplane().circle() and place them.\n# Since we have a solid, we can use .holes() or just extrude cylinders and subtract.\n\n# Let's create a workplane at the top face (or bottom) to define holes\n# The solid is defined in CQ. We can use .add(cq.Workplane()....) but subtraction is easier with boolean operations.\n# Or simply: result = solid.cutThroughHoles(...) ? No, standard CQ doesn't have cutThroughHoles on a solid directly without workplanes.\n# Standard way: Create cylinders and subtract.\n\nholes_to_cut = []\nfor pos in hole_positions:\n    x, y = pos\n    # Create a cylinder at (x, y) with radius hole_radius and height -height (to go through)\n    # CQ Workplane is usually at Z=0 by default for box? \n    # The box was created with .box(width, depth, height). Default position is (0,0,0) to (width, depth, height).\n    # So the top face is at z=height.\n    # We can create a cylinder centered at (x, y) extending from z=-infinity to z=infinity effectively by making it tall enough or using negative height?\n    # Actually, .box creates solid from 0,0,0 to width,depth,height.\n    # To cut holes through the whole plate, we can create cylinders of same height and subtract.\n    \n    cylinder = cq.Workplane().circle(hole_radius).extrude(height)\n    cylinder = cylinder.moved(cq.Vector(x, y, 0)) # Move to correct X,Y,Z start (Z=0 is bottom)\n    holes_to_cut.append(cylinder)\n\n# Combine all hole cylinders into one compound or subtract them one by one\nhole_compound = cq.Compound.makeCompound(holes_to_cut)\n\n# Subtract the holes from the solid\nresult = solid.cut(hole_compound)\n\n# Final check: The fillet radius is 8mm. The plate width is 125, depth 65. \n# Filleting vertical edges with 8mm radius is valid (radius < half of min dimension? No, just needs to fit).\n# 8mm is fine.\n\nresult",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 2217
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 50.3,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Workplane' object has no attribute 'Edges'",
+              "pass": false,
+              "requirement_id": "rounded-007-1",
+              "rubric_item_id": "rounded-007-11:rounded-007-1",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Workplane' object has no attribute 'Edges'",
+              "pass": false,
+              "requirement_id": "rounded-007-2",
+              "rubric_item_id": "rounded-007-11:rounded-007-2",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Workplane' object has no attribute 'Edges'",
+              "pass": false,
+              "requirement_id": "rounded-007-3",
+              "rubric_item_id": "rounded-007-11:rounded-007-3",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Workplane' object has no attribute 'Edges'",
+              "pass": false,
+              "requirement_id": "rounded-007-5",
+              "rubric_item_id": "rounded-007-11:rounded-007-5",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Workplane' object has no attribute 'Edges'",
+              "pass": false,
+              "requirement_id": "rounded-007-6",
+              "rubric_item_id": "rounded-007-11:rounded-007-6",
+              "status": "fail"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "rounded",
+      "id": "rounded-007",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\n\n# Define dimensions in millimeters\nwidth = 105.0\ndepth = 35.0\nheight = 45.0\nwall_thickness = 4.0\n\n# Calculate internal dimensions\ninner_width = width - (2 * wall_thickness)\ninner_depth = depth - (2 * wall_thickness)\ninner_height = height - wall_thickness # Floor thickness subtracted from total height\n\n# Create the floor plate\nfloor = cq.Workplane().box(inner_width, inner_depth, wall_thickness)\n\n# Create the four side walls\n# Left wall\nleft_wall = cq.Workplane().moveTo(0, 0).toLine(width, 0).toLine(width, inner_height).toLine(0, inner_height).close() \\\n    .extrude(-wall_thickness)\n# Right wall\nright_wall = cq.Workplane().moveTo(width - wall_thickness, 0).toLine(width, 0).toLine(width, inner_height).toLine(width - wall_thickness, inner_height).close() \\\n    .extrude(wall_thickness)\n# Front wall\nfront_wall = cq.Workplane().moveTo(0, 0).toLine(0, depth).toLine(inner_width, depth).toLine(inner_width, 0).close() \\\n    .extrude(-wall_thickness)\n# Back wall\nback_wall = cq.Workplane().moveTo(0, depth - wall_thickness).toLine(0, depth).toLine(inner_width, depth).toLine(inner_width, 0).close() \\\n    .extrude(wall_thickness)\n\n# Combine all parts into a single solid\nbox_solid = floor.union(left_wall).union(right_wall).union(front_wall).union(back_wall)\n\n# Assign to result variable\nresult = box_solid",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 386
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 17.3,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Workplane' object has no attribute 'toLine'",
+              "pass": false,
+              "requirement_id": "box-010-1",
+              "rubric_item_id": "box-010-7:box-010-1",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Workplane' object has no attribute 'toLine'",
+              "pass": false,
+              "requirement_id": "box-010-2",
+              "rubric_item_id": "box-010-7:box-010-2",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Workplane' object has no attribute 'toLine'",
+              "pass": false,
+              "requirement_id": "box-010-3",
+              "rubric_item_id": "box-010-7:box-010-3",
+              "status": "fail"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "box",
+      "id": "box-010",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\nfrom cadquery import Vector\n\n# Define dimensions\nwidth = 35.0   # mm (horizontal base width)\ndepth = 40.0   # mm (vertical upright depth)\nheight = 60.0  # mm (total height)\nplate_thickness = 3.0  # mm\nhole_diameter = 5.0  # mm\n\n# Create the horizontal base plate\n# It spans the full width and thickness, but its length is determined by the upright position.\n# The upright is along the back edge. Let's define the coordinate system:\n# X axis: width (35mm)\n# Y axis: depth (40mm) - upright is at the back (Y=0 to Y=depth? or Y=depth to Y=0?)\n# Z axis: height (60mm)\n\n# Let's construct the base first.\n# Base dimensions: Width = 35, Thickness = 3.\n# The upright will be attached to one side of this base.\n# Let's place the base in the XY plane at Z=0 to Z=3.\n# X range: 0 to 35\n# Y range: 0 to 40 (This will be the full depth, but we need to cut out the upright later or build it up)\n\n# Actually, a better approach for an L-bracket is:\n# 1. Create a block for the base.\n# 2. Create a block for the upright.\n# 3. Union them.\n# 4. Subtract the hole.\n\n# Base Block\nbase = cq.Workplane().box(width, depth, plate_thickness) \\\n    .moveTo(0, 0, 0) \\\n    .toOBB() # Just to ensure standard orientation if needed, but box is fine.\n# Let's be explicit with coordinates to match \"upright along the back edge\".\n# Let's say Back Edge is Y=0. So upright is at Y=0.\n# Base extends from Y=0 to Y=depth? Or does the bracket sit on a surface and the upright goes up?\n# Standard L-bracket: One leg horizontal, one vertical.\n# \"35 mm wide\" usually refers to the horizontal leg width (X).\n# \"40 mm deep\" usually refers to the vertical leg depth (Y) or the total footprint depth.\n# \"60 mm tall\" is the height of the vertical leg (Z).\n# \"Upright along the back edge\": If we look from the front, the back edge is where the upright is.\n\n# Let's define:\n# Horizontal leg: X=0..35, Z=0..3 (thickness), Y=0..40? No, that would make it a full plate.\n# Usually, an L-bracket has two legs of equal thickness meeting at a corner.\n# Leg 1 (Base): Width 35, Thickness 3. Length? The prompt says \"overall 35x40x60\".\n# Interpretation:\n# Overall Width (X) = 35\n# Overall Depth (Y) = 40\n# Overall Height (Z) = 60\n# Plate thickness = 3.\n# Upright is along the back edge.\n\n# Construction Plan:\n# 1. Base plate: X=0 to 35, Z=0 to 3. Y dimension?\n#    If the upright is at the back (Y=0), and the bracket has a depth of 40,\n#    does the base extend 40 in Y? Yes, \"overall ... 40 deep\".\n#    So Base: X=[0,35], Y=[0,40], Z=[0,3].\n# 2. Upright plate: Attached to the back edge of the base.\n#    Back edge is at Y=0? Or Y=40? Let's assume Y=0 is the back.\n#    So Upright: X=[0,35], Z=[3, 60+3]? No, thickness is 3.\n#    If base is Z=0..3, upright sits on top? No, they are joined at a corner.\n#    Usually, the intersection is shared.\n#    Let's make the Base: X=[0,35], Y=[0,40], Z=[0,3].\n#    Upright: X=[0,35], Y=[0,3] (matching base thickness at corner), Z=[3, 63]?\n#    Wait, if overall height is 60, and base thickness is 3.\n#    If upright is along the back edge (Y=0 plane?), then:\n#    Upright X range: 0 to 35.\n#    Upright Y range: 0 to 3 (to meet the base).\n#    Upright Z range: 3 to 63? No, total height is 60.\n#    If the corner is at Z=0, then upright goes from Z=0 to Z=60?\n#    But the base has thickness 3.\n#    Standard L-bracket geometry: Two plates of thickness T intersecting.\n#    The union volume is what matters.\n#    Let's define the bounding box first: X=[0,35], Y=[0,40], Z=[0,60].\n#    Base material: X=[0,35], Y=[0,40], Z=[0,3].\n#    Upright material: X=[0,35], Y=[0,3], Z=[0,60].\n#    This creates an L shape where the corner is solid.\n#    Let's verify dimensions:\n#    Width (X) = 35. Correct.\n#    Depth (Y) = 40 (Base extends full depth). Correct.\n#    Height (Z) = 60 (Upright extends full height). Correct.\n#    Thickness = 3. Correct.\n\n# Create Base\nbase_part = cq.Workplane().box(width, depth, plate_thickness) \\\n    .moveTo(0, 0, 0)\n\n# Create Upright\n# It sits on the back edge (Y=0 side? or Y=depth side?)\n# \"Upright along the back edge\". Let's assume Back is Y=0.\n# So upright occupies Y from 0 to plate_thickness.\nupright_part = cq.Workplane().box(width, plate_thickness, height) \\\n    .moveTo(0, 0, 0)\n\n# Combine them\nl_bracket = (base_part.union(upright_part))\n\n# Add Hole\n# \"1 hole of 5 mm diameter, through the base, at the centre of the base in front of the upright.\"\n# Base is Z=[0,3]. Upright is Y=[0,3] (if back is Y=0).\n# \"In front of the upright\": If upright is at Y=0..3, \"front\" usually means positive Y direction.\n# Center of the base:\n# X_center = width / 2 = 17.5\n# Y_center = depth / 2 = 20.0\n# Z_center = plate_thickness / 2 = 1.5 (since it goes through the base)\n\nhole_pos = cq.Workplane().moveTo(width/2, depth/2, plate_thickness/2)\nhole_cylinder = hole_pos.cylinder(hole_diameter, plate_thickness) \\\n    .val() # Get the solid cylinder\n\n# Subtract hole from the L-bracket\nresult = l_bracket.cut(hole_cylinder)",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 1700
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 33.3,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised TypeError: Workplane.moveTo() takes from 1 to 3 positional arguments but 4 were given",
+              "pass": false,
+              "requirement_id": "bracket-010-1",
+              "rubric_item_id": "bracket-010-9:bracket-010-1",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised TypeError: Workplane.moveTo() takes from 1 to 3 positional arguments but 4 were given",
+              "pass": false,
+              "requirement_id": "bracket-010-2",
+              "rubric_item_id": "bracket-010-9:bracket-010-2",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised TypeError: Workplane.moveTo() takes from 1 to 3 positional arguments but 4 were given",
+              "pass": false,
+              "requirement_id": "bracket-010-3",
+              "rubric_item_id": "bracket-010-9:bracket-010-3",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised TypeError: Workplane.moveTo() takes from 1 to 3 positional arguments but 4 were given",
+              "pass": false,
+              "requirement_id": "bracket-010-5",
+              "rubric_item_id": "bracket-010-9:bracket-010-5",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised TypeError: Workplane.moveTo() takes from 1 to 3 positional arguments but 4 were given",
+              "pass": false,
+              "requirement_id": "bracket-010-6",
+              "rubric_item_id": "bracket-010-9:bracket-010-6",
+              "status": "fail"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "bracket",
+      "id": "bracket-010",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\nfrom cadquery import Vector\n\n# Define base dimensions\nwidth = 45.0\ndepth = 45.0\nheight = 4.0\nhole_diameter = 8.0\n\n# Create the solid rectangular plate\nplate = cq.Workplane().box(width, depth, height)\n\n# Define the center of the mounting rectangle (30x30) relative to part center\nmounting_rect_width = 30.0\nmounting_rect_depth = 30.0\n\n# Calculate corner offsets for the 4 holes\n# The 30x30 rectangle is centered on the 45x45 plate\noffset_x = (mounting_rect_width / 2) + (hole_diameter / 2)\noffset_y = (mounting_rect_depth / 2) + (hole_diameter / 2)\n\n# Create holes at the four corners of the 30x30 rectangle\n# Corner 1: Top-Left (relative to local coordinate system, assuming Z is up)\nhole1 = plate.faces().filter(lambda f: f.normal.W == -1).val() # Bottom face\nhole2 = plate.faces().filter(lambda f: f.normal.W == 1).val()   # Top face\n\n# Actually, simpler approach: Extrude a circle and subtract from the box\n# Define positions for the 4 holes relative to the center of the plate\n# The pattern is a 30x30 square centered on the plate.\n# Corners of this 30x30 square are at +/-15mm from center.\n# Hole centers are at these corners.\n\nhole_positions = [\n    ( -offset_x, offset_y), # Top-Left\n    ( offset_x, offset_y), # Top-Right\n    ( -offset_x, -offset_y), # Bottom-Left\n    ( offset_x, -offset_y)  # Bottom-Right\n]\n\n# Build the solid with holes\nsolid = plate\n\nfor pos in hole_positions:\n    # Create a cylinder for the hole\n    hole_cyl = cq.Workplane().moveTo(pos[0], pos[1]).circle(hole_diameter / 2).extrude(height, both=True)\n    solid = solid.cut(hole_cyl)\n\nresult = solid",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 495
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 12.4,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Face' object has no attribute 'normal'",
+              "pass": false,
+              "requirement_id": "plate-011-1",
+              "rubric_item_id": "plate-011-9:plate-011-1",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Face' object has no attribute 'normal'",
+              "pass": false,
+              "requirement_id": "plate-011-2",
+              "rubric_item_id": "plate-011-9:plate-011-2",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Face' object has no attribute 'normal'",
+              "pass": false,
+              "requirement_id": "plate-011-3",
+              "rubric_item_id": "plate-011-9:plate-011-3",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Face' object has no attribute 'normal'",
+              "pass": false,
+              "requirement_id": "plate-011-4",
+              "rubric_item_id": "plate-011-9:plate-011-4",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Face' object has no attribute 'normal'",
+              "pass": false,
+              "requirement_id": "plate-011-5",
+              "rubric_item_id": "plate-011-9:plate-011-5",
+              "status": "fail"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "plate",
+      "id": "plate-011",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\n\n# Define base dimensions in mm\nplate_width = 55.0\nplate_depth = 55.0\nplate_height = 10.0\n\n# Define cutout dimensions in mm\ncutout_width = 30.0\ncutout_height = 22.0\n\n# Create the solid plate block\nplate = cq.Workplane().box(plate_width, plate_depth, plate_height)\n\n# Create the rectangular cutout wire centered on the plate\n# Calculate offsets to center the cutout\noffset_x = (plate_width - cutout_width) / 2.0\noffset_y = (plate_depth - cutout_height) / 2.0\n\ncutout = (cq.Workplane()\n    .moveTo(offset_x, offset_y)\n    .lineTo(offset_x + cutout_width, offset_y)\n    .lineTo(offset_x + cutout_width, offset_y + cutout_height)\n    .lineTo(offset_x, offset_y + cutout_height)\n    .close()\n)\n\n# Subtract the cutout from the plate to create the final solid\nresult = plate.cut(cutout)",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 247
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 8.3,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised ValueError: Null TopoDS_Shape object",
+              "pass": false,
+              "requirement_id": "cutout-012-1",
+              "rubric_item_id": "cutout-012-8:cutout-012-1",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised ValueError: Null TopoDS_Shape object",
+              "pass": false,
+              "requirement_id": "cutout-012-2",
+              "rubric_item_id": "cutout-012-8:cutout-012-2",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised ValueError: Null TopoDS_Shape object",
+              "pass": false,
+              "requirement_id": "cutout-012-3",
+              "rubric_item_id": "cutout-012-8:cutout-012-3",
+              "status": "fail"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "cutout",
+      "id": "cutout-012",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\nfrom cadquery import Vector\n\n# Define dimensions\nwidth = 150.0  # mm\ndepth = 105.0  # mm\nheight = 6.0   # mm\nfillet_radius = 6.0  # mm\nhole_diameter = 4.0  # mm\nhole_radius = hole_diameter / 2.0\n\n# Hole pattern rectangle dimensions\npattern_width = 128.0  # mm\npattern_depth = 82.0   # mm\n\n# Create the base plate with rounded corners\n# Start with a rectangular block\nblock = cq.Workplane().box(width, depth, height)\n\n# Apply fillets to the four vertical edges (top face perimeter)\n# We need to select the top face and apply fillets to its edges\ntop_face = block.faces().filter(lambda f: abs(f.normal.z - 1.0) < 1e-6).val()\n# Since box creates a solid, we use the workplane method for filleting edges directly on the sketch or solid\n# However, cq.Workplane.box returns a Solid. We need to convert to Workplane to fillet or use Solid methods.\n# Let's reconstruct using Workplane for easier filleting of the top perimeter.\n\nwp = cq.Workplane()\n# Create a rectangle with rounded corners directly? No, let's build the solid and fillet edges.\n# Actually, the cleanest way in CadQuery for this specific geometry is:\n# 1. Create a box.\n# 2. Select the top face.\n# 3. Fillet the 4 edges of the top face.\n\nsolid = cq.Solid.makeBox(width, depth, height)\ntop_face = solid.faces().filter(lambda f: abs(f.normal.z - 1.0) < 1e-6).val()\n# Get the edges of this face\nedges = top_face.edges()\n# Fillet each edge\nfor edge in edges:\n    solid = solid.fillet(edge, fillet_radius)\n\n# Now drill the holes\n# Calculate center offsets for the hole pattern\n# The pattern is centered on the part.\n# Center of part is (width/2, depth/2)\n# Half pattern width and depth\nhalf_p_width = pattern_width / 2.0\nhalf_p_depth = pattern_depth / 2.0\n\n# Define the four corner positions relative to the center\n# Top-Left, Top-Right, Bottom-Right, Bottom-Left (in local XY of the face)\n# Note: CadQuery Z is up. X is right, Y is forward (depth).\n# Let's define coordinates based on the box dimensions.\n# Center = (width/2, depth/2)\n# Hole centers:\n# 1. Top-Left: x = width/2 - half_p_width/2, y = depth/2 + half_p_depth/2\n# 2. Top-Right: x = width/2 + half_p_width/2, y = depth/2 + half_p_depth/2\n# 3. Bottom-Right: x = width/2 + half_p_width/2, y = depth/2 - half_p_depth/2\n# 4. Bottom-Left: x = width/2 - half_p_width/2, y = depth/2 - half_p_depth/2\n\nhole_positions = [\n    (width/2 - half_p_width/2, depth/2 + half_p_depth/2), # Top Left\n    (width/2 + half_p_width/2, depth/2 + half_p_depth/2), # Top Right\n    (width/2 + half_p_width/2, depth/2 - half_p_depth/2), # Bottom Right\n    (width/2 - half_p_width/2, depth/2 - half_p_depth/2)  # Bottom Left\n]\n\n# Create the solid with holes\nfor pos in hole_positions:\n    x, y = pos\n    # Create a cylinder for the hole\n    hole_cyl = cq.Workplane().circle(hole_radius).extrude(-height)\n    # Move the cylinder to the correct position\n    hole_cyl = hole_cyl.moved(cq.Vector(x, y, 0))\n    # Subtract the hole from the solid\n    solid = solid.cut(hole_cyl)\n\n# Assign to result variable\nresult = solid",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 948
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 19.4,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Face' object has no attribute 'normal'",
+              "pass": false,
+              "requirement_id": "rounded-012-1",
+              "rubric_item_id": "rounded-012-11:rounded-012-1",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Face' object has no attribute 'normal'",
+              "pass": false,
+              "requirement_id": "rounded-012-2",
+              "rubric_item_id": "rounded-012-11:rounded-012-2",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Face' object has no attribute 'normal'",
+              "pass": false,
+              "requirement_id": "rounded-012-3",
+              "rubric_item_id": "rounded-012-11:rounded-012-3",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Face' object has no attribute 'normal'",
+              "pass": false,
+              "requirement_id": "rounded-012-5",
+              "rubric_item_id": "rounded-012-11:rounded-012-5",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Face' object has no attribute 'normal'",
+              "pass": false,
+              "requirement_id": "rounded-012-6",
+              "rubric_item_id": "rounded-012-11:rounded-012-6",
+              "status": "fail"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "rounded",
+      "id": "rounded-012",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\nfrom cadquery import Vector\n\n# Dimensions\nwidth = 80.0   # mm\ndepth = 55.0   # mm\nheight = 40.0  # mm\nwall_thickness = 3.0  # mm\n\n# Calculate inner dimensions\ninner_width = width - 2 * wall_thickness\ninner_depth = depth - 2 * wall_thickness\ninner_height = height - wall_thickness  # Floor thickness included in total height\n\n# Create the floor (bottom plate)\nfloor = cq.Workplane().box(inner_width, inner_depth, wall_thickness, centered=(False, False, True))\n\n# Create the four side walls\n# Left wall\nleft_wall = cq.Workplane().move(floor.val).workplanes[0].addCircle(0, 0, 0.1) # Dummy to get plane\n# Better approach: Extrude profiles or use box with offset logic manually\n\n# Let's build the profile for one side and extrude, then combine.\n# Actually, creating a single solid by combining boxes is easier.\n\n# Define offsets from the outer bottom-left corner (0,0,0) to inner corners\n# Outer dimensions: W x D x H\n# Inner floor dimensions: (W - 2t) x (D - 2t) at Z = t\n\n# Floor solid\nfloor_solid = cq.Workplane().box(inner_width, inner_depth, wall_thickness)\n\n# Left Wall (at X=0)\nleft_wall_solid = cq.Workplane().box(width, inner_depth, height - wall_thickness).moved(0, 0, wall_thickness)\n# Wait, the box command creates a solid. Let's construct walls as boxes and union them.\n\n# Floor\nfloor_box = cq.Solid.makeBox(inner_width, inner_depth, wall_thickness)\n\n# Left Wall (Front face in Y direction? No, let's stick to standard axes)\n# X is width, Y is depth, Z is height.\n# Floor is at Z=0 to Z=wall_thickness.\n# Walls go from Z=wall_thickness to Z=height.\n\n# Left Wall (X=0 plane): Width = wall_thickness, Depth = inner_depth + 2*wall_thickness? No.\n# The outer box is 80x55.\n# Left Wall: X from 0 to wall_thickness, Y from 0 to depth, Z from wall_thickness to height.\n# But the floor is only inner_width x inner_depth.\n# So the walls must cover the full outer footprint? \n# \"3 mm walls\" usually implies the material thickness is 3mm.\n# If it's an open top box, the walls stand on the floor.\n# The floor is likely the same thickness as the walls (3mm).\n\n# Let's define the geometry precisely:\n# Outer dimensions: 80 (X) x 55 (Y) x 40 (Z)\n# Wall thickness: 3mm\n# Floor thickness: 3mm\n# Top is open.\n\n# 1. Floor\n# Inner size of floor = Outer - 2*thickness\nfloor_w = width - 2 * wall_thickness\nfloor_d = depth - 2 * wall_thickness\nfloor_h = wall_thickness\nfloor = cq.Workplane().box(floor_w, floor_d, floor_h)\n\n# 2. Left Wall (at X=0)\n# It sits on the floor. Its bottom is at Z=floor_h.\n# It spans the full depth of the outer box? Or just the inner part + thickness?\n# Standard interpretation: The wall has thickness 't'. \n# Left Wall occupies X: 0 to t, Y: 0 to depth, Z: floor_h to height.\n# However, at the corners, we need to be careful not to double count or leave gaps if we just union simple boxes.\n# Actually, for a box with uniform walls, the side walls usually span the full outer dimension in the perpendicular direction.\n# Left Wall: X=0..t, Y=0..depth, Z=floor_h..height\nleft_wall = cq.Workplane().box(wall_thickness, depth, height - floor_h).moved(0, 0, floor_h)\n\n# 3. Right Wall (at X=width-t)\nright_wall = cq.Workplane().box(wall_thickness, depth, height - floor_h).moved(width - wall_thickness, 0, floor_h)\n\n# 4. Front Wall (at Y=0)\nfront_wall = cq.Workplane().box(width, wall_thickness, height - floor_h).moved(0, 0, floor_h)\n\n# 5. Back Wall (at Y=depth-t)\nback_wall = cq.Workplane().box(width, wall_thickness, height - floor_h).moved(0, depth - wall_thickness, floor_h)\n\n# Combine all solids\nresult = floor.union(left_wall).union(right_wall).union(front_wall).union(back_wall)",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 1064
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 21.2,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised TypeError: __init__(): incompatible constructor arguments. The following argument types are supported: 1. OCP.OCP.gp.gp_Vec() 2. OCP.OCP.gp.gp_Vec(theV: OCP.OCP.gp.gp_Dir)",
+              "pass": false,
+              "requirement_id": "box-013-1",
+              "rubric_item_id": "box-013-7:box-013-1",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised TypeError: __init__(): incompatible constructor arguments. The following argument types are supported: 1. OCP.OCP.gp.gp_Vec() 2. OCP.OCP.gp.gp_Vec(theV: OCP.OCP.gp.gp_Dir)",
+              "pass": false,
+              "requirement_id": "box-013-2",
+              "rubric_item_id": "box-013-7:box-013-2",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised TypeError: __init__(): incompatible constructor arguments. The following argument types are supported: 1. OCP.OCP.gp.gp_Vec() 2. OCP.OCP.gp.gp_Vec(theV: OCP.OCP.gp.gp_Dir)",
+              "pass": false,
+              "requirement_id": "box-013-3",
+              "rubric_item_id": "box-013-7:box-013-3",
+              "status": "fail"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "box",
+      "id": "box-013",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\n\n# Define base dimensions in mm\nplate_width = 140.0\nplate_depth = 85.0\nplate_height = 5.0\n\n# Define cutout dimensions in mm\ncutout_width = 60.0\ncutout_depth = 42.0\n\n# Create the solid plate block\nplate = cq.Workplane().box(plate_width, plate_depth, plate_height)\n\n# Calculate offsets to center the cutout\nx_offset = (plate_width - cutout_width) / 2.0\ny_offset = (plate_depth - cutout_depth) / 2.0\n\n# Create the cutout loop on the top face of the plate\ncutout_loop = (plate\n    .moveTo(0, 0)\n    .lineTo(plate_width, 0)\n    .lineTo(plate_width, plate_depth)\n    .lineTo(0, plate_depth)\n    .close()\n)\n\n# Create the cutout shape relative to the center\ncutout_shape = (cq.Workplane()\n    .moveTo(x_offset + cutout_width/2, y_offset + cutout_depth/2)\n    .lineTo(x_offset + cutout_width/2, y_offset - cutout_depth/2)\n    .lineTo(x_offset - cutout_width/2, y_offset - cutout_depth/2)\n    .lineTo(x_offset - cutout_width/2, y_offset + cutout_depth/2)\n    .close()\n)\n\n# Subtract the cutout from the plate\nresult = plate.cut(cutout_shape)",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 349
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 10.1,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised ValueError: Null TopoDS_Shape object",
+              "pass": false,
+              "requirement_id": "cutout-013-1",
+              "rubric_item_id": "cutout-013-8:cutout-013-1",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised ValueError: Null TopoDS_Shape object",
+              "pass": false,
+              "requirement_id": "cutout-013-2",
+              "rubric_item_id": "cutout-013-8:cutout-013-2",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised ValueError: Null TopoDS_Shape object",
+              "pass": false,
+              "requirement_id": "cutout-013-3",
+              "rubric_item_id": "cutout-013-8:cutout-013-3",
+              "status": "fail"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "cutout",
+      "id": "cutout-013",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\nfrom cadquery import Vector\n\n# Define base dimensions in mm\nwidth = 140.0\ndepth = 120.0\nheight = 6.0\nhole_diameter = 10.0\n\n# Calculate hole center coordinates based on the inner rectangle (124 x 104)\n# The rectangle is centered on the part, so we offset from the edges.\n# Offset X = (Width - InnerWidth) / 2 = (140 - 124) / 2 = 8 mm\n# Offset Y = (Depth - InnerHeight) / 2 = (120 - 104) / 2 = 8 mm\noffset_x = (width - 124.0) / 2.0\noffset_y = (depth - 104.0) / 2.0\n\n# Create the base block\nbase = cq.Workplane().box(width, depth, height)\n\n# Define hole positions relative to the center of the plate\n# Hole centers are at: (\u00b1offset_x, \u00b1offset_y)\nhole_positions = [\n    Vector(offset_x, offset_y),\n    Vector(-offset_x, offset_y),\n    Vector(offset_x, -offset_y),\n    Vector(-offset_x, -offset_y)\n]\n\n# Create holes using the base block\nfor pos in hole_positions:\n    # Move to the center of the plate first, then apply offset\n    workplane = base.faces().filter(lambda f: f.normal.WZ < 0).val() # Top face\n    # Actually, simpler approach: start from a new workplane at the top face and subtract cylinders\n    wp = cq.Workplane(base.val()).faces().filter(lambda f: abs(f.normal.WZ) > 0.9999).val()\n    \n    # Let's use a more direct CQ approach for holes\n    pass\n\n# Re-approach using standard CQ hole creation logic\n# Start with the solid block\nsolid = cq.Solid.makeBox(width, depth, height)\n\n# Create a workplane on the top face to define holes\nwp = cq.Workplane(solid.faces().filter(lambda f: abs(f.normal.WZ) > 0.99).val())\n\n# Add circles at the calculated positions\nfor pos in hole_positions:\n    # Translate the workplane origin to the hole center\n    wp = wp.moveTo(pos.X, pos.Y)\n    wp = wp.addCircle(hole_diameter / 2.0)\n\n# Subtract the holes from the solid\nresult = solid.cut(wp.val())",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 563
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 13.6,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Face' object has no attribute 'normal'",
+              "pass": false,
+              "requirement_id": "plate-015-1",
+              "rubric_item_id": "plate-015-10:plate-015-1",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Face' object has no attribute 'normal'",
+              "pass": false,
+              "requirement_id": "plate-015-2",
+              "rubric_item_id": "plate-015-10:plate-015-2",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Face' object has no attribute 'normal'",
+              "pass": false,
+              "requirement_id": "plate-015-3",
+              "rubric_item_id": "plate-015-10:plate-015-3",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Face' object has no attribute 'normal'",
+              "pass": false,
+              "requirement_id": "plate-015-4",
+              "rubric_item_id": "plate-015-10:plate-015-4",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Face' object has no attribute 'normal'",
+              "pass": false,
+              "requirement_id": "plate-015-5",
+              "rubric_item_id": "plate-015-10:plate-015-5",
+              "status": "fail"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "plate",
+      "id": "plate-015",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\n\n# Define base dimensions in mm\nwidth = 140.0\ndepth = 70.0\nheight = 6.0\n\n# Define cutout dimensions in mm\ncutout_width = 20.0  # Parallel to plate width (x-axis)\ncutout_depth = 30.0  # Parallel to plate depth (y-axis)\n\n# Create the base solid block\nbase_block = cq.Workplane().box(width, depth, height)\n\n# Create the cutout box (negative extrusion for subtraction)\n# The cutout is centered, so we offset by half the difference between plate and cutout dimensions\ncutout_x_offset = (width - cutout_width) / 2.0\ncutout_y_offset = (depth - cutout_depth) / 2.0\n\ncutout_box = cq.Workplane().box(cutout_width, cutout_depth, height).move((cutout_x_offset, cutout_y_offset, 0))\n\n# Perform the boolean subtraction to create the through cutout\nresult = base_block.cut(cutout_box)",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 237
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 8.1,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised ValueError: Cannot convert object type <class 'cadquery.occ_impl.shapes.Solid'> to vector.",
+              "pass": false,
+              "requirement_id": "cutout-015-1",
+              "rubric_item_id": "cutout-015-8:cutout-015-1",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised ValueError: Cannot convert object type <class 'cadquery.occ_impl.shapes.Solid'> to vector.",
+              "pass": false,
+              "requirement_id": "cutout-015-2",
+              "rubric_item_id": "cutout-015-8:cutout-015-2",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised ValueError: Cannot convert object type <class 'cadquery.occ_impl.shapes.Solid'> to vector.",
+              "pass": false,
+              "requirement_id": "cutout-015-3",
+              "rubric_item_id": "cutout-015-8:cutout-015-3",
+              "status": "fail"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "cutout",
+      "id": "cutout-015",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\nfrom cadquery import Vector\n\n# Define dimensions\nwidth = 85.0  # mm\ndepth = 60.0  # mm\nheight = 10.0 # mm\nfillet_radius = 3.0 # mm\nhole_diameter = 6.0 # mm\nhole_radius = hole_diameter / 2.0\n\n# Define the bounding box for the holes (66 x 42) centered on the part\nhole_box_width = 66.0\nhole_box_depth = 42.0\n\n# Calculate offset to center the hole rectangle on the plate\noffset_x = (width - hole_box_width) / 2.0\noffset_y = (depth - hole_box_depth) / 2.0\n\n# Create the base block\nblock = cq.Workplane().box(width, depth, height)\n\n# Apply fillets to the four vertical edges\n# The vertical edges are at x=0, x=width, y=0, and y=depth\n# We need to apply fillets to the faces meeting these edges.\n# In CadQuery, we can use .faces().filterByType().sortKey() or specific face selection.\n# However, a simpler way for rounded corners on a box is to select the 4 vertical faces and fillet their edges?\n# No, the spec says \"vertical edges are rounded\". This usually means the intersection of two vertical faces (the corner).\n# But a box has sharp vertical edges. We need to fillet the edges where the side walls meet the top/bottom?\n# Re-reading: \"The four vertical edges are rounded with a 3 mm fillet.\"\n# A standard plate has 4 vertical edges (corners). These are the intersections of the side faces.\n# To round these, we fillet the edges connecting the top and bottom faces to the side faces?\n# Actually, usually \"rounded corners\" on a plate means the intersection of the two large faces is rounded.\n# Let's assume it means the 4 vertical edges (corners) are filleted.\n# In CadQuery, we can select the 4 vertical edges and apply a fillet.\n\n# Select the 4 vertical edges\n# The box has 12 edges. We want the 4 that go from z=0 to z=height at the corners.\n# Let's construct the solid and then fillet the specific edges.\nsolid = block.val()\n\n# Get all edges\nedges = solid.Edges()\n\n# Filter for vertical edges (z-axis direction)\nvertical_edges = [e for e in edges if abs(e.Vector().Z - e.LastVertex().Z) > 1e-5]\n\n# Apply fillet to these edges\n# Note: Filleting an edge creates a new face and modifies the solid.\n# We must do this carefully. cq.Workplane has .edges().filterByType('Edge').sortKey() etc.\n# But working with solids directly:\n# Let's use the Workplane method to build it, then fillet.\n\nwp = cq.Workplane()\nbox = wp.box(width, depth, height)\n\n# Select vertical edges and fillet\n# The vertical edges are at the corners.\n# We can select them by position or just filter by direction.\n# Let's use the solid fillet method if available, or work with faces.\n# Actually, cq.Workplane has a .fillets() method? No, it has .edges().filterByType('Edge').sortKey()...\n# The standard way in CadQuery to fillet edges of a solid is:\n# solid = solid.edges().filterByType('Edge').sortKey(...) ? No.\n# Let's use the specific edge selection based on coordinates or just apply fillet to all vertical edges.\n\n# A robust way:\n# 1. Create box.\n# 2. Select the 4 vertical edges.\n# 3. Fillet them.\n\n# Get edges\nall_edges = box.Edges()\n# Filter for edges that are roughly vertical (Z direction)\nvertical_edge_list = []\nfor e in all_edges:\n    v1 = e.FirstVertex().Position\n    v2 = e.LastVertex().Position\n    if abs(v2[0] - v1[0]) < 1e-5 and abs(v2[1] - v1[1]) < 1e-5: # Vertical edge\n        vertical_edge_list.append(e)\n\n# Apply fillet to these edges\n# We need to create a new solid with fillets.\n# cq.Workplane doesn't have a direct \"fillet edges\" method on the solid object returned by .box().\n# However, we can use `solid.edges().filterByType('Edge').sortKey()`? No.\n# Let's use the `faces` approach or simply construct the rounded corners differently?\n# Actually, there is a simpler way: Use `cq.Workplane().box(...).edges().filterByType('Edge')...`\n# Wait, the standard CadQuery API for filleting edges of a solid is:\n# `solid = cq.Solid.makeBox(...)`. Then `solid.edges()`.\n# There isn't a direct `.fillet()` on the Solid object in older versions, but in newer ones or via Workplane:\n# We can use `cq.Workplane().box(...).edges().filterByType('Edge').sortKey(...)`? No.\n\n# Let's try the standard pattern for this specific task using Workplane operations before making a solid.\n# But we need to fillet edges of a closed solid.\n# The method is: `solid = cq.Workplane().box(...).edges().filterByType('Edge').sortKey(...)`. No.\n\n# Correct approach for filleting vertical edges of a box in CadQuery:\n# We can select the faces adjacent to the vertical edges and fillet? No, that rounds the edge between them.\n# Yes, filleting an edge is done by selecting the edge and applying a radius.\n# In CadQuery (Python), we can do:\n# `solid = solid.edges().filterByType('Edge').sortKey(lambda e: e.Center().Z).val()`? No.\n\n# Let's use the `faces` method to select the 4 vertical faces? No, we need edges.\n# Actually, the easiest way is to use the `edges` property and filter, then apply fillet.\n# But how to apply fillet?\n# `solid = cq.Workplane().box(...).edges().filterByType('Edge').sortKey(...)`.\n# Wait, I recall `cq.Solid` has a method `.fillets()`? No.\n# The standard way is:\n# `wp = cq.Workplane().box(width, depth, height)`\n# `wp = wp.edges().filterByType('Edge').sortKey(lambda e: abs(e.Center().X - width/2) + abs(e.Center().Y - depth/2))`? No.\n\n# Let's restart the logic for filleting.\n# We can use `cq.Workplane().box(...).edges().filterByType('Edge')`.\n# Then we need to apply a fillet.\n# The function is `cq.Workplane.edges().filterByType('Edge').sortKey(...)`.\n# Actually, there is a simpler trick: Use `faces` to select the 4 side faces, then fillet their intersection? No.\n\n# Okay, let's use the explicit edge selection and filleting via the Workplane interface if possible,\n# or just construct the rounded corners by offsetting? No, that's complex.\n# Let's assume we can use `solid.edges().filterByType('Edge').sortKey(...)`.\n# Actually, the correct API call to fillet edges in CadQuery Python is:\n# `solid = solid.edges().filterByType('Edge').sortKey(lambda e: e.Center().Z).val()`? No.\n\n# Let's look at the standard solution for this:\n# 1. Create box.\n# 2. Select vertical edges.\n# 3. Fillet them.\n# The code to fillet edges is: `solid = solid.edges().filterByType('Edge').sortKey(lambda e: e.Center().Z).val()`? No.\n\n# Actually, in CadQuery, you can do:\n# `wp = cq.Workplane().box(width, depth, height)`\n# `wp = wp.edges().filterByType('Edge').sortKey(lambda e: abs(e.Center().X - width/2) + abs(e.Center().Y - depth/2))`? No.\n\n# Let's try a different approach: Use `faces` to select the 4 vertical faces, then fillet the edges between them?\n# No, we need to fillet the vertical edges themselves.\n# The method is: `solid = cq.Workplane().box(...).edges().filterByType('Edge').sortKey(...)`.\n# Wait, I found the pattern:\n# `solid = cq.Workplane().box(width, depth, height)`\n# `solid = solid.edges().filterByType('Edge').sortKey(lambda e: e.Center().Z).val()`? No.\n\n# Okay, let's use the `faces` method to select the 4 vertical faces, then fillet the edges?\n# No, we can just select the 4 vertical edges and fillet them.\n# The code is:\n# `solid = cq.Workplane().box(width, depth, height)`\n# `edges = solid.Edges()`\n# `vertical_edges = [e for e in edges if abs(e.Vector().Z) > 0.9]`? No.\n\n# Let's use the `faces` method to select the 4 vertical faces, then fillet the edges between them?\n# No, we can just use `cq.Workplane().box(...).edges().filterByType('Edge').sortKey(...)`.\n# Actually, the correct way is:\n# `solid = cq.Workplane().box(width, depth, height)`\n# `solid = solid.edges().filterByType('Edge').sortKey(lambda e: e.Center().Z).val()`? No.\n\n# Let's try this:\n# `wp = cq.Workplane().box(width, depth, height)`\n# `wp = wp.edges().filterByType('Edge').sortKey(lambda e: abs(e.Center().X - width/2) + abs(e.Center().Y - depth/2))`? No.\n\n# Okay, I will use the standard pattern for filleting edges in CadQuery:\n# 1. Create box.\n# 2. Select vertical edges.\n# 3. Fillet them.\n# The code to fillet edges is: `solid = solid.edges().filterByType('Edge').sortKey(lambda e: e.Center().Z).val()`? No.\n\n# Let's try a different approach: Use `faces` to select the 4 vertical faces, then fillet the edges between them?\n# No, we can just use `cq.Workplane().box(...).edges().filterByType('Edge').sortKey(...)`.\n# Actually, the correct way is:\n# `solid = cq.Workplane().box(width, depth, height)`\n# `solid = solid.edges().filterByType('Edge').sortKey(lambda e: e.Center().Z).val()`? No.\n\n# Let's try this:\n# `wp = cq.Workplane().box(width, depth, height)`\n# `wp = wp.edges().filterByType('Edge').sortKey(lambda e: abs(e.Center().X - width/2) + abs(e.Center().Y - depth/2))`? No.\n\n# Okay, I will use the standard pattern for filleting edges in CadQuery:\n# 1. Create box.\n# 2. Select vertical edges.\n# 3. Fillet them.\n# The code to fillet edges is: `solid = solid.edges().filterByType('Edge').sortKey(lambda e: e.Center().Z).val()`? No.\n\n# Let's try a different approach: Use `faces` to select the 4 vertical faces, then fillet the edges between them?\n# No, we can just use `cq.Workplane().box(...).edges().filterByType('Edge').sortKey(...)`.\n# Actually, the correct way is:\n# `solid = cq.Workplane().box(width, depth, height)`\n# `solid = solid.edges().filterByType('Edge').sortKey(lambda e: e.Center().Z).val()`? No.\n\n# Let's try this:\n# `wp = cq.Workplane().box(width, depth, height)`\n# `wp = wp.edges().filterByType('Edge').sortKey(lambda e: abs(e.Center().X - width/2) + abs(e.Center().Y - depth/2))`? No.\n\n# Okay, I will use the standard pattern for filleting edges in CadQuery:\n# 1. Create box.\n# 2. Select vertical edges.\n# 3. Fillet them.\n# The code to fillet edges is: `solid = solid.edges().filterByType('Edge').sortKey(lambda e: e.Center().Z).val()`? No.\n\n# Let's try a different approach: Use `faces` to select the 4 vertical faces, then fillet the edges between them?\n# No, we can just use `cq.Workplane().box(...).edges().filterByType('Edge').sortKey(...)`.\n# Actually, the correct way is:\n# `solid = cq.Workplane().box(width, depth, height)`\n# `solid = solid.edges().filterByType('Edge').sortKey(lambda e: e.Center().Z).val()`? No.\n\n# Let's try this:\n# `wp = cq.Workplane().box(width, depth, height)`\n# `wp = wp.edges().filterByType('Edge').sortKey(lambda e: abs(e.Center().X - width/2) + abs(e.Center().Y - depth/2))`? No.\n\n# Okay, I will use the standard pattern for filleting edges in CadQuery:\n# 1. Create box.\n# 2. Select vertical edges.\n# 3. Fillet them.\n# The code to fillet edges is: `solid = solid.edges().filterByType('Edge').sortKey(lambda e: e.Center().Z).val()`? No.\n\n# Let's try a different approach: Use `faces` to select the 4 vertical faces, then fillet the edges between them?\n# No, we can just use `cq.Workplane().box(...).edges().filterByType('Edge').sortKey(...)`.\n# Actually, the correct way is:\n# `solid = cq.Workplane().box(width, depth, height)`\n# `solid = solid.edges().filterByType('Edge').sortKey(lambda e: e.Center().Z).val()`? No.\n\n# Let's try this:\n# `wp = cq.Workplane().box(width, depth, height)`\n# `wp = wp.edges().filterByType('Edge').sortKey(lambda e: abs(e.Center().X - width/2) + abs(e.Center().Y - depth/2))`? No.\n\n# Okay, I will use the standard pattern for filleting edges in CadQuery:\n# 1. Create box.\n# 2. Select vertical edges.\n# 3. Fillet them.\n# The code to fillet edges is: `solid = solid.edges().filterByType('Edge').sortKey(lambda e: e.Center().Z).val()`? No.\n\n# Let's try a different approach: Use `faces` to select the 4 vertical faces, then fillet the edges between them?\n# No, we can just use `cq.Workplane().box(...).edges().filterByType('Edge').sortKey(...)`.\n# Actually, the correct way is:\n# `solid = cq.Workplane().box(width, depth, height)`\n# `solid = solid.edges().filterByType('Edge').sortKey(lambda e: e.Center().Z).val()`? No.\n\n# Let's try this:\n# `wp = cq.Workplane().box(width, depth, height)`\n# `wp = wp.edges().filterByType('Edge').sortKey(lambda e: abs(e.Center().X - width/2) + abs(e.Center().Y - depth/2))`? No.\n\n# Okay, I will use the standard pattern for filleting edges in CadQuery:\n# 1. Create box.\n# 2. Select vertical edges.\n# 3. Fillet them.\n# The code to fillet edges is: `solid = solid.edges().filterByType('Edge').sortKey(lambda e: e.Center().Z).val()`? No.\n\n# Let's try a different approach: Use `faces` to select the 4 vertical faces, then fillet the edges between them?\n# No, we can just use `cq.Workplane().box(...).edges().filterByType('Edge').sortKey(...)`.\n# Actually, the correct way is:\n# `solid = cq.Workplane().box(width, depth, height)`\n# `solid = solid.edges().filterByType('Edge').sortKey(lambda e: e.Center().Z).val()`? No.\n\n# Let's try this:\n# `wp = cq.Workplane().box(width, depth, height)`\n# `wp = wp.edges().filterByType('Edge').sortKey(lambda e: abs(e.Center().X - width/2) + abs(e.Center().Y - depth/2))`? No.\n\n# Okay, I will use the standard pattern for filleting edges in CadQuery:\n# 1. Create box.\n# 2. Select vertical edges.\n# 3. Fillet them.\n# The code to fillet edges is: `solid = solid.edges().filterByType('Edge').sortKey(lambda e: e.Center().Z).val()`? No.\n\n# Let's try a different approach: Use `faces` to select the 4 vertical faces, then fillet the edges between them?\n# No, we can just use `cq.Workplane().box(...).edges().filterByType('Edge').sortKey(...)`.\n# Actually, the correct way is:\n# `solid = cq.Workplane().box(width, depth, height)`\n# `solid = solid.edges().filterByType('Edge').sortKey(lambda e: e.Center().Z).val()`? No.\n\n# Let's try this:\n# `wp = cq.Workplane().box(width, depth, height)`\n# `wp = wp.edges().filterByType('Edge').sortKey(lambda e: abs(e.Center().X - width/2) + abs(e.Center().Y - depth/2))`? No.\n\n# Okay, I will use the standard pattern for filleting edges in CadQuery:\n# 1. Create box.\n# 2.",
+          "error": null,
+          "meta": {
+            "done_reason": "length",
+            "eval_count": 4096
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 74.2,
+          "truncated": true,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Edge' object has no attribute 'Vector'",
+              "pass": false,
+              "requirement_id": "rounded-015-1",
+              "rubric_item_id": "rounded-015-11:rounded-015-1",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Edge' object has no attribute 'Vector'",
+              "pass": false,
+              "requirement_id": "rounded-015-2",
+              "rubric_item_id": "rounded-015-11:rounded-015-2",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Edge' object has no attribute 'Vector'",
+              "pass": false,
+              "requirement_id": "rounded-015-3",
+              "rubric_item_id": "rounded-015-11:rounded-015-3",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Edge' object has no attribute 'Vector'",
+              "pass": false,
+              "requirement_id": "rounded-015-5",
+              "rubric_item_id": "rounded-015-11:rounded-015-5",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised AttributeError: 'Edge' object has no attribute 'Vector'",
+              "pass": false,
+              "requirement_id": "rounded-015-6",
+              "rubric_item_id": "rounded-015-11:rounded-015-6",
+              "status": "fail"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "rounded",
+      "id": "rounded-015",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\nfrom cadquery import Vector\n\n# Define dimensions\nwidth = 80.0   # Overall width (x)\ndepth = 55.0   # Overall depth (y)\nheight = 25.0  # Overall height (z)\nplate_thickness = 8.0\nhole_diameter = 4.0\n\n# Calculate base dimensions for the holes\n# The hole pattern is a 70mm x 36mm rectangle centered on the base\n# Base width available for holes = overall width - plate_thickness (back upright)\n# However, the spec says \"centred on the base in front of the upright\".\n# Let's assume the base extends the full width and depth minus thickness where appropriate.\n# Usually L-brackets have a vertical back and a horizontal bottom.\n# Let's define the geometry:\n# Vertical plate: x=0 to 80, z=0 to 25, y=0 to 8 (thickness)\n# Horizontal plate: y=0 to 55, z=0 to 8 (thickness), x=0 to 80\n# Wait, standard L-bracket orientation:\n# Vertical leg is usually at the back. Horizontal leg is at the bottom.\n# Let's place the corner at (0,0,0).\n# Vertical plate: x in [0, 80], z in [0, 25], y in [0, 8] (thickness along Y)\n# Horizontal plate: x in [0, 80], y in [0, 55], z in [0, 8] (thickness along Z)\n# This creates an L shape where the corner is at bottom-left-back.\n\n# Create the vertical upright\nvertical = cq.Workplane().box(80, plate_thickness, height, moved=(0, 0, 0))\n\n# Create the horizontal base\nbase = cq.Workplane().box(width, depth, plate_thickness, moved=(0, 0, 0))\n\n# Combine to form the L-bracket solid\nl_bracket = (vertical + base).fuse()\n\n# Define hole positions\n# Rectangle for holes: 70mm wide x 36mm deep, centered on the base.\n# Base dimensions: Width=80, Depth=55.\n# Center of base in X: 80 / 2 = 40\n# Center of base in Y: 55 / 2 = 27.5\n# Hole pattern center offset from base center:\n# Pattern width = 70 -> half = 35\n# Pattern depth = 36 -> half = 18\n# X range for holes: [40 - 35, 40 + 35] = [5, 75]\n# Y range for holes: [27.5 - 18, 27.5 + 18] = [9.5, 45.5]\n\nhole_pattern_width = 70.0\nhole_pattern_depth = 36.0\npattern_center_x = width / 2\npattern_center_y = depth / 2\n\n# Calculate hole centers\nhole_spacing_x = hole_pattern_width / (4 - 1) # Assuming 2 columns? Or grid?\n# \"one at each corner of a 70 mm by 36 mm rectangle\" implies 4 holes at the corners of this rectangle.\n# So we just need the 4 corners of that rectangle.\n\nhole_x_centers = [pattern_center_x - hole_pattern_width / 2, pattern_center_x + hole_pattern_width / 2]\nhole_y_centers = [pattern_center_y - hole_pattern_depth / 2, pattern_center_y + hole_pattern_depth / 2]\n\n# Create holes\nfor hx in hole_x_centers:\n    for hy in hole_y_centers:\n        # Hole cylinder\n        hole_cyl = cq.Workplane().moveTo(hx, hy).circle(hole_diameter / 2).extrude(-plate_thickness)\n        l_bracket = l_bracket.cut(hole_cyl)\n\n# Final result\nresult = l_bracket",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 899
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 18.9,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised TypeError: Workplane.box() got an unexpected keyword argument 'moved'",
+              "pass": false,
+              "requirement_id": "bracket-017-1",
+              "rubric_item_id": "bracket-017-11:bracket-017-1",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised TypeError: Workplane.box() got an unexpected keyword argument 'moved'",
+              "pass": false,
+              "requirement_id": "bracket-017-2",
+              "rubric_item_id": "bracket-017-11:bracket-017-2",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised TypeError: Workplane.box() got an unexpected keyword argument 'moved'",
+              "pass": false,
+              "requirement_id": "bracket-017-3",
+              "rubric_item_id": "bracket-017-11:bracket-017-3",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised TypeError: Workplane.box() got an unexpected keyword argument 'moved'",
+              "pass": false,
+              "requirement_id": "bracket-017-5",
+              "rubric_item_id": "bracket-017-11:bracket-017-5",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised TypeError: Workplane.box() got an unexpected keyword argument 'moved'",
+              "pass": false,
+              "requirement_id": "bracket-017-6",
+              "rubric_item_id": "bracket-017-11:bracket-017-6",
+              "status": "fail"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "bracket",
+      "id": "bracket-017",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    }
+  ],
+  "rollouts": 1,
+  "scoring": "executed",
+  "solve_rate": 0.0,
+  "spec_version": "cad-spec-1.0",
+  "split": "heldout",
+  "tasks": 20,
+  "totals": {
+    "failed": 20,
+    "no_code": 0,
+    "not_run": 0,
+    "solved": 0,
+    "truncated": 3,
+    "unjudged": 0
+  },
+  "unjudged_rate": 0.0
+}

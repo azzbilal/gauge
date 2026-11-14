@@ -60,3 +60,6 @@ jobs:
 
       - name: Test verify/probe
         run: python3 -m unittest discover -s verify/probe/tests -v
+
+      - name: Test model (cad-spec, generator, benchmark)
+        run: python3 -m unittest discover -s model/tests -v
