@@ -1,0 +1,1279 @@
+{
+  "attempted": 20,
+  "by_family": {
+    "box": {
+      "attempted": 4,
+      "solve_rate": 0.5,
+      "solved": 2
+    },
+    "bracket": {
+      "attempted": 4,
+      "solve_rate": 0.0,
+      "solved": 0
+    },
+    "cutout": {
+      "attempted": 4,
+      "solve_rate": 1.0,
+      "solved": 4
+    },
+    "plate": {
+      "attempted": 4,
+      "solve_rate": 0.0,
+      "solved": 0
+    },
+    "rounded": {
+      "attempted": 4,
+      "solve_rate": 0.0,
+      "solved": 0
+    }
+  },
+  "candidate": "ollama:qwen3.5:9b-q4_K_M+fewshot5",
+  "data": "model/data/synthetic-seed0-n100.json",
+  "extract_version": "extract-7",
+  "generation": {
+    "endpoint": "/api/generate",
+    "fewshot": {
+      "example_ids": [
+        "plate-001",
+        "box-001",
+        "bracket-001",
+        "cutout-001",
+        "rounded-001"
+      ],
+      "k": 5
+    },
+    "num_ctx": 16384,
+    "num_predict": 4096,
+    "temperature": 0.0,
+    "think": false
+  },
+  "model": "qwen3.5:9b-q4_K_M",
+  "not_scored": {
+    "box": "wall thickness, open top, hole positions",
+    "bracket": "plate thickness, upright position, hole positions",
+    "cutout": "the cutout (size and presence)",
+    "plate": "hole positions",
+    "rounded": "fillet radius (and presence), hole positions"
+  },
+  "per_task": [
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\n\nresult = (\n    cq.Workplane(\"XY\")\n    .box(50, 40, 6)\n    .faces(\">Z\")\n    .workplane()\n    .rarray(36, 26, 8, 4)\n    .hole(8)\n)",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 79,
+            "prompt_eval_count": 1128
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 9.0,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "width 50 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "plate-002-1",
+              "rubric_item_id": "plate-002-10:plate-002-1",
+              "status": "pass"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "depth 40 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "plate-002-2",
+              "rubric_item_id": "plate-002-10:plate-002-2",
+              "status": "pass"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "height 6 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "plate-002-3",
+              "rubric_item_id": "plate-002-10:plate-002-3",
+              "status": "pass"
+            },
+            {
+              "check": "static_cad",
+              "detail": "hole count: spec requires 4 but reference has 32",
+              "pass": false,
+              "requirement_id": "plate-002-4",
+              "rubric_item_id": "plate-002-10:plate-002-4",
+              "status": "fail"
+            },
+            {
+              "check": "static_cad",
+              "detail": "hole diameter 8 mm matches spec",
+              "pass": true,
+              "requirement_id": "plate-002-5",
+              "rubric_item_id": "plate-002-10:plate-002-5",
+              "status": "pass"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "plate",
+      "id": "plate-002",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\n\nresult = (\n    cq.Workplane(\"XY\")\n    .box(50, 40, 10)\n    .faces(\">Z\")\n    .workplane()\n    .rect(22, 8)\n    .cutThruAll()\n)",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 73,
+            "prompt_eval_count": 1122
+          },
+          "no_code": false,
+          "outcome": "solved",
+          "seconds": 6.8,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "width 50 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "cutout-002-1",
+              "rubric_item_id": "cutout-002-8:cutout-002-1",
+              "status": "pass"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "depth 40 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "cutout-002-2",
+              "rubric_item_id": "cutout-002-8:cutout-002-2",
+              "status": "pass"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "height 10 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "cutout-002-3",
+              "rubric_item_id": "cutout-002-8:cutout-002-3",
+              "status": "pass"
+            }
+          ]
+        }
+      ],
+      "failed": 0,
+      "family": "cutout",
+      "id": "cutout-002",
+      "not_run": 0,
+      "solved": 1,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\n\nresult = (\n    cq.Workplane(\"XY\")\n    .box(135, 70, 10)\n    .edges(\"|Z\")\n    .fillet(6)\n    .faces(\">Z\")\n    .workplane()\n    .rarray(44, 8, 8, 6)\n    .hole(8)\n)",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 95,
+            "prompt_eval_count": 1140
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 7.1,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "width 135 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "rounded-003-1",
+              "rubric_item_id": "rounded-003-10:rounded-003-1",
+              "status": "pass"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "depth 70 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "rounded-003-2",
+              "rubric_item_id": "rounded-003-10:rounded-003-2",
+              "status": "pass"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "height 10 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "rounded-003-3",
+              "rubric_item_id": "rounded-003-10:rounded-003-3",
+              "status": "pass"
+            },
+            {
+              "check": "static_cad",
+              "detail": "hole count: spec requires 6 but reference has 48",
+              "pass": false,
+              "requirement_id": "rounded-003-5",
+              "rubric_item_id": "rounded-003-10:rounded-003-5",
+              "status": "fail"
+            },
+            {
+              "check": "static_cad",
+              "detail": "hole diameter 8 mm matches spec",
+              "pass": true,
+              "requirement_id": "rounded-003-6",
+              "rubric_item_id": "rounded-003-10:rounded-003-6",
+              "status": "pass"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "rounded",
+      "id": "rounded-003",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\n\nresult = (\n    cq.Workplane(\"XY\")\n    .box(50, 50, 12)\n    .faces(\">Z\")\n    .workplane()\n    .rarray(19, 38, 6, 2)\n    .hole(6)\n)",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 80,
+            "prompt_eval_count": 1140
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 6.2,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "width 50 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "plate-004-1",
+              "rubric_item_id": "plate-004-10:plate-004-1",
+              "status": "pass"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "depth 50 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "plate-004-2",
+              "rubric_item_id": "plate-004-10:plate-004-2",
+              "status": "pass"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "height 12 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "plate-004-3",
+              "rubric_item_id": "plate-004-10:plate-004-3",
+              "status": "pass"
+            },
+            {
+              "check": "static_cad",
+              "detail": "hole count: spec requires 6 but reference has 12",
+              "pass": false,
+              "requirement_id": "plate-004-4",
+              "rubric_item_id": "plate-004-10:plate-004-4",
+              "status": "fail"
+            },
+            {
+              "check": "static_cad",
+              "detail": "hole diameter 6 mm matches spec",
+              "pass": true,
+              "requirement_id": "plate-004-5",
+              "rubric_item_id": "plate-004-10:plate-004-5",
+              "status": "pass"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "plate",
+      "id": "plate-004",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\n\nresult = (\n    cq.Workplane(\"XY\")\n    .box(130, 65, 35)\n    .faces(\">Z\")\n    .shell(-2.5)\n    .faces(\"<Z\")\n    .workplane()\n    .rect(114, 50)\n    .cutThruAll()\n)",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 92,
+            "prompt_eval_count": 1158
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 6.3,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "width 130 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "box-004-1",
+              "rubric_item_id": "box-004-11:box-004-1",
+              "status": "pass"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "depth 65 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "box-004-2",
+              "rubric_item_id": "box-004-11:box-004-2",
+              "status": "pass"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "height 35 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "box-004-3",
+              "rubric_item_id": "box-004-11:box-004-3",
+              "status": "pass"
+            },
+            {
+              "check": "static_cad",
+              "detail": "hole count: reference uses cutThruAll of a non-circular profile; hole count cannot be resolved statically",
+              "pass": false,
+              "requirement_id": "box-004-5",
+              "rubric_item_id": "box-004-11:box-004-5",
+              "status": "not_run"
+            },
+            {
+              "check": "static_cad",
+              "detail": "hole diameter: spec requires 4 mm but the reference has no hole",
+              "pass": false,
+              "requirement_id": "box-004-6",
+              "rubric_item_id": "box-004-11:box-004-6",
+              "status": "fail"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "box",
+      "id": "box-004",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\n\nbase = (\n    cq.Workplane(\"XY\")\n    .box(70, 65, 3, centered=(True, True, False))\n    .faces(\">Z\")\n    .workplane()\n    .rarray(0, 54, 10, 2)\n    .hole(10)\n)\n\nupright = (\n    cq.Workplane(\"XY\")\n    .center(35, 65 - 1.5)\n    .box(70, 3, 30, centered=(True, True, False))\n)\n\nresult = base.union(upright)",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 151,
+            "prompt_eval_count": 1161
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 7.2,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "width: spec requires 70 mm but the executed solid `result` measures 105 mm along X",
+              "pass": false,
+              "requirement_id": "bracket-004-1",
+              "rubric_item_id": "bracket-004-10:bracket-004-1",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "depth: spec requires 65 mm but the executed solid `result` measures 97.5 mm along Y",
+              "pass": false,
+              "requirement_id": "bracket-004-2",
+              "rubric_item_id": "bracket-004-10:bracket-004-2",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "height 30 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "bracket-004-3",
+              "rubric_item_id": "bracket-004-10:bracket-004-3",
+              "status": "pass"
+            },
+            {
+              "check": "static_cad",
+              "detail": "hole count: spec requires 2 but reference has 20",
+              "pass": false,
+              "requirement_id": "bracket-004-5",
+              "rubric_item_id": "bracket-004-10:bracket-004-5",
+              "status": "fail"
+            },
+            {
+              "check": "static_cad",
+              "detail": "hole diameter 10 mm matches spec",
+              "pass": true,
+              "requirement_id": "bracket-004-6",
+              "rubric_item_id": "bracket-004-10:bracket-004-6",
+              "status": "pass"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "bracket",
+      "id": "bracket-004",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\n\nresult = (\n    cq.Workplane(\"XY\")\n    .box(80, 65, 50)\n    .faces(\">Z\")\n    .shell(-3)\n    .faces(\"<Z\")\n    .workplane()\n    .rect(60, 44)\n    .vertices()\n    .circle(8)\n    .cutThruAll()\n)",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 100,
+            "prompt_eval_count": 1151
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 6.9,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised StdFail_NotDone: BRep_API: command not done",
+              "pass": false,
+              "requirement_id": "box-005-1",
+              "rubric_item_id": "box-005-11:box-005-1",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised StdFail_NotDone: BRep_API: command not done",
+              "pass": false,
+              "requirement_id": "box-005-2",
+              "rubric_item_id": "box-005-11:box-005-2",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised StdFail_NotDone: BRep_API: command not done",
+              "pass": false,
+              "requirement_id": "box-005-3",
+              "rubric_item_id": "box-005-11:box-005-3",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised StdFail_NotDone: BRep_API: command not done",
+              "pass": false,
+              "requirement_id": "box-005-5",
+              "rubric_item_id": "box-005-11:box-005-5",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised StdFail_NotDone: BRep_API: command not done",
+              "pass": false,
+              "requirement_id": "box-005-6",
+              "rubric_item_id": "box-005-11:box-005-6",
+              "status": "fail"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "box",
+      "id": "box-005",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\n\nbase = (\n    cq.Workplane(\"XY\")\n    .box(110, 65, 8, centered=(True, True, False))\n    .faces(\">Z\")\n    .workplane()\n    .center(0, 0)\n    .hole(3)\n)\n\nupright = (\n    cq.Workplane(\"XY\")\n    .center(0, 31.5)\n    .box(110, 8, 25, centered=(True, True, False))\n)\n\nresult = base.union(upright)",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 139,
+            "prompt_eval_count": 1149
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 7.0,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "width 110 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "bracket-007-1",
+              "rubric_item_id": "bracket-007-9:bracket-007-1",
+              "status": "pass"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "depth: spec requires 65 mm but the executed solid `result` measures 68 mm along Y",
+              "pass": false,
+              "requirement_id": "bracket-007-2",
+              "rubric_item_id": "bracket-007-9:bracket-007-2",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "height 25 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "bracket-007-3",
+              "rubric_item_id": "bracket-007-9:bracket-007-3",
+              "status": "pass"
+            },
+            {
+              "check": "static_cad",
+              "detail": "hole count 1 matches spec",
+              "pass": true,
+              "requirement_id": "bracket-007-5",
+              "rubric_item_id": "bracket-007-9:bracket-007-5",
+              "status": "pass"
+            },
+            {
+              "check": "static_cad",
+              "detail": "hole diameter 3 mm matches spec",
+              "pass": true,
+              "requirement_id": "bracket-007-6",
+              "rubric_item_id": "bracket-007-9:bracket-007-6",
+              "status": "pass"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "bracket",
+      "id": "bracket-007",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\n\nresult = (\n    cq.Workplane(\"XY\")\n    .box(125, 65, 12)\n    .edges(\"|Z\")\n    .fillet(8)\n    .faces(\">Z\")\n    .workplane()\n    .rarray(0, 0, 4, 4, 98, 38)\n    .hole(4)\n)",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 102,
+            "prompt_eval_count": 1147
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 6.5,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised TypeError: Workplane.rarray() takes from 5 to 6 positional arguments but 7 were given",
+              "pass": false,
+              "requirement_id": "rounded-007-1",
+              "rubric_item_id": "rounded-007-11:rounded-007-1",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised TypeError: Workplane.rarray() takes from 5 to 6 positional arguments but 7 were given",
+              "pass": false,
+              "requirement_id": "rounded-007-2",
+              "rubric_item_id": "rounded-007-11:rounded-007-2",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised TypeError: Workplane.rarray() takes from 5 to 6 positional arguments but 7 were given",
+              "pass": false,
+              "requirement_id": "rounded-007-3",
+              "rubric_item_id": "rounded-007-11:rounded-007-3",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised TypeError: Workplane.rarray() takes from 5 to 6 positional arguments but 7 were given",
+              "pass": false,
+              "requirement_id": "rounded-007-5",
+              "rubric_item_id": "rounded-007-11:rounded-007-5",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised TypeError: Workplane.rarray() takes from 5 to 6 positional arguments but 7 were given",
+              "pass": false,
+              "requirement_id": "rounded-007-6",
+              "rubric_item_id": "rounded-007-11:rounded-007-6",
+              "status": "fail"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "rounded",
+      "id": "rounded-007",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\n\nresult = (\n    cq.Workplane(\"XY\")\n    .box(105, 35, 45)\n    .faces(\">Z\")\n    .shell(-4)\n)",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 56,
+            "prompt_eval_count": 1106
+          },
+          "no_code": false,
+          "outcome": "solved",
+          "seconds": 5.9,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "width 105 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "box-010-1",
+              "rubric_item_id": "box-010-7:box-010-1",
+              "status": "pass"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "depth 35 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "box-010-2",
+              "rubric_item_id": "box-010-7:box-010-2",
+              "status": "pass"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "height 45 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "box-010-3",
+              "rubric_item_id": "box-010-7:box-010-3",
+              "status": "pass"
+            }
+          ]
+        }
+      ],
+      "failed": 0,
+      "family": "box",
+      "id": "box-010",
+      "not_run": 0,
+      "solved": 1,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\n\nbase = (\n    cq.Workplane(\"XY\")\n    .box(35, 40, 3, centered=(True, True, False))\n    .faces(\">Z\")\n    .workplane()\n    .hole(5)\n)\nupright = (\n    cq.Workplane(\"XY\")\n    .center(0, 20.5)\n    .box(35, 3, 60, centered=(True, True, False))\n)\nresult = base.union(upright)",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 127,
+            "prompt_eval_count": 1147
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 7.7,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "width 35 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "bracket-010-1",
+              "rubric_item_id": "bracket-010-9:bracket-010-1",
+              "status": "pass"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "depth: spec requires 40 mm but the executed solid `result` measures 42 mm along Y",
+              "pass": false,
+              "requirement_id": "bracket-010-2",
+              "rubric_item_id": "bracket-010-9:bracket-010-2",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "height 60 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "bracket-010-3",
+              "rubric_item_id": "bracket-010-9:bracket-010-3",
+              "status": "pass"
+            },
+            {
+              "check": "static_cad",
+              "detail": "hole count 1 matches spec",
+              "pass": true,
+              "requirement_id": "bracket-010-5",
+              "rubric_item_id": "bracket-010-9:bracket-010-5",
+              "status": "pass"
+            },
+            {
+              "check": "static_cad",
+              "detail": "hole diameter 5 mm matches spec",
+              "pass": true,
+              "requirement_id": "bracket-010-6",
+              "rubric_item_id": "bracket-010-9:bracket-010-6",
+              "status": "pass"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "bracket",
+      "id": "bracket-010",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\n\nresult = (\n    cq.Workplane(\"XY\")\n    .box(45, 45, 4)\n    .faces(\">Z\")\n    .workplane()\n    .rarray(0, 0, 8, 2)\n    .hole(8)\n)",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 77,
+            "prompt_eval_count": 1128
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 6.0,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised ValueError: Spacing and count must be > 0 in at least one direction",
+              "pass": false,
+              "requirement_id": "plate-011-1",
+              "rubric_item_id": "plate-011-9:plate-011-1",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised ValueError: Spacing and count must be > 0 in at least one direction",
+              "pass": false,
+              "requirement_id": "plate-011-2",
+              "rubric_item_id": "plate-011-9:plate-011-2",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised ValueError: Spacing and count must be > 0 in at least one direction",
+              "pass": false,
+              "requirement_id": "plate-011-3",
+              "rubric_item_id": "plate-011-9:plate-011-3",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised ValueError: Spacing and count must be > 0 in at least one direction",
+              "pass": false,
+              "requirement_id": "plate-011-4",
+              "rubric_item_id": "plate-011-9:plate-011-4",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "reference raised ValueError: Spacing and count must be > 0 in at least one direction",
+              "pass": false,
+              "requirement_id": "plate-011-5",
+              "rubric_item_id": "plate-011-9:plate-011-5",
+              "status": "fail"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "plate",
+      "id": "plate-011",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\n\nresult = (\n    cq.Workplane(\"XY\")\n    .box(55, 55, 10)\n    .faces(\">Z\")\n    .workplane()\n    .rect(30, 22)\n    .cutThruAll()\n)",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 74,
+            "prompt_eval_count": 1123
+          },
+          "no_code": false,
+          "outcome": "solved",
+          "seconds": 6.1,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "width 55 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "cutout-012-1",
+              "rubric_item_id": "cutout-012-8:cutout-012-1",
+              "status": "pass"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "depth 55 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "cutout-012-2",
+              "rubric_item_id": "cutout-012-8:cutout-012-2",
+              "status": "pass"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "height 10 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "cutout-012-3",
+              "rubric_item_id": "cutout-012-8:cutout-012-3",
+              "status": "pass"
+            }
+          ]
+        }
+      ],
+      "failed": 0,
+      "family": "cutout",
+      "id": "cutout-012",
+      "not_run": 0,
+      "solved": 1,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\n\nresult = (\n    cq.Workplane(\"XY\")\n    .box(150, 105, 6)\n    .edges(\"|Z\")\n    .fillet(6)\n    .faces(\">Z\")\n    .workplane()\n    .rarray(64, 41, 4, 4)\n    .hole(4)\n)",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 96,
+            "prompt_eval_count": 1148
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 6.4,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "width 150 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "rounded-012-1",
+              "rubric_item_id": "rounded-012-11:rounded-012-1",
+              "status": "pass"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "depth 105 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "rounded-012-2",
+              "rubric_item_id": "rounded-012-11:rounded-012-2",
+              "status": "pass"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "height 6 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "rounded-012-3",
+              "rubric_item_id": "rounded-012-11:rounded-012-3",
+              "status": "pass"
+            },
+            {
+              "check": "static_cad",
+              "detail": "hole count: spec requires 4 but reference has 16",
+              "pass": false,
+              "requirement_id": "rounded-012-5",
+              "rubric_item_id": "rounded-012-11:rounded-012-5",
+              "status": "fail"
+            },
+            {
+              "check": "static_cad",
+              "detail": "hole diameter 4 mm matches spec",
+              "pass": true,
+              "requirement_id": "rounded-012-6",
+              "rubric_item_id": "rounded-012-11:rounded-012-6",
+              "status": "pass"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "rounded",
+      "id": "rounded-012",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\n\nresult = (\n    cq.Workplane(\"XY\")\n    .box(80, 55, 40)\n    .faces(\">Z\")\n    .shell(-3)\n)",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 55,
+            "prompt_eval_count": 1104
+          },
+          "no_code": false,
+          "outcome": "solved",
+          "seconds": 5.7,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "width 80 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "box-013-1",
+              "rubric_item_id": "box-013-7:box-013-1",
+              "status": "pass"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "depth 55 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "box-013-2",
+              "rubric_item_id": "box-013-7:box-013-2",
+              "status": "pass"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "height 40 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "box-013-3",
+              "rubric_item_id": "box-013-7:box-013-3",
+              "status": "pass"
+            }
+          ]
+        }
+      ],
+      "failed": 0,
+      "family": "box",
+      "id": "box-013",
+      "not_run": 0,
+      "solved": 1,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\n\nresult = (\n    cq.Workplane(\"XY\")\n    .box(140, 85, 5)\n    .faces(\">Z\")\n    .workplane()\n    .rect(60, 42)\n    .cutThruAll()\n)",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 74,
+            "prompt_eval_count": 1123
+          },
+          "no_code": false,
+          "outcome": "solved",
+          "seconds": 6.3,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "width 140 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "cutout-013-1",
+              "rubric_item_id": "cutout-013-8:cutout-013-1",
+              "status": "pass"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "depth 85 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "cutout-013-2",
+              "rubric_item_id": "cutout-013-8:cutout-013-2",
+              "status": "pass"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "height 5 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "cutout-013-3",
+              "rubric_item_id": "cutout-013-8:cutout-013-3",
+              "status": "pass"
+            }
+          ]
+        }
+      ],
+      "failed": 0,
+      "family": "cutout",
+      "id": "cutout-013",
+      "not_run": 0,
+      "solved": 1,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\n\nresult = (\n    cq.Workplane(\"XY\")\n    .box(140, 120, 6)\n    .faces(\">Z\")\n    .workplane()\n    .rarray(60, 50, 10, 4)\n    .hole(10)\n)",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 83,
+            "prompt_eval_count": 1136
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 6.2,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "width 140 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "plate-015-1",
+              "rubric_item_id": "plate-015-10:plate-015-1",
+              "status": "pass"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "depth 120 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "plate-015-2",
+              "rubric_item_id": "plate-015-10:plate-015-2",
+              "status": "pass"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "height 6 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "plate-015-3",
+              "rubric_item_id": "plate-015-10:plate-015-3",
+              "status": "pass"
+            },
+            {
+              "check": "static_cad",
+              "detail": "hole count: spec requires 4 but reference has 40",
+              "pass": false,
+              "requirement_id": "plate-015-4",
+              "rubric_item_id": "plate-015-10:plate-015-4",
+              "status": "fail"
+            },
+            {
+              "check": "static_cad",
+              "detail": "hole diameter 10 mm matches spec",
+              "pass": true,
+              "requirement_id": "plate-015-5",
+              "rubric_item_id": "plate-015-10:plate-015-5",
+              "status": "pass"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "plate",
+      "id": "plate-015",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\n\nresult = (\n    cq.Workplane(\"XY\")\n    .box(140, 70, 6)\n    .faces(\">Z\")\n    .workplane()\n    .rect(20, 30)\n    .cutThruAll()\n)",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 74,
+            "prompt_eval_count": 1123
+          },
+          "no_code": false,
+          "outcome": "solved",
+          "seconds": 9.3,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "width 140 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "cutout-015-1",
+              "rubric_item_id": "cutout-015-8:cutout-015-1",
+              "status": "pass"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "depth 70 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "cutout-015-2",
+              "rubric_item_id": "cutout-015-8:cutout-015-2",
+              "status": "pass"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "height 6 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "cutout-015-3",
+              "rubric_item_id": "cutout-015-8:cutout-015-3",
+              "status": "pass"
+            }
+          ]
+        }
+      ],
+      "failed": 0,
+      "family": "cutout",
+      "id": "cutout-015",
+      "not_run": 0,
+      "solved": 1,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\n\nresult = (\n    cq.Workplane(\"XY\")\n    .box(85, 60, 10)\n    .edges(\"|Z\")\n    .fillet(3)\n    .faces(\">Z\")\n    .workplane()\n    .rarray(33, 21, 6, 4)\n    .hole(6)\n)",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 95,
+            "prompt_eval_count": 1145
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 7.7,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "width 85 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "rounded-015-1",
+              "rubric_item_id": "rounded-015-11:rounded-015-1",
+              "status": "pass"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "depth 60 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "rounded-015-2",
+              "rubric_item_id": "rounded-015-11:rounded-015-2",
+              "status": "pass"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "height 10 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "rounded-015-3",
+              "rubric_item_id": "rounded-015-11:rounded-015-3",
+              "status": "pass"
+            },
+            {
+              "check": "static_cad",
+              "detail": "hole count: spec requires 4 but reference has 24",
+              "pass": false,
+              "requirement_id": "rounded-015-5",
+              "rubric_item_id": "rounded-015-11:rounded-015-5",
+              "status": "fail"
+            },
+            {
+              "check": "static_cad",
+              "detail": "hole diameter 6 mm matches spec",
+              "pass": true,
+              "requirement_id": "rounded-015-6",
+              "rubric_item_id": "rounded-015-11:rounded-015-6",
+              "status": "pass"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "rounded",
+      "id": "rounded-015",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "code": "import cadquery as cq\n\nbase = (\n    cq.Workplane(\"XY\")\n    .box(80, 55, 8, centered=(True, True, False))\n    .faces(\">Z\")\n    .workplane()\n    .pushPoints([(-40, -17), (40, -17), (-40, 19), (40, 19)])\n    .hole(4)\n)\nupright = (\n    cq.Workplane(\"XY\")\n    .center(0, 27.5)\n    .box(80, 8, 25, centered=(True, True, False))\n)\nresult = base.union(upright)",
+          "error": null,
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 165,
+            "prompt_eval_count": 1162
+          },
+          "no_code": false,
+          "outcome": "failed",
+          "seconds": 7.5,
+          "truncated": false,
+          "verdicts": [
+            {
+              "check": "geometry_cad",
+              "detail": "width 80 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "bracket-017-1",
+              "rubric_item_id": "bracket-017-11:bracket-017-1",
+              "status": "pass"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "depth: spec requires 55 mm but the executed solid `result` measures 59 mm along Y",
+              "pass": false,
+              "requirement_id": "bracket-017-2",
+              "rubric_item_id": "bracket-017-11:bracket-017-2",
+              "status": "fail"
+            },
+            {
+              "check": "geometry_cad",
+              "detail": "height 25 mm matches spec, measured on the executed solid `result`",
+              "pass": true,
+              "requirement_id": "bracket-017-3",
+              "rubric_item_id": "bracket-017-11:bracket-017-3",
+              "status": "pass"
+            },
+            {
+              "check": "static_cad",
+              "detail": "hole count 4 matches spec",
+              "pass": true,
+              "requirement_id": "bracket-017-5",
+              "rubric_item_id": "bracket-017-11:bracket-017-5",
+              "status": "pass"
+            },
+            {
+              "check": "static_cad",
+              "detail": "hole diameter 4 mm matches spec",
+              "pass": true,
+              "requirement_id": "bracket-017-6",
+              "rubric_item_id": "bracket-017-11:bracket-017-6",
+              "status": "pass"
+            }
+          ]
+        }
+      ],
+      "failed": 1,
+      "family": "bracket",
+      "id": "bracket-017",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    }
+  ],
+  "rollouts": 1,
+  "scoring": "executed",
+  "solve_rate": 0.3,
+  "spec_version": "cad-spec-1.0",
+  "split": "heldout",
+  "tasks": 20,
+  "totals": {
+    "failed": 14,
+    "no_code": 0,
+    "not_run": 0,
+    "solved": 6,
+    "truncated": 0,
+    "unjudged": 0
+  },
+  "unjudged_rate": 0.0
+}

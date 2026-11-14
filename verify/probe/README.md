@@ -32,6 +32,12 @@ result = probe(packet, "qwen2.5-coder:7b")  # 3 rollouts by default
   timeout `OLLAMA_TIMEOUT_MS`, default 300 s, both read when the module loads) and raises
   `OllamaError` when the server is down or the model is unknown, so an infrastructure
   failure is never reported as a tier.
+- The request carries the settings the API's intake provider sends
+  (`apps/api/src/intake/llm/ollama.provider.ts`): `think: false`, temperature 0, `num_ctx`
+  (`OLLAMA_NUM_CTX`, default 16384) and `num_predict` (`OLLAMA_NUM_PREDICT`, default 2048).
+  Without `think: false` a thinking model such as qwen3.5 spends the whole budget reasoning
+  and returns an empty answer, which would be scored as a failed rollout and push the task
+  toward t2.
 
 Standard library only (the worker needs cadquery, see the M8 README). Tests need no
 live Ollama:

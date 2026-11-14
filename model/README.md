@@ -1,7 +1,9 @@
 # Model loop (M5)
 
-The cad-spec release, the synthetic task generator and the held-out benchmark harness.
-Training runs are not built yet.
+The cad-spec release, the synthetic task generator and the held-out benchmark harness, with
+a few-shot prompt as the first "training run". It is in-context examples, not weight
+training; no model weights are changed. Results:
+[`docs/results/phase4-benchmark-2026-11-14.md`](../docs/results/phase4-benchmark-2026-11-14.md).
 
 | File | What it is |
 |---|---|
@@ -45,9 +47,16 @@ python model/benchmark.py --mock oracle        # the reference itself: must be 1
 python model/benchmark.py --mock wrong         # every box 7 mm wider: must be 0 %
 python model/benchmark.py --model qwen3.5:9b-q4_K_M --out report.json
 python model/benchmark.py --limit 5 --rollouts 3
+python model/benchmark.py --num-predict 4096 --fewshot 5 --out report.json   # few-shot
 ```
 
-The model gets probe's instructions plus the prompt and spec, never the reference. The
+The model gets probe's instructions plus the prompt and spec, never the task's own
+reference. With `--fewshot K` the prompt also holds K worked examples (prompt, spec and
+reference) from the **train** split, placed before the task: round-robin over the five
+families in file order, so K=5 is the first train task of each family. Tasks in the
+evaluated set are never examples, and a held-out task passed as an example is refused.
+`--fewshot 0` (the default) sends exactly the zero-shot prompt. The report's `generation`
+block records K and the example ids. The
 request sends `think: false`, temperature 0, `num_ctx` and `num_predict` (`$OLLAMA_NUM_CTX`,
 `$OLLAMA_NUM_PREDICT`, as the API's intake provider does). Without `think: false`,
 qwen3.5 spends its whole budget reasoning and returns an empty answer. An empty answer is

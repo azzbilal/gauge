@@ -210,6 +210,50 @@ class BenchmarkStatic(unittest.TestCase):
             self.assertEqual(report["candidate"], "mock:oracle")
 
 
+TRAIN = [t for t in BATCH["tasks"] if t["split"] == "train"]
+
+
+class FewShot(unittest.TestCase):
+    def test_no_examples_is_the_zero_shot_prompt_byte_for_byte(self):
+        # The committed 0/20 baseline used build_prompt; --fewshot 0 must not change it.
+        from probe.probe import build_prompt
+        for task in HELDOUT:
+            self.assertEqual(benchmark.fewshot_prompt(task["prompt"], task["spec"]),
+                             build_prompt(task["prompt"], task["spec"]))
+
+    def test_selection_is_one_per_family_in_file_order(self):
+        picked = benchmark.select_examples(TRAIN, 5)
+        self.assertEqual([t["family"] for t in picked], list(generate.FAMILIES))
+        for t in picked:
+            self.assertEqual(t, next(x for x in TRAIN if x["family"] == t["family"]))
+        self.assertEqual(benchmark.select_examples(TRAIN, 5), picked)  # deterministic
+        self.assertEqual(len(benchmark.select_examples(TRAIN, 7)), 7)
+        self.assertEqual(benchmark.select_examples(TRAIN, 0), [])
+
+    def test_held_out_tasks_are_never_examples(self):
+        with self.assertRaises(cadspec.SpecError):
+            benchmark.select_examples(TRAIN + HELDOUT[:1], 5)
+        evaluated = {t["id"] for t in TRAIN[:10]}
+        picked = benchmark.select_examples(TRAIN, 5, exclude_ids=evaluated)
+        self.assertFalse(evaluated & {t["id"] for t in picked})
+        with self.assertRaises(cadspec.SpecError):
+            benchmark.select_examples(TRAIN, 5, exclude_ids={t["id"] for t in TRAIN})
+
+    def test_examples_come_before_the_task_and_hide_its_reference(self):
+        examples = benchmark.select_examples(TRAIN, 5)
+        task = HELDOUT[0]
+        text = benchmark.fewshot_prompt(task["prompt"], task["spec"], examples)
+        for ex in examples:
+            self.assertIn(ex["reference"].strip(), text)
+            self.assertLess(text.index(ex["spec"].strip()), text.index(task["spec"].strip()))
+        self.assertNotIn(task["reference"].strip(), text)
+        self.assertTrue(text.endswith(task["spec"].strip()))
+
+    def test_cli_refuses_fewshot_with_a_mock(self):
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(benchmark.main(["--mock", "oracle", "--fewshot", "3"]), 2)
+
+
 class _Stub(BaseHTTPRequestHandler):
     reply = {}
     bodies = []
@@ -254,6 +298,18 @@ class OllamaCandidateStub(unittest.TestCase):
         self.assertEqual(body["options"],
                          {"temperature": 0.0, "num_ctx": 8192, "num_predict": 512})
         self.assertNotIn("cadquery as cq", body["prompt"])
+        self.assertNotIn("fewshot", candidate.settings)
+
+    def test_fewshot_candidate_sends_the_examples_and_records_them(self):
+        _Stub.reply = {"response": "```python\nresult = 1\n```", "done_reason": "stop"}
+        examples = benchmark.select_examples(TRAIN, 2)
+        candidate = benchmark.OllamaCandidate(url=self.url, examples=examples)
+        candidate("Model a plate.", "Plate: 60 mm wide.", "m")
+        body = _Stub.bodies[0]
+        self.assertIn(examples[0]["reference"].strip(), body["prompt"])
+        self.assertIs(body["think"], False)
+        self.assertEqual(candidate.settings["fewshot"],
+                         {"k": 2, "example_ids": [e["id"] for e in examples]})
 
     def test_empty_reply_is_failed_and_labelled_no_code(self):
         _Stub.reply = {"response": "", "done_reason": "length"}

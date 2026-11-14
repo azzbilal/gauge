@@ -1,0 +1,37 @@
+cad-spec benchmark  cad-spec-1.0  model/data/synthetic-seed0-n100.json
+candidate ollama:qwen3.5:9b-q4_K_M+fewshot5  split heldout  20 tasks x 1 rollout(s)  scoring executed
+
+Solve rate: 6/20 = 30 %   (failed 14, of which no code 0; unjudged 0 = 0 %; not run 0; cut off at num_predict 0)
+generation {"endpoint": "/api/generate", "fewshot": {"example_ids": ["plate-001", "box-001", "bracket-001", "cutout-001", "rounded-001"], "k": 5}, "num_ctx": 16384, "num_predict": 4096, "temperature": 0.0, "think": false}
+
+By family                solved  not scored by the verifier
+  box          2/4     50 %   wall thickness, open top, hole positions
+  bracket      0/4      0 %   plate thickness, upright position, hole positions
+  cutout       4/4    100 %   the cutout (size and presence)
+  plate        0/4      0 %   hole positions
+  rounded      0/4      0 %   fillet radius (and presence), hole positions
+
+Per task
+  plate-002     failed     hole count: spec requires 4 but reference has 32
+  cutout-002    solved     
+  rounded-003   failed     hole count: spec requires 6 but reference has 48
+  plate-004     failed     hole count: spec requires 6 but reference has 12
+  box-004       failed     hole count: reference uses cutThruAll of a non-circular profile; hole count cannot be resolved statically
+  bracket-004   failed     width: spec requires 70 mm but the executed solid `result` measures 105 mm along X
+  box-005       failed     reference raised StdFail_NotDone: BRep_API: command not done
+  bracket-007   failed     depth: spec requires 65 mm but the executed solid `result` measures 68 mm along Y
+  rounded-007   failed     reference raised TypeError: Workplane.rarray() takes from 5 to 6 positional arguments but 7 were given
+  box-010       solved     
+  bracket-010   failed     depth: spec requires 40 mm but the executed solid `result` measures 42 mm along Y
+  plate-011     failed     reference raised ValueError: Spacing and count must be > 0 in at least one direction
+  cutout-012    solved     
+  rounded-012   failed     hole count: spec requires 4 but reference has 16
+  box-013       solved     
+  cutout-013    solved     
+  plate-015     failed     hole count: spec requires 4 but reference has 40
+  cutout-015    solved     
+  rounded-015   failed     hole count: spec requires 4 but reference has 24
+  bracket-017   failed     depth: spec requires 55 mm but the executed solid `result` measures 59 mm along Y
+
+* the answer was cut off at num_predict (done_reason length).
+Solved covers overall size, hole diameter and hole count only (model/SPEC.md, 'Solved').

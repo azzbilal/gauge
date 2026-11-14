@@ -76,8 +76,22 @@ def _ollama_timeout_s() -> float:
     return value if value > 0 else 300.0
 
 
+def _env_int(name: str, default: int) -> int:
+    """A positive integer environment variable, or `default` when unset or invalid."""
+    try:
+        value = int(os.environ.get(name, ""))
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
 OLLAMA_URL = _ollama_url()
 DEFAULT_TIMEOUT_S = _ollama_timeout_s()
+# The generation settings the API's intake provider sends
+# (apps/api/src/intake/llm/ollama.provider.ts), read from the same variables.
+DEFAULT_NUM_CTX = _env_int("OLLAMA_NUM_CTX", 16384)
+DEFAULT_NUM_PREDICT = _env_int("OLLAMA_NUM_PREDICT", 2048)
+DEFAULT_TEMPERATURE = 0.0
 
 _INSTRUCTIONS = (
     "You are a CAD engineer. Write a CadQuery (Python) script that models the part "
@@ -131,14 +145,27 @@ def extract_code(text: str) -> str:
     return blocks[0][1].strip()
 
 
+def generation_body(model: str, prompt: str, *, think: bool = False,
+                    temperature: float = DEFAULT_TEMPERATURE, num_ctx: int = DEFAULT_NUM_CTX,
+                    num_predict: int = DEFAULT_NUM_PREDICT) -> dict:
+    """The /api/generate request body, with the settings the API's intake provider sends.
+
+    `think: false` matters: without it a thinking model such as qwen3.5 spends the whole
+    num_predict budget reasoning and returns an empty answer, which would then be scored as
+    a failed rollout. Temperature 0 keeps rollouts reproducible; num_ctx stops Ollama from
+    silently truncating a long prompt to its small default window."""
+    return {"model": model, "prompt": prompt, "stream": False, "think": think,
+            "options": {"temperature": temperature, "num_ctx": num_ctx,
+                        "num_predict": num_predict}}
+
+
 def rollout(prompt: str, spec: str, model: str, *, url: str = OLLAMA_URL,
             timeout: float = DEFAULT_TIMEOUT_S) -> str:
     """Ask the local Ollama `model` for one CadQuery solution and return the code.
 
+    Sends think false, temperature 0, num_ctx and num_predict (generation_body).
     Raises OllamaError when the server is unreachable or does not return a completion."""
-    body = json.dumps(
-        {"model": model, "prompt": build_prompt(prompt, spec), "stream": False}
-    ).encode("utf-8")
+    body = json.dumps(generation_body(model, build_prompt(prompt, spec))).encode("utf-8")
     request = urllib.request.Request(
         url, data=body, headers={"Content-Type": "application/json"})
     try:
@@ -206,6 +233,6 @@ def probe(packet, model: str, n: int = DEFAULT_ROLLOUTS, rollout_fn=rollout) -> 
 
 
 __all__ = [
-    "probe", "rollout", "tier", "score", "extract_code", "build_prompt",
+    "probe", "rollout", "tier", "score", "extract_code", "build_prompt", "generation_body",
     "OllamaError", "PacketError", "T0", "T1", "T2", "BROKEN", "DEFAULT_ROLLOUTS",
 ]

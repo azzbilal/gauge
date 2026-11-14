@@ -4,9 +4,11 @@
     python model/benchmark.py --model qwen3.5:9b-q4_K_M --limit 5 --out report.json
     python model/benchmark.py --mock oracle                     # the reference: must be 100 %
     python model/benchmark.py --mock wrong                      # 7 mm too wide: must be 0 %
+    python model/benchmark.py --fewshot 5                       # 5 worked train examples first
 
 For every held-out task of a cad-spec batch (model/SPEC.md) it asks a candidate for a
-CadQuery solution from the prompt and spec alone, scores it with the M8 Verifier Pack
+CadQuery solution from the task's prompt and spec (never its reference; with --fewshot,
+also worked examples from the train split), scores it with the M8 Verifier Pack
 through the M9 probe's own scorer (verify/probe/probe.py), and reports the solve rate plus
 a per-task breakdown. Nothing here scores anything itself.
 
@@ -22,12 +24,16 @@ The headline solve rate is solved / (solved + failed + unjudged); unjudged is re
 beside it, not hidden in it. not_run attempts are left out of the rate and listed.
 
 A candidate is any `fn(prompt, spec, model) -> code`, the probe's rollout_fn signature:
-OllamaCandidate (local Ollama) by default, or a mock. OllamaCandidate builds the prompt and
-reads the code with the probe's own build_prompt / extract_code, and sends what the API's
-intake provider sends (apps/api/src/intake/llm/ollama.provider.ts): think off, temperature,
+OllamaCandidate (local Ollama) by default, or a mock. OllamaCandidate builds the prompt with the
+probe's own build_prompt (fewshot_prompt adds examples), reads the code with extract_code,
+and sends what the API's intake provider sends (apps/api/src/intake/llm/ollama.provider.ts): think off, temperature,
 num_ctx and num_predict. Without `think: false` a thinking model such as qwen3.5 spends the
 whole budget reasoning and returns an empty answer. An attempt whose reply holds no code is
 `failed`, labelled "no code" and counted in the headline.
+
+--fewshot K places K worked examples (prompt, spec, reference) from the train split before
+the task (select_examples, fewshot_prompt): in-context examples, no weights change. With
+K=0 the prompt is probe's build_prompt unchanged.
 
 Generated code is EXECUTED by the
 verifier in a worker process with a timeout; set GAUGE_CAD_PYTHON to an interpreter with
@@ -48,8 +54,9 @@ from cadspec import SpecError, check_task, spec_version, to_packet, use_verify  
 
 use_verify()
 from lint.packet import TaskPacket  # noqa: E402
-from probe.probe import (DEFAULT_TIMEOUT_S, OLLAMA_URL, OllamaError,  # noqa: E402
-                         build_prompt, extract_code, score)
+from probe.probe import (DEFAULT_NUM_CTX, DEFAULT_NUM_PREDICT,  # noqa: E402
+                         DEFAULT_TIMEOUT_S, OLLAMA_URL, OllamaError, build_prompt,
+                         extract_code, generation_body, score)
 
 import generate  # noqa: E402  (data paths, and fmt() for the wrong mock)
 
@@ -57,18 +64,6 @@ SOLVED, FAILED, UNJUDGED, NOT_RUN = "solved", "failed", "unjudged", "not_run"
 DEFAULT_DATA = generate.DATA_DIR / (
     f"synthetic-seed{generate.DEFAULT_SEED}-n{generate.DEFAULT_COUNT}.json")
 DEFAULT_MODEL = os.environ.get("OLLAMA_MODEL", "").strip() or "qwen3.5:9b-q4_K_M"
-
-
-def _env_int(name, default):
-    try:
-        value = int(os.environ.get(name, ""))
-    except ValueError:
-        return default
-    return value if value > 0 else default
-
-
-DEFAULT_NUM_CTX = _env_int("OLLAMA_NUM_CTX", 16384)  # read as the API reads them
-DEFAULT_NUM_PREDICT = _env_int("OLLAMA_NUM_PREDICT", 2048)
 WRONG_BY = 7  # mm the `wrong` mock adds to the width
 
 # What a solved verdict does not look at, per family (model/SPEC.md, "Solved").
@@ -95,6 +90,51 @@ def load_tasks(path: Path, split: str = "heldout") -> tuple:
     for task in tasks:
         check_task(task, version)
     return batch, [t for t in tasks if split == "all" or t["split"] == split]
+
+
+# ----------------------------------------------------------------------------- few-shot
+
+def select_examples(train: list, k: int, exclude_ids=()) -> list:
+    """`k` worked examples from the train split, chosen by a fixed rule.
+
+    Round-robin over generate.FAMILIES, taking each family's train tasks in file order, so
+    k=5 is the first train task of every family. The rule looks at nothing but the split,
+    the family and the order: no held-out task, score or answer goes into the choice.
+    Tasks in `exclude_ids` (the evaluated set) are never examples. Raises SpecError if a
+    task is not train, or if fewer than k remain."""
+    if k < 0:
+        raise ValueError("k must not be negative")
+    for task in train:
+        if task["split"] != "train":
+            raise SpecError(f"{task['id']} is {task['split']}, few-shot examples must be train")
+    excluded = set(exclude_ids)
+    train = [t for t in train if t["id"] not in excluded]
+    queues = {f: [t for t in train if t["family"] == f] for f in generate.FAMILIES}
+    picked = []
+    while len(picked) < k and any(queues.values()):
+        for family in generate.FAMILIES:
+            if queues[family] and len(picked) < k:
+                picked.append(queues[family].pop(0))
+    if len(picked) < k:
+        raise SpecError(f"asked for {k} few-shot examples, the train split has {len(picked)}")
+    return picked
+
+
+def fewshot_prompt(prompt: str, spec: str, examples=()) -> str:
+    """probe's build_prompt with worked examples (task, spec, reference) before the task.
+
+    With no examples it is build_prompt(prompt, spec), byte for byte."""
+    base = build_prompt(prompt, spec)
+    if not examples:
+        return base
+    head, _, tail = base.partition("\n\n")  # the instructions, then the task and spec
+    shots = ["Worked examples of correct solutions follow. They use only real CadQuery "
+             "methods; write your solution the same way."]
+    for i, ex in enumerate(examples, 1):
+        shots.append(f"Example {i}\nTask:\n{ex['prompt'].strip()}\nSpec:\n{ex['spec'].strip()}"
+                     f"\nSolution:\n```python\n{ex['reference'].strip()}\n```")
+    shots.append("Now solve this task.")
+    return "\n\n".join([head, *shots, tail])
 
 
 # ----------------------------------------------------------------------------- candidates
@@ -131,20 +171,23 @@ class OllamaCandidate:
     """A local Ollama model as a candidate: `fn(prompt, spec, model) -> Reply`."""
 
     def __init__(self, url=OLLAMA_URL, temperature=0.0, num_ctx=DEFAULT_NUM_CTX,
-                 num_predict=DEFAULT_NUM_PREDICT, think=False, timeout=DEFAULT_TIMEOUT_S):
+                 num_predict=DEFAULT_NUM_PREDICT, think=False, timeout=DEFAULT_TIMEOUT_S,
+                 examples=()):
         self.url, self.timeout = url, timeout
+        self.examples = list(examples)
         self.settings = {"endpoint": "/api/generate", "think": think,
                          "temperature": temperature, "num_ctx": num_ctx,
                          "num_predict": num_predict}
+        if self.examples:
+            self.settings["fewshot"] = {"k": len(self.examples),
+                                        "example_ids": [e["id"] for e in self.examples]}
 
     def __call__(self, prompt, spec, model):
         s = self.settings
-        body = json.dumps({
-            "model": model, "prompt": build_prompt(prompt, spec), "stream": False,
-            "think": s["think"],
-            "options": {"temperature": s["temperature"], "num_ctx": s["num_ctx"],
-                        "num_predict": s["num_predict"]},
-        }).encode("utf-8")
+        body = json.dumps(generation_body(
+            model, fewshot_prompt(prompt, spec, self.examples), think=s["think"],
+            temperature=s["temperature"], num_ctx=s["num_ctx"],
+            num_predict=s["num_predict"])).encode("utf-8")
         request = urllib.request.Request(
             self.url, data=body, headers={"Content-Type": "application/json"})
         try:
@@ -160,7 +203,8 @@ class OllamaCandidate:
             raise OllamaError(f"ollama returned no completion: {error or 'unexpected reply'}")
         return Reply(extract_code(reply["response"]),
                      {"done_reason": reply.get("done_reason"),
-                      "eval_count": reply.get("eval_count")})
+                      "eval_count": reply.get("eval_count"),
+                      "prompt_eval_count": reply.get("prompt_eval_count")})
 
 
 def ollama_has(model: str, url: str = OLLAMA_URL, timeout: float = 10.0) -> bool:
@@ -318,6 +362,8 @@ def main(argv=None) -> int:
                     help="default $OLLAMA_NUM_CTX or 16384")
     ap.add_argument("--num-predict", type=int, default=DEFAULT_NUM_PREDICT,
                     help="default $OLLAMA_NUM_PREDICT or 2048")
+    ap.add_argument("--fewshot", type=int, default=0, metavar="K",
+                    help="prepend K worked examples from the train split (default 0: none)")
     ap.add_argument("--out", type=Path, default=None, help="write the JSON report here")
     args = ap.parse_args(argv)
 
@@ -333,6 +379,17 @@ def main(argv=None) -> int:
         return 2
 
     generation = None
+    examples = []
+    if args.fewshot:
+        if args.mock:
+            print("error: --fewshot needs a model, not a mock", file=sys.stderr)
+            return 2
+        try:
+            _, train = load_tasks(args.data, "train")
+            examples = select_examples(train, args.fewshot, {t["id"] for t in tasks})
+        except (OSError, ValueError) as err:
+            print(f"error: {err}", file=sys.stderr)
+            return 2
     if args.mock:
         candidate_for, label = MOCKS[args.mock], f"mock:{args.mock}"
     else:
@@ -344,7 +401,7 @@ def main(argv=None) -> int:
             print(f"error: {err}", file=sys.stderr)
             return 1
         candidate = OllamaCandidate(temperature=args.temperature, num_ctx=args.num_ctx,
-                                    num_predict=args.num_predict)
+                                    num_predict=args.num_predict, examples=examples)
         generation = candidate.settings
         candidate_for, label = (lambda task: candidate), f"ollama:{args.model}"
 
@@ -359,7 +416,7 @@ def main(argv=None) -> int:
         "extract_version": batch.get("generator", {}).get("extract_version"),
         "data": _shown(args.data),
         "split": args.split,
-        "candidate": label,
+        "candidate": label + (f"+fewshot{len(examples)}" if examples else ""),
         "model": None if args.mock else args.model,
         "generation": generation,
         "not_scored": {f: NOT_SCORED.get(f) for f in report["by_family"]},

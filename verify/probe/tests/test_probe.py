@@ -2,6 +2,7 @@
 
     python -m unittest discover -s verify/probe/tests -v
 """
+import importlib
 import json
 import os
 import sys
@@ -18,6 +19,7 @@ sys.path.insert(0, str(VERIFY_DIR))
 sys.path.insert(0, str(VERIFY_DIR / "service"))
 
 from probe import OllamaError, PacketError, probe, rollout, tier  # noqa: E402
+probe_module = importlib.import_module("probe.probe")
 from probe.probe import build_prompt, extract_code  # noqa: E402
 
 FIXTURES = VERIFY_DIR / "verifiers" / "tests" / "fixtures"
@@ -314,6 +316,23 @@ class Rollout(unittest.TestCase):
         self.assertIs(body["stream"], False)
         self.assertIn("Model a plate.", body["prompt"])
         self.assertIn("60 mm wide.", body["prompt"])
+
+    def test_request_sends_the_intake_provider_settings(self):
+        # Without think false qwen3.5 reasons until num_predict and answers with nothing,
+        # which would be scored as a failed rollout.
+        rollout("Model a plate.", "60 mm wide.", "qwen3.5:9b-q4_K_M", url=self.url)
+        _, body = FakeOllama.seen[0]
+        self.assertIs(body["think"], False)
+        self.assertEqual(body["options"], {"temperature": 0.0,
+                                           "num_ctx": probe_module.DEFAULT_NUM_CTX,
+                                           "num_predict": probe_module.DEFAULT_NUM_PREDICT})
+
+    def test_generation_settings_read_the_api_variables(self):
+        with mock.patch.dict(os.environ, {"OLLAMA_NUM_CTX": "8192", "OLLAMA_NUM_PREDICT": "x"}):
+            self.assertEqual(probe_module._env_int("OLLAMA_NUM_CTX", 16384), 8192)
+            self.assertEqual(probe_module._env_int("OLLAMA_NUM_PREDICT", 2048), 2048)
+        with mock.patch.dict(os.environ, {"OLLAMA_NUM_CTX": "-1"}):
+            self.assertEqual(probe_module._env_int("OLLAMA_NUM_CTX", 16384), 16384)
 
     def test_http_error_raises_ollama_error(self):
         FakeOllama.reply = (404, {"error": "model 'nope' not found"})
