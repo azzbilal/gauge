@@ -21,6 +21,7 @@ needs an interpreter with cadquery in `GAUGE_CAD_PYTHON` (see `verify/verifiers/
 ```bash
 python model/generate.py                       # 100 tasks, seed 0 -> data/synthetic-seed0-n100.json
 python model/generate.py --count 200 --seed 7 --out model/data/batch.json
+python model/generate.py --count 300 --seed 1 --heldout 1 --stratify \n    --exclude model/data/synthetic-seed0-n100.json --out model/data/heldout-seed1-n300.json
 GAUGE_CAD_PYTHON=/path/to/python python model/generate.py --check   # score every reference too
 ```
 
@@ -34,6 +35,14 @@ vary.
   timestamps: the same seed gives a byte-identical file.
 - **Split.** 20 % of each family is held out (`--heldout`), and no two tasks share a family
   and parameter set.
+- **Held-out batches.** `--stratify` draws fixed quotas per (family, hole pattern) cell
+  instead of round-robin: even over the families, then even over each family's patterns
+  (300 tasks: 60 per family; plate 5 x 12, box 4 x 15 including no holes, bracket 3 x 20,
+  cutout 60, rounded 3 x 20). The cells are interleaved, so any prefix of the file spreads
+  over them, and the split is drawn per cell. `--heldout 1` holds out every task.
+  `--exclude BATCH` (repeatable) never draws a task (family and parameter set) that is in
+  another batch, so a held-out batch cannot repeat the training batch. The default path
+  is unchanged: seed 0 still regenerates byte for byte.
 - **Self-checked.** The rubric comes from `verify/lint/extract.py` on the task text, exactly
   as for a task created through the API. Generation fails if extraction does not read back
   exactly the overall size plus the hole diameter and count the generator meant.
@@ -48,6 +57,8 @@ python model/benchmark.py --mock wrong         # every box 7 mm wider: must be 0
 python model/benchmark.py --model qwen3.5:9b-q4_K_M --out report.json
 python model/benchmark.py --limit 5 --rollouts 3
 python model/benchmark.py --num-predict 4096 --fewshot 5 --out report.json   # few-shot
+python model/benchmark.py --data model/data/heldout-seed1-n300.json --num-predict 4096 \n    --fewshot 5 --train-data model/data/synthetic-seed0-n100.json --out fewshot.json
+python model/benchmark.py --compare baseline.json fewshot.json   # paired, McNemar
 ```
 
 The model gets probe's instructions plus the prompt and spec, never the task's own
@@ -66,3 +77,24 @@ attempt is `solved`, `failed`, `unjudged` (nothing failed but a check could not 
 unjudged; unjudged is printed beside it and not_run is left out. The report records the
 spec and extraction versions, the model and whether scoring was executed or static. It
 also lists, per family, what the verifier does not score.
+
+- **Separate training batch.** `--train-data BATCH` takes the few-shot examples from that
+  batch's train split. Batches reuse ids (`plate-001` ...), so across files the harness
+  checks that no example is an evaluated task by family and parameters or by prompt and
+  spec text, and fails if one is.
+- **Intervals.** The report gives a 95 % Wilson interval for the solve rate overall, per
+  family, per hole pattern and per stratum (family/pattern). With several rollouts the
+  interval treats attempts as independent, which they are not at temperature 0: grow the
+  task set, not the rollouts.
+- **Paired comparison.** `--compare FIRST SECOND` runs nothing. It pairs two 1-rollout
+  reports on the same data and task set: the 2x2 table, both solve rates with Wilson
+  intervals, McNemar's exact two-sided test on the discordant tasks, and a 95 % interval
+  for the difference, overall and per family and stratum. The difference interval is
+  Newcombe's (1998) method 10, with the corrected phi as stated in the NCSS manual. It has
+  not been checked against a published worked example, so cite McNemar, not this interval.
+  Per-group p-values are uncorrected. A task not run in either report is left out of the
+  pairs; unjudged counts as not solved.
+- **Long runs.** Every finished task is appended to a JSONL log (`--log`, default
+  `<out>.progress.jsonl`). `--resume` skips the tasks already logged, but only when the log
+  was written with the same data, candidate and settings. Tasks that were not run are
+  tried again.

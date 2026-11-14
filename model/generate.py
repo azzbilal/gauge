@@ -3,6 +3,8 @@
     python model/generate.py                         # 100 tasks, seed 0
     python model/generate.py --count 200 --seed 7 --out model/data/my-batch.json
     python model/generate.py --check                 # also score every reference with M8
+    python model/generate.py --count 300 --seed 1 --heldout 1 --stratify \
+        --exclude model/data/synthetic-seed0-n100.json   # an all-held-out batch
 
 Writes a batch of templated CAD tasks in the cad-spec format (model/SPEC.md): a prompt, a
 spec, a CadQuery reference that satisfies it, and the rubric the Verifier Pack scores
@@ -16,6 +18,10 @@ requirement ids are derived from the task id, keys are sorted, there are no time
 The split (train / heldout) is assigned here, stratified per family, and stored in each
 task. No two tasks share a family and parameter set, so a held-out task never duplicates a
 training task.
+
+--stratify draws fixed quotas per (family, hole pattern) cell instead (strata_quotas) and
+splits per cell; --heldout 1 holds out every task; --exclude BATCH never draws a task that
+is in another batch file. Without those options the output is unchanged, byte for byte.
 
 Every task is self-checked as it is made: the requirements extraction finds must be exactly
 the overall size plus the hole diameter and count, with the generator's values. --check
@@ -149,11 +155,17 @@ def _size_spec(w, d, h):
     return f"{fmt(w)} mm wide, {fmt(d)} mm deep, {fmt(h)} mm tall"
 
 
-def plate(rng):
+def _forced(pattern, default):
+    """The pattern choices for a builder: its own default, or the one pattern a stratified
+    draw asks for."""
+    return default if pattern is None else (pattern,)
+
+
+def plate(rng, pattern=None):
     w = _step(rng, 40, 160, 5)
     d = _step(rng, 30, w, 5)
     h = rng.choice((3, 4, 5, 6, 8, 10, 12))
-    params, points, where = _holes(rng, w, d, tuple(PATTERNS))
+    params, points, where = _holes(rng, w, d, _forced(pattern, tuple(PATTERNS)))
     n, dia = params["holes"], params["hole_d"]
     params = dict(params, width=w, depth=d, height=h)
     prompt = f"Model a rectangular mounting plate {_size(w, d, h)} with {_hole_count_phrase(n, dia)}."
@@ -168,7 +180,7 @@ def plate(rng):
     return params, prompt, spec, reference
 
 
-def box(rng):
+def box(rng, pattern=None):
     w = _step(rng, 40, 150, 5)
     d = _step(rng, 30, w, 5)
     h = _step(rng, 15, 60, 5)
@@ -180,10 +192,17 @@ def box(rng):
         "import cadquery as cq\n\n"
         f"result = (\n    cq.Workplane(\"XY\")\n    .box({fmt(w)}, {fmt(d)}, {fmt(h)})\n"
         f"    .faces(\">Z\")\n    .shell(-{fmt(t)})\n")
-    if rng.random() < 0.6:
+    if pattern is None:  # the original draw, kept byte for byte: holes 60 % of the time
+        wants_holes = rng.random() < 0.6
+    else:  # a stratified draw: "none" means no holes; a pattern that does not fit redraws
+        wants_holes = pattern != NO_HOLES
+    if wants_holes:
         try:
-            hp, points, where = _holes(rng, w - 2 * t, d - 2 * t, ("corners", "row", "centre"))
+            hp, points, where = _holes(rng, w - 2 * t, d - 2 * t,
+                                       _forced(pattern, ("corners", "row", "centre")))
         except _NoFit:
+            if pattern is not None:
+                raise
             hp = None
         if hp:
             params.update(hp)
@@ -198,7 +217,7 @@ def box(rng):
     return params, prompt, spec, reference
 
 
-def bracket(rng):
+def bracket(rng, pattern=None):
     w = _step(rng, 30, 120, 5)
     d = _step(rng, 30, 80, 5)
     h = _step(rng, 25, 80, 5)
@@ -206,7 +225,7 @@ def bracket(rng):
     # Holes go in the base, clear of the upright: usable depth runs from the front edge
     # to the upright's inner face, centred at y = -t/2.
     usable_d = d - t
-    hp, _, where = _holes(rng, w, usable_d, ("row", "corners", "centre"))
+    hp, _, where = _holes(rng, w, usable_d, _forced(pattern, ("row", "corners", "centre")))
     n, dia = hp["holes"], hp["hole_d"]
     yc = -t / 2
     if hp["pattern"] == "centre":
@@ -239,7 +258,7 @@ def bracket(rng):
     return params, prompt, spec, reference
 
 
-def cutout(rng):
+def cutout(rng, pattern=None):
     w = _step(rng, 50, 160, 5)
     d = _step(rng, 40, w, 5)
     h = rng.choice((3, 4, 5, 6, 8, 10))
@@ -259,13 +278,14 @@ def cutout(rng):
     return params, prompt, spec, reference
 
 
-def rounded(rng):
+def rounded(rng, pattern=None):
     w = _step(rng, 50, 160, 5)
     d = _step(rng, 40, w, 5)
     h = rng.choice((4, 5, 6, 8, 10, 12))
     r = rng.choice((2, 3, 4, 5, 6, 8))
     # Keep holes clear of the fillets.
-    hp, points, where = _holes(rng, w - 2 * r, d - 2 * r, ("corners", "circle", "centre"))
+    hp, points, where = _holes(rng, w - 2 * r, d - 2 * r,
+                               _forced(pattern, ("corners", "circle", "centre")))
     n, dia = hp["holes"], hp["hole_d"]
     params = dict(hp, width=w, depth=d, height=h, fillet=r)
     prompt = (f"Model a plate {_size(w, d, h)} with rounded corners and "
@@ -284,6 +304,28 @@ def rounded(rng):
 
 BUILDERS = {"plate": plate, "box": box, "bracket": bracket, "cutout": cutout,
             "rounded": rounded}
+
+# The hole patterns each family can draw ("none": no holes), in the order a stratified batch
+# lists them. These are the builders' own choices above; a stratified draw forces one.
+NO_HOLES = "none"
+FAMILY_PATTERNS = {
+    "plate": ("corners", "row", "grid", "circle", "centre"),
+    "box": (NO_HOLES, "corners", "row", "centre"),
+    "bracket": ("row", "corners", "centre"),
+    "cutout": (NO_HOLES,),
+    "rounded": ("corners", "circle", "centre"),
+}
+
+
+def pattern_of(task_or_params: dict) -> str:
+    """A task's hole pattern, or "none" when it has no holes."""
+    params = task_or_params.get("params", task_or_params)
+    return (params.get("pattern") or NO_HOLES) if params.get("holes") else NO_HOLES
+
+
+def task_key(family: str, params: dict) -> tuple:
+    """What makes two tasks the same task: family and parameter set."""
+    return (family, json.dumps(params, sort_keys=True))
 
 
 # ------------------------------------------------------------------------------ rubric
@@ -335,53 +377,135 @@ def self_check(task: dict) -> None:
 
 # ------------------------------------------------------------------------------ batch
 
+def _make_task(family, params, prompt, spec, reference, task_id, version):
+    task = {"id": task_id, "spec_version": version, "family": family, "split": "train",
+            "prompt": prompt, "spec": spec, "reference": reference,
+            "rubric": rubric(task_id, prompt, spec), "params": params}
+    self_check(task)
+    return task
+
+
+def _draw(rng, family, seen, pattern=None):
+    """A new (params, prompt, spec, reference) for `family` whose key is not in `seen`."""
+    for _ in range(200):
+        try:
+            made = BUILDERS[family](rng) if pattern is None else BUILDERS[family](rng, pattern)
+        except _NoFit:
+            continue
+        key = task_key(family, made[0])
+        if key not in seen:
+            seen.add(key)
+            return made
+    cell = family if pattern is None else f"{family}/{pattern}"
+    raise RuntimeError(f"could not draw a new {cell} task; the family is exhausted")
+
+
+def strata_quotas(count: int) -> list:
+    """[(family, pattern, quota)] for a stratified batch of `count` tasks.
+
+    Even over the families, then even over each family's patterns (FAMILY_PATTERNS); a
+    remainder goes to the earlier families and patterns. Cells with quota 0 are left out."""
+    out = []
+    for i, family in enumerate(FAMILIES):
+        n_family = count // len(FAMILIES) + (i < count % len(FAMILIES))
+        patterns = FAMILY_PATTERNS[family]
+        for j, pattern in enumerate(patterns):
+            n = n_family // len(patterns) + (j < n_family % len(patterns))
+            if n:
+                out.append((family, pattern, n))
+    return out
+
+
 def generate(count: int = DEFAULT_COUNT, seed: int = DEFAULT_SEED,
-             heldout: float = HELDOUT_FRACTION) -> dict:
-    """A batch of `count` tasks, round-robin over the families, split per family."""
+             heldout: float = HELDOUT_FRACTION, stratify: bool = False,
+             exclude: dict = None) -> dict:
+    """A batch of `count` tasks.
+
+    Default: round-robin over the families, split per family. With `stratify`: fixed quotas
+    per (family, hole pattern) cell (strata_quotas), split per cell, listed interleaved so
+    any prefix of the file spreads over the cells. `exclude` maps a label (a file name) to
+    task keys (task_key) never to draw, so a batch cannot repeat another batch's tasks.
+    heldout=1 holds out every task."""
     if count < 1:
         raise ValueError("count must be at least 1")
-    if not 0 <= heldout < 1:
-        raise ValueError("heldout fraction must be in [0, 1)")
+    if not 0 <= heldout <= 1:
+        raise ValueError("heldout fraction must be in [0, 1]")
     rng = random.Random(seed)
     version = spec_version()
     seen = set()
+    for keys in (exclude or {}).values():
+        seen.update(keys)
+
+    if stratify:
+        tasks, cells = _generate_stratified(rng, count, heldout, seen, version)
+    else:
+        tasks, cells = _generate_round_robin(rng, count, heldout, seen, version), None
+    for task in tasks:
+        check_task(task, version)
+    meta = {"name": GENERATOR, "seed": seed, "heldout_fraction": heldout,
+            "extract_version": EXTRACT_VERSION}
+    # New keys only when the new options are used, so seed 0 stays byte-identical.
+    if stratify:
+        meta["stratify"] = {"by": ["family", "pattern"],
+                            "cells": [{"family": f, "pattern": p, "count": n}
+                                      for f, p, n in cells]}
+    if exclude:
+        meta["exclude"] = [{"file": label, "tasks": len(keys)}
+                           for label, keys in sorted(exclude.items())]
+    return {
+        "spec_version": version,
+        "generator": meta,
+        "count": len(tasks),
+        "tasks": tasks,
+    }
+
+
+def _generate_round_robin(rng, count, heldout, seen, version):
     per_family = {f: [] for f in FAMILIES}
     for i in range(count):
         family = FAMILIES[i % len(FAMILIES)]
-        for _ in range(200):
-            try:
-                params, prompt, spec, reference = BUILDERS[family](rng)
-            except _NoFit:
-                continue
-            key = (family, json.dumps(params, sort_keys=True))
-            if key not in seen:
-                seen.add(key)
-                break
-        else:
-            raise RuntimeError(f"could not draw a new {family} task; the family is exhausted")
+        made = _draw(rng, family, seen)
         task_id = f"{family}-{len(per_family[family]) + 1:03d}"
-        task = {"id": task_id, "spec_version": version, "family": family, "split": "train",
-                "prompt": prompt, "spec": spec, "reference": reference,
-                "rubric": rubric(task_id, prompt, spec), "params": params}
-        self_check(task)
-        per_family[family].append(task)
+        per_family[family].append(_make_task(family, *made, task_id, version))
 
     for tasks in per_family.values():  # stratified split, drawn from the same rng
         k = round(len(tasks) * heldout)
         for task in rng.sample(tasks, k):
             task["split"] = "heldout"
 
-    tasks = [t for i in range(count) for t in
-             [per_family[FAMILIES[i % len(FAMILIES)]][i // len(FAMILIES)]]]
-    for task in tasks:
-        check_task(task, version)
-    return {
-        "spec_version": version,
-        "generator": {"name": GENERATOR, "seed": seed, "heldout_fraction": heldout,
-                      "extract_version": EXTRACT_VERSION},
-        "count": len(tasks),
-        "tasks": tasks,
-    }
+    return [t for i in range(count) for t in
+            [per_family[FAMILIES[i % len(FAMILIES)]][i // len(FAMILIES)]]]
+
+
+def _generate_stratified(rng, count, heldout, seen, version):
+    cells = strata_quotas(count)
+    # Slot j of a cell with quota n sits at (j + 0.5) / n: every cell is spread evenly over
+    # the file, so the first N tasks hold about the same share of each cell.
+    order = sorted(((j + 0.5) / n, c) for c, (_, _, n) in enumerate(cells) for j in range(n))
+    per_family = {f: 0 for f in FAMILIES}
+    per_cell = [[] for _ in cells]
+    tasks = []
+    for _, c in order:
+        family, pattern, _ = cells[c]
+        made = _draw(rng, family, seen, pattern)
+        if pattern_of(made[0]) != pattern:
+            raise RuntimeError(f"{family}: asked for {pattern}, drew {pattern_of(made[0])}")
+        per_family[family] += 1
+        task = _make_task(family, *made, f"{family}-{per_family[family]:03d}", version)
+        per_cell[c].append(task)
+        tasks.append(task)
+    for cell_tasks in per_cell:  # split per cell
+        for task in rng.sample(cell_tasks, round(len(cell_tasks) * heldout)):
+            task["split"] = "heldout"
+    return tasks, cells
+
+
+def _shown(path: Path) -> str:
+    """A path relative to the repo when it is inside it, so files carry no local paths."""
+    try:
+        return Path(path).resolve().relative_to(MODEL_DIR.parent).as_posix()
+    except ValueError:
+        return Path(path).name
 
 
 def write(batch: dict, path: Path) -> None:
@@ -417,21 +541,35 @@ def main(argv=None) -> int:
     ap.add_argument("--count", type=int, default=DEFAULT_COUNT)
     ap.add_argument("--seed", type=int, default=DEFAULT_SEED)
     ap.add_argument("--heldout", type=float, default=HELDOUT_FRACTION,
-                    help="fraction of each family held out (default 0.2)")
+                    help="fraction of each family (each cell with --stratify) held out; "
+                         "default 0.2, 1 holds out every task")
+    ap.add_argument("--stratify", action="store_true",
+                    help="fixed quotas per (family, hole pattern) cell instead of round-robin")
+    ap.add_argument("--exclude", type=Path, action="append", default=[], metavar="BATCH",
+                    help="never draw a task (family and parameter set) that is in this batch "
+                         "file; repeatable")
     ap.add_argument("--out", type=Path, default=None,
                     help="output file (default model/data/synthetic-seed<SEED>-n<COUNT>.json)")
     ap.add_argument("--check", action="store_true",
                     help="score every reference with the M8 Verifier Pack; exit 1 if one fails")
     args = ap.parse_args(argv)
     try:
-        batch = generate(args.count, args.seed, args.heldout)
-    except (ValueError, SpecError, RuntimeError) as err:
+        exclude = {}
+        for path in args.exclude:
+            other = json.loads(path.read_text(encoding="utf-8"))
+            exclude[_shown(path)] = {task_key(t["family"], t["params"])
+                                     for t in other["tasks"]}
+        batch = generate(args.count, args.seed, args.heldout, args.stratify, exclude)
+    except (OSError, KeyError, TypeError, ValueError, SpecError, RuntimeError) as err:
         print(f"error: {err}", file=sys.stderr)
         return 2
     out = args.out or DATA_DIR / f"synthetic-seed{args.seed}-n{args.count}.json"
     write(batch, out)
     held = sum(t["split"] == "heldout" for t in batch["tasks"])
     print(f"wrote {batch['count']} {batch['spec_version']} tasks ({held} held out) to {out}")
+    if args.stratify:
+        print("cells: " + ", ".join(f"{c['family']}/{c['pattern']} {c['count']}"
+                                    for c in batch["generator"]["stratify"]["cells"]))
     if args.check and verify_references(batch):
         return 1
     return 0

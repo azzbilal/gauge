@@ -1,0 +1,343 @@
+cad-spec benchmark  cad-spec-1.0  model/data/heldout-seed1-n300.json
+candidate ollama:qwen3.5:9b-q4_K_M+fewshot5  split heldout  300 tasks x 1 rollout(s)  scoring executed
+
+Solve rate: 122/300 = 41 %  95 % Wilson [35-46 %]   (failed 178, of which no code 0; unjudged 0 = 0 %; not run 0; cut off at num_predict 1)
+generation {"endpoint": "/api/generate", "fewshot": {"example_ids": ["plate-001", "box-001", "bracket-001", "cutout-001", "rounded-001"], "k": 5}, "num_ctx": 16384, "num_predict": 4096, "temperature": 0.0, "think": false}
+
+By family                solved  95 % Wilson   not scored by the verifier
+  box         30/60    50 %  [38-62 %]     wall thickness, open top, hole positions
+  bracket      0/60     0 %  [0-6 %]       plate thickness, upright position, hole positions
+  cutout      60/60   100 %  [94-100 %]    the cutout (size and presence)
+  plate       12/60    20 %  [12-32 %]     hole positions
+  rounded     20/60    33 %  [23-46 %]     fillet radius (and presence), hole positions
+
+By hole pattern          solved  95 % Wilson
+  centre                47/67    70 %  [58-80 %]
+  circle                 0/32     0 %  [0-11 %]
+  corners                0/67     0 %  [0-5 %]
+  grid                   0/12     0 %  [0-24 %]
+  none                  75/75   100 %  [95-100 %]
+  row                    0/47     0 %  [0-8 %]
+
+By stratum (family/pattern) solved  95 % Wilson
+  box/centre            15/15   100 %  [80-100 %]
+  box/corners            0/15     0 %  [0-20 %]
+  box/none              15/15   100 %  [80-100 %]
+  box/row                0/15     0 %  [0-20 %]
+  bracket/centre         0/20     0 %  [0-16 %]
+  bracket/corners        0/20     0 %  [0-16 %]
+  bracket/row            0/20     0 %  [0-16 %]
+  cutout/none           60/60   100 %  [94-100 %]
+  plate/centre          12/12   100 %  [76-100 %]
+  plate/circle           0/12     0 %  [0-24 %]
+  plate/corners          0/12     0 %  [0-24 %]
+  plate/grid             0/12     0 %  [0-24 %]
+  plate/row              0/12     0 %  [0-24 %]
+  rounded/centre        20/20   100 %  [84-100 %]
+  rounded/circle         0/20     0 %  [0-16 %]
+  rounded/corners        0/20     0 %  [0-16 %]
+
+Per task
+  cutout-001    solved     
+  bracket-001   failed     depth: spec requires 65 mm but the executed solid `result` measures 68 mm along Y
+  bracket-002   failed     depth: spec requires 60 mm but the executed solid `result` measures 68 mm along Y
+  bracket-003   failed     depth: spec requires 45 mm but the executed solid `result` measures 46.5 mm along Y
+  cutout-002    solved     
+  rounded-001   failed     hole count: spec requires 4 but reference has 40
+  rounded-002   failed     reference raised AttributeError: 'Workplane' object has no attribute 'holes'
+  rounded-003   solved     
+  box-001       solved     
+  box-002       failed     reference raised StdFail_NotDone: BRep_API: command not done
+  box-003       failed     hole count: spec requires 4 but reference has 32
+  box-004       solved     
+  plate-001     failed     hole count: spec requires 4 but reference has 40
+  plate-002     failed     hole count: spec requires 2 but reference has 16
+  plate-003     failed     hole count: spec requires 6 but reference has 12
+  plate-004     failed     reference raised AttributeError: 'Workplane' object has no attribute 'holes'
+  plate-005     solved     
+  cutout-003    solved     
+  cutout-004    solved     
+  bracket-004   failed     depth: spec requires 60 mm but the executed solid `result` measures 64 mm along Y
+  bracket-005   failed     depth: spec requires 65 mm but the executed solid `result` measures 71 mm along Y
+  bracket-006   failed     depth: spec requires 60 mm but the executed solid `result` measures 62.5 mm along Y
+  cutout-005    solved     
+  rounded-004   failed     hole count: spec requires 4 but reference has 16
+  rounded-005   failed     reference raised AttributeError: 'Workplane' object has no attribute 'holes'
+  rounded-006   solved     
+  cutout-006    solved     
+  box-005       solved     
+  box-006       failed     reference raised AttributeError: 'Workplane' object has no attribute 'moved'
+  box-007       failed     hole count: spec requires 3 but reference has 30
+  box-008       solved     
+  cutout-007    solved     
+  plate-006     failed     hole count: spec requires 4 but reference has 16
+  plate-007     failed     hole count: spec requires 2 but reference has 12
+  plate-008     failed     hole count: spec requires 6 but reference has 20
+  plate-009     failed     reference raised AttributeError: 'Workplane' object has no attribute 'holes'
+  plate-010     solved     
+  bracket-007   failed     depth: spec requires 30 mm but the executed solid `result` measures 32.5 mm along Y
+  bracket-008   failed     depth: spec requires 35 mm but the executed solid `result` measures 37.5 mm along Y
+  bracket-009   failed     depth: spec requires 75 mm but the executed solid `result` measures 77 mm along Y
+  cutout-008    solved     
+  rounded-007   failed     hole count: spec requires 4 but reference has 24
+  rounded-008   failed     reference raised AttributeError: 'Workplane' object has no attribute 'holes'
+  rounded-009   solved     
+  cutout-009    solved     
+  cutout-010    solved     
+  box-009       solved     
+  box-010       failed     reference raised StdFail_NotDone: BRep_API: command not done
+  box-011       failed     hole count: spec requires 2 but reference has 6
+  box-012       solved     
+  bracket-010   failed     depth: spec requires 55 mm but the executed solid `result` measures 58 mm along Y
+  bracket-011   failed     depth: spec requires 40 mm but the executed solid `result` measures 44 mm along Y
+  bracket-012   failed     depth: spec requires 60 mm but the executed solid `result` measures 63 mm along Y
+  cutout-011    solved     
+  rounded-010   failed     reference raised ValueError: Spacing and count must be > 0 in at least one direction
+  rounded-011   failed     reference raised AttributeError: 'Workplane' object has no attribute 'holes'
+  rounded-012   solved     
+  cutout-012    solved     
+  plate-011     failed     reference raised ValueError: Spacing and count must be > 0 in at least one direction
+  plate-012     failed     hole count: spec requires 2 but reference has 8
+  plate-013     failed     hole count: spec requires 6 but reference has 12
+  plate-014     failed     reference raised TypeError: Workplane.circle() got an unexpected keyword argument 'centered'
+  plate-015     solved     
+  cutout-013    solved     
+  bracket-013   failed     depth: spec requires 55 mm but the executed solid `result` measures 58.5 mm along Y
+  bracket-014   failed     depth: spec requires 35 mm but the executed solid `result` measures 37 mm along Y
+  bracket-015   failed     depth: spec requires 50 mm but the executed solid `result` measures 58.5 mm along Y
+  cutout-014    solved     
+  rounded-013   failed     hole count: spec requires 4 but reference has 32
+  rounded-014   failed     reference raised AttributeError: 'Workplane' object has no attribute 'holes'
+  rounded-015   solved     
+  box-013       solved     
+  box-014       failed     reference raised Standard_DomainError
+  box-015       failed     hole count: spec requires 3 but reference has 15
+  box-016       solved     
+  cutout-015    solved     
+  cutout-016    solved     
+  bracket-016   failed     depth: spec requires 45 mm but the executed solid `result` measures 49 mm along Y
+  bracket-017   failed     depth: spec requires 45 mm but the executed solid `result` measures 47.5 mm along Y
+  bracket-018   failed     depth: spec requires 80 mm but the executed solid `result` measures 85 mm along Y
+  cutout-017    solved     
+  rounded-016   failed     hole count: spec requires 4 but reference has 16
+  rounded-017   failed     reference raised AttributeError: 'Workplane' object has no attribute 'holes'
+  rounded-018   solved     
+  plate-016     failed     hole count: spec requires 4 but reference has 24
+  plate-017     failed     hole count: spec requires 4 but reference has 40
+  plate-018     failed     hole count: spec requires 6 but reference has 10
+  plate-019     failed     hole count: spec requires 5 but reference has 1
+  plate-020     solved     
+  cutout-018    solved     
+  box-017       solved     
+  box-018       failed     hole count: reference uses cutThruAll of a non-circular profile; hole count cannot be resolved statically
+  box-019       failed     hole count: spec requires 3 but reference has 12
+  box-020       solved     
+  cutout-019    solved     
+  bracket-019   failed     depth: spec requires 70 mm but the executed solid `result` measures 72 mm along Y
+  bracket-020   failed     depth: spec requires 50 mm but the executed solid `result` measures 51.5 mm along Y
+  bracket-021   failed     depth: spec requires 45 mm but the executed solid `result` measures 52.5 mm along Y
+  cutout-020    solved     
+  rounded-019   failed     hole count: spec requires 4 but reference has 32
+  rounded-020   failed     reference raised ValueError: Spacing and count must be > 0 in at least one direction
+  rounded-021   solved     
+  cutout-021    solved     
+  cutout-022    solved     
+  box-021       solved     
+  box-022       failed     hole count: reference uses cutThruAll of a non-circular profile; hole count cannot be resolved statically
+  box-023       failed     hole count: spec requires 2 but reference has 8
+  box-024       solved     
+  plate-021     failed     hole count: spec requires 4 but reference has 16
+  plate-022     failed     hole count: spec requires 4 but reference has 20
+  plate-023     failed     hole count: spec requires 6 but reference has 16
+  plate-024     failed     reference raised AttributeError: 'Workplane' object has no attribute 'holes'
+  plate-025     solved     
+  bracket-022   failed     depth: spec requires 60 mm but the executed solid `result` measures 68 mm along Y
+  bracket-023   failed     depth: spec requires 45 mm but the executed solid `result` measures 50 mm along Y
+  bracket-024   failed     depth: spec requires 40 mm but the executed solid `result` measures 44 mm along Y
+  cutout-023    solved     
+  rounded-022   failed     reference raised ValueError: Spacing and count must be > 0 in at least one direction
+  rounded-023   failed     reference raised AttributeError: 'Workplane' object has no attribute 'holes'
+  rounded-024   solved     
+  cutout-024    solved     
+  cutout-025    solved     
+  bracket-025   failed     depth: spec requires 65 mm but the executed solid `result` measures 68 mm along Y
+  bracket-026   failed     depth: spec requires 50 mm but the executed solid `result` measures 53 mm along Y
+  bracket-027   failed     depth: spec requires 55 mm but the executed solid `result` measures 60 mm along Y
+  cutout-026    solved     
+  rounded-025   failed     reference raised ValueError: Spacing and count must be > 0 in at least one direction
+  rounded-026   failed*    reference raised ValueError: Cannot convert object type <class 'cadquery.occ_impl.shapes.Wire'> to vector.
+  rounded-027   solved     
+  box-025       solved     
+  box-026       failed     reference raised StdFail_NotDone: BRep_API: command not done
+  box-027       failed     hole count: spec requires 3 but reference has 30
+  box-028       solved     
+  cutout-027    solved     
+  plate-026     failed     reference raised TypeError: Workplane.rarray() got an unexpected keyword argument 'centered'
+  plate-027     failed     hole count: spec requires 4 but reference has 20
+  plate-028     failed     hole count: spec requires 6 but reference has 8
+  plate-029     failed     reference raised AttributeError: 'Workplane' object has no attribute 'holes'
+  plate-030     solved     
+  cutout-028    solved     
+  bracket-028   failed     depth: spec requires 35 mm but the executed solid `result` measures 36.5 mm along Y
+  bracket-029   failed     depth: spec requires 65 mm but the executed solid `result` measures 71 mm along Y
+  bracket-030   failed     depth: spec requires 80 mm but the executed solid `result` measures 83 mm along Y
+  cutout-029    solved     
+  rounded-028   failed     reference raised TypeError: Workplane.rarray() takes from 5 to 6 positional arguments but 7 were given
+  rounded-029   failed     reference raised AttributeError: 'Workplane' object has no attribute 'holes'
+  rounded-030   solved     
+  cutout-030    solved     
+  box-029       solved     
+  box-030       failed     reference raised StdFail_NotDone: BRep_API: command not done
+  box-031       failed     hole count: spec requires 2 but reference has 10
+  box-032       solved     
+  cutout-031    solved     
+  bracket-031   failed     depth: spec requires 60 mm but the executed solid `result` measures 62 mm along Y
+  bracket-032   failed     depth: spec requires 50 mm but the executed solid `result` measures 52 mm along Y
+  bracket-033   failed     depth: spec requires 55 mm but the executed solid `result` measures 57.5 mm along Y
+  cutout-032    solved     
+  rounded-031   failed     reference raised TypeError: Workplane.rarray() got an unexpected keyword argument 'centered'
+  rounded-032   failed     reference raised AttributeError: 'Workplane' object has no attribute 'holes'
+  rounded-033   solved     
+  plate-031     failed     hole count: spec requires 4 but reference has 16
+  plate-032     failed     hole count: spec requires 4 but reference has 12
+  plate-033     failed     hole count: spec requires 6 but reference has 16
+  plate-034     failed     hole count: spec requires 6 but reference has 24
+  plate-035     solved     
+  cutout-033    solved     
+  cutout-034    solved     
+  box-033       solved     
+  box-034       failed     reference raised TypeError: Workplane.center() missing 1 required positional argument: 'y'
+  box-035       failed     hole count: spec requires 4 but reference has 20
+  box-036       solved     
+  bracket-034   failed     depth: spec requires 70 mm but the executed solid `result` measures 74 mm along Y
+  bracket-035   failed     depth: spec requires 45 mm but the executed solid `result` measures 48 mm along Y
+  bracket-036   failed     depth: spec requires 60 mm but the executed solid `result` measures 62 mm along Y
+  cutout-035    solved     
+  rounded-034   failed     reference raised ValueError: Spacing and count must be > 0 in at least one direction
+  rounded-035   failed     reference raised AttributeError: 'Workplane' object has no attribute 'holes'
+  rounded-036   solved     
+  cutout-036    solved     
+  cutout-037    solved     
+  plate-036     failed     hole count: spec requires 4 but reference has 20
+  plate-037     failed     hole count: spec requires 4 but reference has 20
+  plate-038     failed     hole count: spec requires 6 but reference has 12
+  plate-039     failed     reference raised AttributeError: 'Workplane' object has no attribute 'holes'
+  plate-040     solved     
+  bracket-037   failed     depth: spec requires 60 mm but the executed solid `result` measures 64 mm along Y
+  bracket-038   failed     depth: spec requires 35 mm but the executed solid `result` measures 37.5 mm along Y
+  bracket-039   failed     depth: spec requires 45 mm but the executed solid `result` measures 47 mm along Y
+  cutout-038    solved     
+  rounded-037   failed     reference raised ValueError: Spacing and count must be > 0 in at least one direction
+  rounded-038   failed     hole count: spec requires 6 but reference has 48
+  rounded-039   solved     
+  box-037       solved     
+  box-038       failed     reference raised TypeError: Workplane.rarray() takes from 5 to 6 positional arguments but 7 were given
+  box-039       failed     hole count: spec requires 4 but reference has 40
+  box-040       solved     
+  cutout-039    solved     
+  cutout-040    solved     
+  bracket-040   failed     depth: spec requires 40 mm but the executed solid `result` measures 58 mm along Y
+  bracket-041   failed     depth: spec requires 50 mm but the executed solid `result` measures 51.5 mm along Y
+  bracket-042   failed     depth: spec requires 60 mm but the executed solid `result` measures 62.5 mm along Y
+  cutout-041    solved     
+  rounded-040   failed     hole count: spec requires 4 but reference has 40
+  rounded-041   failed     reference raised TypeError: Workplane.circle() got an unexpected keyword argument 'centered'
+  rounded-042   solved     
+  cutout-042    solved     
+  box-041       solved     
+  box-042       failed     hole count: reference uses cutThruAll of a non-circular profile; hole count cannot be resolved statically
+  box-043       failed     hole count: spec requires 2 but reference has 6
+  box-044       solved     
+  plate-041     failed     hole count: spec requires 4 but reference has 40
+  plate-042     failed     hole count: spec requires 3 but reference has 12
+  plate-043     failed     hole count: spec requires 6 but reference has 16
+  plate-044     failed     reference raised TypeError: Workplane.circle() got an unexpected keyword argument 'centered'
+  plate-045     solved     
+  cutout-043    solved     
+  bracket-043   failed     depth: spec requires 65 mm but the executed solid `result` measures 65.5 mm along Y
+  bracket-044   failed     depth: spec requires 60 mm but the executed solid `result` measures 64 mm along Y
+  bracket-045   failed     depth: spec requires 70 mm but the executed solid `result` measures 73 mm along Y
+  cutout-044    solved     
+  rounded-043   failed     reference raised ValueError: Spacing and count must be > 0 in at least one direction
+  rounded-044   failed     reference raised TypeError: Workplane.circle() got an unexpected keyword argument 'centered'
+  rounded-045   solved     
+  cutout-045    solved     
+  cutout-046    solved     
+  box-045       solved     
+  box-046       failed     hole count: reference uses cutThruAll of a non-circular profile; hole count cannot be resolved statically
+  box-047       failed     hole count: spec requires 2 but reference has 16
+  box-048       solved     
+  bracket-046   failed     depth: spec requires 75 mm but the executed solid `result` measures 79.5 mm along Y
+  bracket-047   failed     depth: spec requires 50 mm but the executed solid `result` measures 53 mm along Y
+  bracket-048   failed     depth: spec requires 40 mm but the executed solid `result` measures 42 mm along Y
+  cutout-047    solved     
+  rounded-046   failed     hole count: spec requires 4 but reference has 32
+  rounded-047   failed     reference raised AttributeError: 'Workplane' object has no attribute 'holes'
+  rounded-048   solved     
+  plate-046     failed     reference raised ValueError: Spacing and count must be > 0 in at least one direction
+  plate-047     failed     hole count: spec requires 3 but reference has 12
+  plate-048     failed     hole count: spec requires 6 but reference has 8
+  plate-049     failed     reference raised AttributeError: 'Workplane' object has no attribute 'holes'
+  plate-050     solved     
+  cutout-048    solved     
+  cutout-049    solved     
+  bracket-049   failed     depth: spec requires 60 mm but the executed solid `result` measures 62 mm along Y
+  bracket-050   failed     depth: spec requires 30 mm but the executed solid `result` measures 38 mm along Y
+  bracket-051   failed     depth: spec requires 45 mm but the executed solid `result` measures 52.5 mm along Y
+  cutout-050    solved     
+  rounded-049   failed     reference raised TypeError: Workplane.rarray() got an unexpected keyword argument 'centered'
+  rounded-050   failed     hole count: spec requires 8 but reference has 1
+  rounded-051   solved     
+  box-049       solved     
+  box-050       failed     reference raised StdFail_NotDone: BRep_API: command not done
+  box-051       failed     hole count: spec requires 4 but reference has 20
+  box-052       solved     
+  cutout-051    solved     
+  cutout-052    solved     
+  plate-051     failed     reference raised ValueError: Spacing and count must be > 0 in at least one direction
+  plate-052     failed     hole count: spec requires 2 but reference has 12
+  plate-053     failed     hole count: spec requires 6 but reference has 20
+  plate-054     failed     reference raised AttributeError: 'Workplane' object has no attribute 'holes'
+  plate-055     solved     
+  bracket-052   failed     width: spec requires 65 mm but the executed solid `result` measures 97.5 mm along X
+  bracket-053   failed     depth: spec requires 30 mm but the executed solid `result` measures 32.5 mm along Y
+  bracket-054   failed     depth: spec requires 80 mm but the executed solid `result` measures 83 mm along Y
+  cutout-053    solved     
+  rounded-052   failed     reference raised ValueError: Spacing and count must be > 0 in at least one direction
+  rounded-053   failed     hole count: spec requires 8 but reference has 1
+  rounded-054   solved     
+  cutout-054    solved     
+  box-053       solved     
+  box-054       failed     hole count: reference uses cutThruAll of a non-circular profile; hole count cannot be resolved statically
+  box-055       failed     hole count: spec requires 4 but reference has 24
+  box-056       solved     
+  cutout-055    solved     
+  bracket-055   failed     depth: spec requires 40 mm but the executed solid `result` measures 46 mm along Y
+  bracket-056   failed     depth: spec requires 70 mm but the executed solid `result` measures 75 mm along Y
+  bracket-057   failed     depth: spec requires 80 mm but the executed solid `result` measures 84 mm along Y
+  cutout-056    solved     
+  rounded-055   failed     reference raised ValueError: Spacing and count must be > 0 in at least one direction
+  rounded-056   failed     reference raised ValueError: Spacing and count must be > 0 in at least one direction
+  rounded-057   solved     
+  cutout-057    solved     
+  plate-056     failed     hole count: spec requires 4 but reference has 24
+  plate-057     failed     hole count: spec requires 4 but reference has 24
+  plate-058     failed     hole count: spec requires 6 but reference has 12
+  plate-059     failed     reference raised AttributeError: 'Workplane' object has no attribute 'holes'
+  plate-060     solved     
+  cutout-058    solved     
+  box-057       solved     
+  box-058       failed     reference raised ValueError: Spacing and count must be > 0 in at least one direction
+  box-059       failed     hole count: spec requires 2 but reference has 16
+  box-060       solved     
+  bracket-058   failed     depth: spec requires 50 mm but the executed solid `result` measures 53 mm along Y
+  bracket-059   failed     depth: spec requires 40 mm but the executed solid `result` measures 42 mm along Y
+  bracket-060   failed     depth: spec requires 70 mm but the executed solid `result` measures 72 mm along Y
+  cutout-059    solved     
+  rounded-058   failed     hole count: spec requires 4 but reference has 12
+  rounded-059   failed     hole count: spec requires 6 but reference has 18
+  rounded-060   solved     
+  cutout-060    solved     
+
+* the answer was cut off at num_predict (done_reason length).
+Solved covers overall size, hole diameter and hole count only (model/SPEC.md, 'Solved').

@@ -341,6 +341,206 @@ class OllamaCandidateStub(unittest.TestCase):
         self.assertIsNone(report["solve_rate"])
 
 
+class HeldOutBatch(unittest.TestCase):
+    """--stratify, --heldout 1 and --exclude: a large all-held-out batch."""
+
+    SEED0 = generate.generate(40, seed=0)
+
+    def test_round_robin_default_is_unchanged_by_the_new_options(self):
+        a = generate.generate(30, seed=4)
+        b = generate.generate(30, seed=4, stratify=False, exclude={})
+        self.assertEqual(a, b)
+        self.assertNotIn("stratify", a["generator"])
+        self.assertNotIn("exclude", a["generator"])
+
+    def test_quotas_are_even_over_families_then_patterns(self):
+        cells = generate.strata_quotas(300)
+        self.assertEqual(sum(n for _, _, n in cells), 300)
+        per_family = Counter()
+        for family, pattern, n in cells:
+            per_family[family] += n
+            self.assertIn(pattern, generate.FAMILY_PATTERNS[family])
+        self.assertEqual(set(per_family.values()), {60})
+        self.assertEqual(dict((f"{f}/{p}", n) for f, p, n in cells)["plate/grid"], 12)
+        self.assertEqual(sum(n for _, _, n in generate.strata_quotas(37)), 37)
+
+    def test_stratified_batch_fills_every_cell_and_holds_out_all(self):
+        batch = generate.generate(64, seed=9, heldout=1, stratify=True)
+        tasks = batch["tasks"]
+        self.assertTrue(all(t["split"] == "heldout" for t in tasks))
+        got = Counter((t["family"], generate.pattern_of(t)) for t in tasks)
+        want = {(f, p): n for f, p, n in generate.strata_quotas(64)}
+        self.assertEqual(dict(got), want)
+        self.assertEqual(len({t["id"] for t in tasks}), 64)
+        for task in tasks:
+            generate.self_check(task)
+        # Interleaved: the first quarter of the file touches every family.
+        self.assertEqual({t["family"] for t in tasks[:16]}, set(generate.FAMILIES))
+
+    def test_stratified_split_is_per_cell(self):
+        batch = generate.generate(100, seed=2, heldout=0.5, stratify=True)
+        held = Counter((t["family"], generate.pattern_of(t)) for t in batch["tasks"]
+                       if t["split"] == "heldout")
+        for family, pattern, n in generate.strata_quotas(100):
+            self.assertEqual(held[(family, pattern)], round(n * 0.5), (family, pattern))
+
+    def test_exclude_never_redraws_an_excluded_task(self):
+        keys = {generate.task_key(t["family"], t["params"]) for t in self.SEED0["tasks"]}
+        # The same seed would redraw the same tasks; with exclusion, none of them.
+        batch = generate.generate(40, seed=0, exclude={"seed0.json": keys})
+        new = {generate.task_key(t["family"], t["params"]) for t in batch["tasks"]}
+        self.assertFalse(keys & new)
+        self.assertEqual(batch["generator"]["exclude"], [{"file": "seed0.json", "tasks": 40}])
+
+    def test_heldout_above_one_is_refused(self):
+        with self.assertRaises(ValueError):
+            generate.generate(10, heldout=1.5)
+
+    def test_cli_excludes_a_batch_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            first, out = Path(tmp) / "first.json", Path(tmp) / "held.json"
+            generate.write(self.SEED0, first)
+            with contextlib.redirect_stdout(io.StringIO()):
+                code = generate.main(["--count", "32", "--seed", "0", "--heldout", "1",
+                                      "--stratify", "--exclude", str(first), "--out", str(out)])
+            self.assertEqual(code, 0)
+            batch = json.loads(out.read_text(encoding="utf-8"))
+            benchmark.check_disjoint(self.SEED0["tasks"], batch["tasks"])  # does not raise
+            self.assertEqual(batch["count"], 32)
+
+
+class Statistics(unittest.TestCase):
+    def test_wilson_matches_the_committed_intervals(self):
+        lo, hi = benchmark.wilson(0, 20)
+        self.assertEqual(lo, 0.0)
+        self.assertAlmostEqual(hi, 0.1611, places=4)
+        lo, hi = benchmark.wilson(6, 20)
+        self.assertAlmostEqual(lo, 0.1455, places=4)
+        self.assertAlmostEqual(hi, 0.5190, places=4)
+        self.assertEqual(benchmark.wilson(20, 20)[1], 1.0)
+        self.assertIsNone(benchmark.wilson(0, 0))
+
+    def test_mcnemar_exact(self):
+        self.assertAlmostEqual(benchmark.mcnemar_exact(0, 6), 0.03125)
+        self.assertAlmostEqual(benchmark.mcnemar_exact(6, 0), 0.03125)
+        self.assertEqual(benchmark.mcnemar_exact(0, 0), 1.0)
+        self.assertEqual(benchmark.mcnemar_exact(3, 3), 1.0)
+        self.assertAlmostEqual(benchmark.mcnemar_exact(1, 9), 2 * 11 / 1024)
+
+    def test_paired_difference_interval_holds_the_estimate(self):
+        for a, b, c, d in ((0, 0, 6, 14), (12, 2, 9, 21), (5, 5, 5, 5), (0, 0, 0, 10)):
+            lo, hi = benchmark.paired_diff_ci(a, b, c, d)
+            est = (c - b) / (a + b + c + d)
+            self.assertLessEqual(lo, est)
+            self.assertGreaterEqual(hi, est)
+            self.assertTrue(-1 <= lo <= hi <= 1)
+
+
+def _report(candidate, solved_ids, ids, data="d.json", rollouts=1, not_run=()):
+    rows = []
+    for i in ids:
+        s = int(i in solved_ids)
+        nr = int(i in not_run)
+        rows.append({"id": i, "family": i.split("-")[0], "pattern": "none",
+                     "solved": 0 if nr else s, "failed": 0 if (s or nr) else 1,
+                     "unjudged": 0, "not_run": nr, "attempts": []})
+    return {"data": data, "split": "heldout", "spec_version": "cad-spec-1.0",
+            "candidate": candidate, "rollouts": rollouts, "scoring": "executed",
+            "generation": {"temperature": 0.0}, "per_task": rows}
+
+
+class Compare(unittest.TestCase):
+    IDS = [f"plate-{i:03d}" for i in range(1, 11)] + [f"box-{i:03d}" for i in range(1, 11)]
+
+    def test_paired_table_and_mcnemar(self):
+        first = _report("a", {"plate-001", "plate-002"}, self.IDS)
+        second = _report("b", {"plate-002", "box-001", "box-002", "box-003"}, self.IDS)
+        out = benchmark.compare(first, second)
+        o = out["overall"]
+        self.assertEqual((o["both"], o["first_only"], o["second_only"], o["neither"]),
+                         (1, 1, 3, 15))
+        self.assertAlmostEqual(o["mcnemar_exact_p"], benchmark.mcnemar_exact(1, 3))
+        self.assertAlmostEqual(o["difference"], 2 / 20)
+        self.assertEqual(out["by_family"]["box"]["second_only"], 3)
+        self.assertEqual(out["changed"]["first_only"], ["plate-001"])
+        self.assertIn("McNemar exact", benchmark.render_compare(out))
+
+    def test_not_run_tasks_leave_the_pairs(self):
+        first = _report("a", set(), self.IDS, not_run={"box-010"})
+        second = _report("b", {"box-010"}, self.IDS)
+        out = benchmark.compare(first, second)
+        self.assertEqual(out["overall"]["n"], 19)
+        self.assertEqual(out["excluded_not_run"], ["box-010"])
+        self.assertEqual(out["overall"]["second_only"], 0)
+
+    def test_refuses_different_tasks_data_or_rollouts(self):
+        base = _report("a", set(), self.IDS)
+        with self.assertRaises(ValueError):
+            benchmark.compare(base, _report("b", set(), self.IDS[:-1]))
+        with self.assertRaises(ValueError):
+            benchmark.compare(base, _report("b", set(), self.IDS, data="other.json"))
+        with self.assertRaises(ValueError):
+            benchmark.compare(base, _report("b", set(), self.IDS, rollouts=3))
+
+    def test_cli_compare_writes_json(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            a, b, out = (Path(tmp) / n for n in ("a.json", "b.json", "cmp.json"))
+            a.write_text(json.dumps(_report("a", set(), self.IDS)), encoding="utf-8")
+            b.write_text(json.dumps(_report("b", {"box-001"}, self.IDS)), encoding="utf-8")
+            with contextlib.redirect_stdout(io.StringIO()):
+                code = benchmark.main(["--compare", str(a), str(b), "--out", str(out)])
+            self.assertEqual(code, 0)
+            self.assertEqual(json.loads(out.read_text(encoding="utf-8"))["overall"]["n"], 20)
+
+
+class TrainDataAndResume(unittest.TestCase):
+    def test_disjoint_check_catches_a_shared_task(self):
+        benchmark.check_disjoint(TRAIN, HELDOUT)  # one batch's splits never overlap
+        copy = dict(HELDOUT[0], id="other-id", split="train")
+        with self.assertRaises(cadspec.SpecError):
+            benchmark.check_disjoint(TRAIN + [copy], HELDOUT)
+
+    def test_train_data_needs_fewshot(self):
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(benchmark.main(["--mock", "oracle", "--train-data", "x.json"]), 2)
+
+    def test_resume_skips_logged_tasks_and_refuses_another_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data, out = Path(tmp) / "batch.json", Path(tmp) / "report.json"
+            generate.write(dict(BATCH, tasks=SINGLE_BOX[:3]), data)
+            argv = ["--data", str(data), "--mock", "oracle", "--out", str(out)]
+
+            def main(args):
+                with static_only(), contextlib.redirect_stdout(io.StringIO()), \
+                        contextlib.redirect_stderr(io.StringIO()):
+                    return benchmark.main(args)
+
+            self.assertEqual(main(argv), 0)
+            log = out.with_name(out.name + ".progress.jsonl")
+            self.assertEqual(len(log.read_text(encoding="utf-8").splitlines()), 4)
+            first = json.loads(out.read_text(encoding="utf-8"))
+            with mock.patch.object(benchmark, "attempt", side_effect=AssertionError):
+                self.assertEqual(main(argv + ["--resume"]), 0)  # nothing runs again
+            again = json.loads(out.read_text(encoding="utf-8"))
+            self.assertEqual(again["totals"], first["totals"])
+            self.assertEqual(again["by_stratum"], first["by_stratum"])
+            # A log from another candidate is refused.
+            self.assertEqual(main(["--data", str(data), "--mock", "wrong", "--out", str(out),
+                                   "--resume"]), 2)
+
+    def test_report_has_wilson_intervals_per_stratum(self):
+        with static_only():
+            report = benchmark.run(SINGLE_BOX, "none", benchmark.oracle)
+        self.assertEqual(report["solve_rate_ci95"], benchmark.wilson(len(SINGLE_BOX),
+                                                                     len(SINGLE_BOX)))
+        for name, g in report["by_stratum"].items():
+            family, pattern = name.split("/")
+            self.assertIn(pattern, generate.FAMILY_PATTERNS[family])
+            self.assertEqual(g["ci95"], benchmark.wilson(g["solved"], g["attempted"]))
+        self.assertIn("By stratum", benchmark.render(dict(
+            report, spec_version="v", data="d", candidate="c", split="heldout")))
+
+
 @needs_cadquery
 class BenchmarkExecuted(unittest.TestCase):
     """The reference oracle on every held-out task, measured on the executed solid."""
