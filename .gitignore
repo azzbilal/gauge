@@ -22,11 +22,6 @@ coverage/
 __pycache__/
 *.pyc
 
-# dbt
-data/dbt/target/
-data/dbt/dbt_packages/
-data/dbt/logs/
-
 # OS / editor
 .DS_Store
 Thumbs.db

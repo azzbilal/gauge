@@ -7,8 +7,9 @@ POST /lint runs M7 Packet Lint on a task packet and returns {"findings": [...]}.
 POST /verify runs the M8 Verifier Pack on a task packet and returns {"verdicts": [...]},
 one per machine-checkable rubric item.
 POST /probe runs the M9 Probe Gate: body {"packet": {...}, "model": "...", "rollouts": 3}
-(rollouts optional, default 3) and returns {"tier": ..., "rollouts": [...], ...}. It calls
-the local Ollama server and answers 502 when that fails.
+(rollouts optional, default 3) and returns {"tier": ..., "rollouts": [...], ...}. Each
+rollout is sampled at the probe's temperature with its own fixed seed. It calls the local
+Ollama server and answers 502 when that fails.
 /health proves the seam works. Uses only the standard library.
 
 One thread per request, so a lint (pure and fast) is never queued behind a verify or a

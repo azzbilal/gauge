@@ -1,6 +1,6 @@
 # Gauge — Product Requirements Document (PRD)
 
-> One page. Version 2: the 28-day, four-phase plan, and what is actually built (2026-11-13).
+> One page. Version 2: the 28-day, four-phase plan, and what is actually built (2026-11-15).
 > Version 1 (day 1) was 21 days / three phases, with no verification layer.
 
 ## Problem
@@ -38,17 +38,17 @@ seven days to make room for verification.
 
 ## Success metrics (gates)
 
-| Gate | Criterion | State (2026-11-13) |
+| Gate | Criterion | State (2026-11-15) |
 |---|---|---|
-| **1 (day 6)** | live URL | **not met**: runs locally only |
+| **1 (day 6)** | live URL | **met**: web on Vercel; API, verify service and Postgres on Render (free plans; `render.yaml`, `docs/DEPLOY.md`) |
 | | green CI | CI runs typecheck, API tests, builds and the Python suites |
-| | intake-agent agreement rate on the 20-pair golden set | **measured: 4/20 = 20 %** (`npm run golden`; see below) |
+| | intake-agent agreement rate on the 20-pair golden set | **18/20 = 90 %, prompt-tuned on the eval set** (`intake-v5`; in-sample, see below). First run: 4/20 = 20 % (`intake-v3`) |
 | | published pipeline spec | `docs/pipeline.md` |
 | | ≥ 1 contributor task submitted | depends on the live database; not recorded here |
-| **2 (day 13)** | M7–M9 built and wired into submission and review | pre-submit check, server-side lint gate and stored verdicts built; verdicts are not shown on the Review screen; the probe runs from the admin-only `POST /tasks/:id/probe` and is stored as a `ProbeRun` |
+| **2 (day 13)** | M7–M9 built and wired into submission and review | pre-submit check, server-side lint gate and stored verdicts built; the Review screen shows the stored lint and verifier verdicts per criterion after the reviewer submits (hidden while scoring); the probe runs from the admin-only `POST /tasks/:id/probe` and is stored as a `ProbeRun`, with seeded sampling so all four tiers are reachable |
 | | verifier agreement with human verdicts | **measured on the 10-task Layer 2 golden set: 8/10 = 80 % (seeded, in-sample)**, kappa 0.58 (`npm run verifier-golden`; see below) |
-| **3 (day 19)** | all dbt tests pass, dashboard on the semantic layer, retro with real campaign numbers | not started |
-| **4 (day 28)** | held-out scores before and after training, with a failure analysis | not started |
+| **3 (day 19)** | all dbt tests pass, dashboard on the semantic layer, retro with real campaign numbers | **partly met**: Dagster job and dbt warehouse built (`warehouse/`), dbt 31/31 on build and 26/26 on test; the dashboard reads the marts directly because the MCP semantic layer is not built; the retro uses dev data, as no real campaign has run (`docs/results/gate3-retro-2026-11-13.md`) |
+| **4 (day 28)** | held-out scores before and after training, with a failure analysis | **partly met**: model loop built (`model/`). "Training" is in-context few-shot prompting, not weight training. 20 held-out tasks: 0/20 → 6/20. 300 held-out tasks: few-shot 122/300 = 41 % (Wilson 95 %: 35–46 %), with a failure analysis; the 300-task zero-shot baseline is still pending (`docs/results/phase4-*`) |
 
 The plan gives the verification phase a list of deliverables but no gate of its own; Gate 2
 above is that list. Gates 3 and 4 are version 1's Gates 2 and 3, moved to the new phase ends.
@@ -63,8 +63,15 @@ that repeat a few-shot example.
 **First result and failure analysis.** `intake-v3-fewshot@ollama/qwen3.5:9b-q4_K_M`: 20 %
 (17 % without the two leaked pairs); mean bias −2.05 on communication, −1.10 on scripting.
 The gold labels credit communication and general programming that the intake prompt's anchors
-tell the model not to credit. The rubric definition has to be reconciled (labels or prompt)
-before the number means much. Full output: `docs/results/`.
+told the model not to credit.
+
+**Current result: prompt-tuned on the eval set.** `intake-v5-fewshot@ollama/qwen3.5:9b-q4_K_M`:
+18/20 = 90 % (16/18 = 89 % without the leaked pairs); routing agreement unchanged at 55 %.
+v5 reconciled the rubric by rewriting the prompt's anchors after reading the v3 misses on
+these same 20 CVs; the labels did not change. So 90 % is in-sample: it shows the prompt now
+matches the labels' rubric, not how well the agent agrees on new CVs. That needs a fresh
+hand-labelled set the prompt was never tuned on. Full output:
+`docs/results/gate1-golden-2026-11-13-intake-v5.*`.
 
 **Gate 2 harness.** `GET /tasks/verifier-agreement` (admin) compares, over decided normal
 tasks, the latest stored verifier run on the reference (`passed`: every machine verdict passed)
@@ -95,9 +102,12 @@ cases would measure nothing real; the harness records the mode it ran in. Full o
 One PostgreSQL database is the **source of truth**. The API (NestJS, JWT) writes to it; the web
 app (React) talks only to the API. The API reaches the verification layer (`verify/`, Python
 standard library, port 4000) over HTTP only: `/extract`, `/lint`, `/verify`, `/probe`.
-Verification stores its results in its own five tables keyed by `taskId`. Later, Dagster copies
-the database into a dbt warehouse on a schedule, and the model loop consumes only reviewed,
-accepted tasks. Data flows one way, so downstream failure can never corrupt the campaign.
+Verification stores its results in its own five tables keyed by `taskId`. A Dagster job copies
+the database into a dbt warehouse on DuckDB (`warehouse/`; the daily schedule is defined but
+not running). The model loop (`model/`) benchmarks a local model on synthetic cad-spec tasks
+scored by the Verifier Pack; it does not yet consume campaign tasks. Data flows one way, so
+downstream failure can never corrupt the campaign. Deployed: web on Vercel; API, verify
+service and Postgres on Render.
 
 ## Non-negotiable rules
 
@@ -108,8 +118,9 @@ version, pipeline spec). Hold out before training. Publish failures.
 
 - **Few contributors.** Run with two people plus yourself; the adjudication escape keeps
   splits from stalling; report the small sample.
-- **Golden labels and rubric disagree.** This has already happened: re-label or re-anchor,
-  and version the change.
+- **Golden labels and rubric disagree.** This happened at Gate 1. The prompt was re-anchored
+  and versioned (v3 → v5), which raised agreement from 20 % to 90 % but made the number
+  in-sample; a fresh labelled set is needed to measure it honestly.
 - **Verification breaks Layer 1.** Keep Layer 2 additive: new tables keyed by `taskId`,
   one HTTP seam, no edits to Layer 1 tables.
 - **Flat training result.** Publish it; a clear failure analysis is still a full loop.

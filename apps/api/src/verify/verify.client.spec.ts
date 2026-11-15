@@ -71,6 +71,24 @@ describe('VerifyClient.probe', () => {
     expect(result.rollouts).toHaveLength(2);
   });
 
+  it('accepts the seeded-sampling answer (temperature, seeds, a seed per rollout)', async () => {
+    handler = (_req, _body, res) =>
+      reply(
+        res,
+        200,
+        answer(3, {
+          tier: 't1',
+          solve_rate: 2 / 3,
+          temperature: 0.7,
+          seeds: [1, 2, 3],
+          rollouts: [1, 2, 3].map((seed) => ({ code: '', solved: seed !== 2, verdicts: [], error: null, seed })),
+        }),
+      );
+    const result = await new VerifyClient().probe(packet, 'm', 3);
+    expect(result).toMatchObject({ tier: DifficultyTier.T1, solve_rate: 2 / 3 });
+    expect(result.rollouts).toHaveLength(3);
+  });
+
   it('tells Ollama down (502) apart from a service error (500)', async () => {
     handler = (_req, _body, res) => reply(res, 502, { error: 'ollama request failed: refused' });
     const down = await new VerifyClient().probe(packet, 'm', 1).catch((e) => e);

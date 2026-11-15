@@ -2,6 +2,7 @@
 
     python -m unittest discover -s verify/probe/tests -v
 """
+import functools
 import importlib
 import json
 import os
@@ -60,14 +61,18 @@ def packet() -> dict:
 
 
 def fake_rollouts(*codes):
-    """A rollout_fn that returns the given solutions in order and records its calls."""
-    queue, calls = list(codes), []
+    """A rollout_fn that returns the given solutions in order and records its calls.
 
-    def fn(prompt, spec, model):
+    `fn.calls` holds (prompt, spec, model); `fn.sampling` holds (seed, temperature)."""
+    queue, calls, sampling = list(codes), [], []
+
+    def fn(prompt, spec, model, *, seed, temperature):
         calls.append((prompt, spec, model))
+        sampling.append((seed, temperature))
         return queue.pop(0)
 
     fn.calls = calls
+    fn.sampling = sampling
     return fn
 
 
@@ -210,6 +215,119 @@ class Probe(unittest.TestCase):
         self.assertEqual(fn.calls, [])
 
 
+class Sampling(unittest.TestCase):
+    """Rollouts are sampled with a fixed seed each, so the middle tier is reachable."""
+
+    def test_each_rollout_gets_its_own_seed_and_a_temperature_above_zero(self):
+        fn = fake_rollouts(OK, WRONG, OK)
+        result = probe(packet(), "tiny", rollout_fn=fn)
+        seeds = [seed for seed, _ in fn.sampling]
+        self.assertEqual(len(set(seeds)), 3)  # distinct within a probe
+        self.assertEqual(seeds, result["seeds"])
+        self.assertEqual([r["seed"] for r in result["rollouts"]], seeds)
+        for _, temperature in fn.sampling:
+            self.assertEqual(temperature, probe_module.PROBE_TEMPERATURE)
+        self.assertGreater(result["temperature"], 0)
+
+    def test_seeds_are_the_same_in_every_probe(self):
+        first, second = fake_rollouts(OK, OK, OK), fake_rollouts(OK, OK, OK)
+        probe(packet(), "tiny", rollout_fn=first)
+        probe(packet(), "tiny", rollout_fn=second)
+        self.assertEqual(first.sampling, second.sampling)
+        self.assertEqual([s for s, _ in first.sampling], probe_module.rollout_seeds(3))
+
+    def test_temperature_zero_with_several_rollouts_is_refused(self):
+        fn = fake_rollouts(OK, OK, OK)
+        with self.assertRaises(ValueError) as ctx:
+            probe(packet(), "tiny", n=3, rollout_fn=fn, temperature=0)
+        self.assertIn("temperature 0", str(ctx.exception))
+        self.assertEqual(fn.calls, [])
+
+    def test_temperature_zero_with_one_rollout_is_allowed_and_binary(self):
+        result = probe(packet(), "tiny", n=1, rollout_fn=fake_rollouts(OK), temperature=0)
+        self.assertEqual((result["solve_rate"], result["tier"]), (1.0, "t0"))
+        result = probe(packet(), "tiny", n=1, rollout_fn=fake_rollouts(WRONG), temperature=0)
+        self.assertEqual((result["solve_rate"], result["tier"]), (0.0, "t2"))
+
+    def test_bad_temperatures_are_refused(self):
+        for temperature in (-0.1, 2.5, True, "0.7", float("nan")):
+            with self.assertRaises(ValueError, msg=temperature):
+                probe(packet(), "tiny", rollout_fn=fake_rollouts(OK), temperature=temperature)
+
+
+class SeedAwareOllama(BaseHTTPRequestHandler):
+    """A mock Ollama whose answer depends on options.seed, as a sampling model's would.
+
+    Seeds in `wrong_seeds` get a wrong-width plate; every other seed gets the right one. At
+    temperature 0 it answers the same for every seed, as a greedy decoder would."""
+    wrong_seeds = set()
+    seen = []
+
+    def do_POST(self):
+        length = int(self.headers.get("Content-Length") or 0)
+        body = json.loads(self.rfile.read(length))
+        type(self).seen.append(body)
+        options = body["options"]
+        wrong = options["temperature"] > 0 and options.get("seed") in type(self).wrong_seeds
+        code = WRONG if wrong else OK
+        payload = json.dumps({"response": f"```python\n{code}\n```"}).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def log_message(self, *args):
+        pass
+
+
+class SeededProbeEndToEnd(unittest.TestCase):
+    """The real rollout() against a mock Ollama: seeds reach the server and t1 is reachable.
+
+    This shows the mechanism with a mock. It is not a measurement of how often a real model
+    lands in t1."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.server, base = serve(SeedAwareOllama)
+        cls.rollout_fn = functools.partial(rollout, url=base + "/api/generate", timeout=10)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+        cls.server.server_close()
+
+    def setUp(self):
+        SeedAwareOllama.seen = []
+        SeedAwareOllama.wrong_seeds = set()
+
+    def test_one_wrong_sample_in_three_is_t1(self):
+        seeds = probe_module.rollout_seeds(3)
+        SeedAwareOllama.wrong_seeds = {seeds[1]}
+        result = probe(packet(), "tiny", rollout_fn=self.rollout_fn)
+        self.assertEqual([r["solved"] for r in result["rollouts"]], [True, False, True])
+        self.assertAlmostEqual(result["solve_rate"], 2 / 3)
+        self.assertEqual(result["tier"], "t1")
+        sent = [(b["options"]["seed"], b["options"]["temperature"]) for b in SeedAwareOllama.seen]
+        self.assertEqual(sent, [(s, probe_module.PROBE_TEMPERATURE) for s in seeds])
+
+    def test_the_same_probe_twice_gives_the_same_tier(self):
+        SeedAwareOllama.wrong_seeds = set(probe_module.rollout_seeds(3)[:2])
+        first = probe(packet(), "tiny", rollout_fn=self.rollout_fn)
+        second = probe(packet(), "tiny", rollout_fn=self.rollout_fn)
+        self.assertEqual(first["tier"], "t2")
+        self.assertEqual([r["solved"] for r in first["rollouts"]],
+                         [r["solved"] for r in second["rollouts"]])
+
+    def test_temperature_zero_reaches_the_server_as_greedy_decoding(self):
+        # One rollout at temperature 0 is still allowed; the server must see temperature 0,
+        # which this mock (like a greedy decoder) answers the same whatever the seed.
+        SeedAwareOllama.wrong_seeds = set(probe_module.rollout_seeds(3))
+        result = probe(packet(), "tiny", n=1, rollout_fn=self.rollout_fn, temperature=0)
+        self.assertEqual(SeedAwareOllama.seen[0]["options"]["temperature"], 0)
+        self.assertEqual(result["tier"], "t0")  # the seed was ignored: greedy answer
+
+
 class ExecutedRollouts(unittest.TestCase):
     """Rollouts are executed and measured when cadquery is available to the worker."""
 
@@ -317,15 +435,23 @@ class Rollout(unittest.TestCase):
         self.assertIn("Model a plate.", body["prompt"])
         self.assertIn("60 mm wide.", body["prompt"])
 
-    def test_request_sends_the_intake_provider_settings(self):
+    def test_request_sends_the_intake_provider_settings_and_the_seed(self):
         # Without think false qwen3.5 reasons until num_predict and answers with nothing,
         # which would be scored as a failed rollout.
-        rollout("Model a plate.", "60 mm wide.", "qwen3.5:9b-q4_K_M", url=self.url)
+        rollout("Model a plate.", "60 mm wide.", "qwen3.5:9b-q4_K_M", url=self.url, seed=7)
         _, body = FakeOllama.seen[0]
         self.assertIs(body["think"], False)
-        self.assertEqual(body["options"], {"temperature": 0.0,
+        self.assertEqual(body["options"], {"temperature": probe_module.PROBE_TEMPERATURE,
                                            "num_ctx": probe_module.DEFAULT_NUM_CTX,
-                                           "num_predict": probe_module.DEFAULT_NUM_PREDICT})
+                                           "num_predict": probe_module.DEFAULT_NUM_PREDICT,
+                                           "seed": 7})
+        self.assertGreater(probe_module.PROBE_TEMPERATURE, 0)
+
+    def test_no_seed_is_sent_when_none_is_given(self):
+        rollout("p", "s", "m", url=self.url, temperature=0.0)
+        _, body = FakeOllama.seen[0]
+        self.assertNotIn("seed", body["options"])
+        self.assertEqual(body["options"]["temperature"], 0.0)
 
     def test_generation_settings_read_the_api_variables(self):
         with mock.patch.dict(os.environ, {"OLLAMA_NUM_CTX": "8192", "OLLAMA_NUM_PREDICT": "x"}):
@@ -397,6 +523,8 @@ class Endpoint(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(body["tier"], "t1")
         self.assertEqual(len(body["rollouts"]), 3)
+        self.assertEqual(body["seeds"], probe_module.rollout_seeds(3))
+        self.assertEqual(body["temperature"], probe_module.PROBE_TEMPERATURE)
         self.assertEqual([r["solved"] for r in body["rollouts"]], [True, False, True])
         self.assertEqual(fn.calls[0][2], "tiny")
 

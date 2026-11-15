@@ -1,7 +1,7 @@
 {
   "generatedAt": "2026-11-13T19:41:29.246Z",
   "goldenSet": {
-    "file": "D:\\10_PROJECTS\\RECUITE\\gauge\\apps\\api\\prisma\\golden-set.json",
+    "file": "apps/api/prisma/golden-set.json",
     "sha256": "d4c45fbbb0b358c7dc96936ef0aaaea76a32ac20c42e0c82498b5541a8d65ae1",
     "pairs": 20
   },

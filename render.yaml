@@ -1,5 +1,5 @@
 # Gauge on Render (Blueprint). Steps and caveats: docs/DEPLOY.md.
-# Not deployed from this repo yet; the file is checked only for YAML shape.
+# The live backend (gauge-api, gauge-verify, gauge-db) runs on Render with this layout.
 #
 #   gauge-api     Docker web service; the image entrypoint runs prisma migrate deploy on start
 #   gauge-verify  Docker web service on port 4000 (no cadquery: cannot run submitted CAD code)

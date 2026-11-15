@@ -2,14 +2,14 @@
 
 There are two ways to run Gauge outside development:
 
-- **Render**, through the Blueprint in `render.yaml`.
+- **Vercel + Render** (the live deployment): the web app on Vercel (`apps/web/vercel.json`), the API, verify service and Postgres on Render through the Blueprint in `render.yaml`.
 - **Self-hosted with Docker Compose**, through `docker-compose.prod.yml`.
 
 Both run the same four parts:
 
 | Part | Built from | Listens on | Notes |
 | --- | --- | --- | --- |
-| web | `apps/web/Dockerfile` (nginx), or a Render static site | 80 | Serves the SPA and forwards `/api/*` to the API with the `/api` prefix stripped |
+| web | `apps/web/Dockerfile` (nginx), or Vercel | 80 | Serves the SPA and forwards `/api/*` to the API with the `/api` prefix stripped |
 | api | `apps/api/Dockerfile` | 3000, or Render's `PORT` | Runs `prisma migrate deploy` on every start, then `node dist/main.js` |
 | verify | `verify/Dockerfile` | 4000 | Layer 2 service: `/extract`, `/lint`, `/verify`, `/health` |
 | postgres | `postgres:16-alpine`, or Render Postgres | 5432 | The only stateful part |
@@ -83,12 +83,11 @@ To stop the stack, run `docker compose -f docker-compose.prod.yml down`. Add `-v
 
 ## Render
 
-`render.yaml` defines four resources:
+`render.yaml` defines three resources, all on the `free` plan; the web app is on Vercel (step 3):
 
-- `gauge-web`, a static site.
-- `gauge-api`, a Docker web service on the `free` plan.
-- `gauge-verify`, a Docker web service on port 4000, on the paid `0.5c-512mb` plan (see step 2).
-- `gauge-db`, a Postgres database on the `free` plan.
+- `gauge-api`, a Docker web service.
+- `gauge-verify`, a Docker web service on port 4000.
+- `gauge-db`, a Postgres database.
 
 Every plan is set explicitly, because a Blueprint service with no `plan` defaults to the paid `0.5c-512mb`.
 
@@ -100,17 +99,15 @@ Every plan is set explicitly, because a Blueprint service with no `plan` default
 
    `JWT_SECRET` is generated for you, and `DATABASE_URL` is filled in from `gauge-db`.
 
-2. **Connect the API to verify.** This step is manual. On the `gauge-verify` page, open **Connect → Internal** and copy its internal address, which has the form `gauge-verify-xxxx:4000`. Then set this on `gauge-api`:
+2. **Connect the API to verify.** This step is manual. Copy the public URL of `gauge-verify` and set it on `gauge-api`, with the scheme:
 
    ```
-   VERIFY_SERVICE_URL=http://gauge-verify-xxxx:4000
+   VERIFY_SERVICE_URL=https://gauge-verify-xxxx.onrender.com
    ```
 
-   Two details matter:
-   - **Include the `http://` scheme.** The internal address has none. `fromService` in a Blueprint also returns only `host:port`, which is why this variable is not wired automatically.
-   - **The internal URL needs a paid instance.** Render's free web services can send private-network traffic but cannot receive it, That is why `render.yaml` puts `gauge-verify` on a paid plan. To run verify for free, set its `plan: free` and use its public URL instead: `VERIFY_SERVICE_URL=https://gauge-verify.onrender.com`.
+   The public URL is used because Render's free web services can send private-network traffic but cannot receive it. On a paid verify instance you could use the internal address (**Connect → Internal**, `http://gauge-verify-xxxx:4000`) instead; it has no scheme, so add `http://`.
 
-3. **Check the API URL in the static site.** `render.yaml` rewrites `/api/*` to `https://gauge-api.onrender.com/*`. If Render assigned the API a different hostname, edit that `destination` and redeploy `gauge-web`.
+3. **Deploy the web app on Vercel.** Import the repository in Vercel with `apps/web` as the root directory. `apps/web/vercel.json` builds it and rewrites `/api/*` to the API's Render URL; if Render assigned the API a different hostname, edit that `destination` and redeploy.
 
 4. **Migrations need no action.** Every API deploy runs `prisma migrate deploy` before it starts.
 
@@ -125,11 +122,11 @@ Every plan is set explicitly, because a Blueprint service with no `plan` default
 
      This also runs `migrate deploy` first, which is harmless.
 
-6. **Open the `gauge-web` URL** and sign in as `admin@gauge.local`.
+6. **Open the Vercel URL** and sign in as `admin@gauge.local`.
 
 **Free tier.** Free services spin down when idle, so the first request after a pause is slow. The API gives each verify call 5 seconds, so a verify service that is waking up from a free-tier spin-down shows as `not_run` in a preview, not as a slow request. Free Postgres databases are time-limited; check Render's current limits before you rely on one.
 
-**What has been tested.** The Compose stack was built and tested locally. The Render Blueprint has not been deployed, so this file has only been checked for YAML shape. In particular, the static-site rewrite to an external URL is untested. If Render does not proxy it, the web app's `/api` calls will fail. The app always calls the relative path `/api`, so the fallback would be to serve the web from the nginx image (`apps/web/Dockerfile`) as a Docker web service, with its `proxy_pass` pointed at the API.
+**What has been tested.** The Compose stack was built and tested locally. The Vercel + Render deployment is up: on 2026-11-15 the Render API's `/health` answered `{"status":"ok","db":"up"}`. The rest of the live setup (web on Vercel, verify on Render) is as configured in `apps/web/vercel.json` and `render.yaml`, not separately checked.
 
 ## Known limits
 

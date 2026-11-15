@@ -56,6 +56,9 @@ pushed tasks toward `t2`. `rollout()` now sends what the API's intake provider s
 `think: false`, temperature 0, `num_ctx` (`OLLAMA_NUM_CTX`, default 16384) and `num_predict`
 (`OLLAMA_NUM_PREDICT`, default 2048), built by one shared `generation_body()` that the
 benchmark also uses.
+*(Later change, 2026-11-15: probe rollouts now sample at temperature 0.7 with a fixed seed
+each, so the middle tier is reachable; the benchmark still runs at temperature 0. See
+`verify/probe/README.md`.)*
 
 Reproduced this session on `plate-002`:
 - The **old** request shape (`model`, `prompt` and `stream` only) came back after 65 s with

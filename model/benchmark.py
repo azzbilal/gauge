@@ -26,7 +26,8 @@ Each attempt has one of four outcomes:
 The headline solve rate is solved / (solved + failed + unjudged); unjudged is reported
 beside it, not hidden in it. not_run attempts are left out of the rate and listed.
 
-A candidate is any `fn(prompt, spec, model) -> code`, the probe's rollout_fn signature:
+A candidate is any `fn(prompt, spec, model) -> code` (the probe's rollout_fn also takes a seed
+and a temperature; a benchmark candidate does not):
 OllamaCandidate (local Ollama) by default, or a mock. OllamaCandidate builds the prompt with the
 probe's own build_prompt (fewshot_prompt adds examples), reads the code with extract_code,
 and sends what the API's intake provider sends (apps/api/src/intake/llm/ollama.provider.ts): think off, temperature,

@@ -4,7 +4,14 @@
     result = probe(packet_dict, "qwen2.5-coder:7b")   # 3 rollouts by default
 
 Asks a local Ollama model to solve the task N times, scores every attempt with the M8
-Verifier Pack dimension and hole checks and turns the solve rate into a difficulty tier:
+Verifier Pack dimension and hole checks and turns the solve rate into a difficulty tier.
+
+Each rollout samples at temperature PROBE_TEMPERATURE (0.7) with its own fixed seed
+(ROLLOUT_SEED_BASE + i), so the N attempts can differ from each other while a re-run with
+the same model, Ollama build and hardware asks for the same N samples. At temperature 0
+every rollout would repeat one answer, the solve rate could only be 0 or 1 and t1 could
+never be reached, so probe() refuses temperature 0 with more than one rollout.
+With the default 3 rollouts the possible solve rates are 0, 1/3, 2/3 and 1 (t2, t2, t1, t0).
 
     t0      solve_rate > 0.8            too easy
     t1      0.4 <= solve_rate <= 0.8    in band
@@ -36,6 +43,7 @@ import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import Optional
 
 try:
     from lint.packet import PacketError, TaskPacket
@@ -56,6 +64,10 @@ T0_ABOVE = 0.8
 T1_FROM = 0.4
 
 DEFAULT_ROLLOUTS = 3
+# Sampling settings for probe rollouts. Rollout i of a probe uses seed ROLLOUT_SEED_BASE + i:
+# distinct within a probe, the same in every probe, so a tier can be re-run.
+PROBE_TEMPERATURE = 0.7
+ROLLOUT_SEED_BASE = 1
 
 
 def _ollama_url() -> str:
@@ -91,6 +103,8 @@ DEFAULT_TIMEOUT_S = _ollama_timeout_s()
 # (apps/api/src/intake/llm/ollama.provider.ts), read from the same variables.
 DEFAULT_NUM_CTX = _env_int("OLLAMA_NUM_CTX", 16384)
 DEFAULT_NUM_PREDICT = _env_int("OLLAMA_NUM_PREDICT", 2048)
+# generation_body's default: one deterministic answer per request. model/benchmark.py passes
+# its own temperature (0 by default); probe rollouts sample at PROBE_TEMPERATURE instead.
 DEFAULT_TEMPERATURE = 0.0
 
 _INSTRUCTIONS = (
@@ -147,25 +161,33 @@ def extract_code(text: str) -> str:
 
 def generation_body(model: str, prompt: str, *, think: bool = False,
                     temperature: float = DEFAULT_TEMPERATURE, num_ctx: int = DEFAULT_NUM_CTX,
-                    num_predict: int = DEFAULT_NUM_PREDICT) -> dict:
-    """The /api/generate request body, with the settings the API's intake provider sends.
+                    num_predict: int = DEFAULT_NUM_PREDICT,
+                    seed: Optional[int] = None) -> dict:
+    """The /api/generate request body, with the context settings the API's intake provider
+    sends (think, num_ctx, num_predict).
 
     `think: false` matters: without it a thinking model such as qwen3.5 spends the whole
     num_predict budget reasoning and returns an empty answer, which would then be scored as
-    a failed rollout. Temperature 0 keeps rollouts reproducible; num_ctx stops Ollama from
-    silently truncating a long prompt to its small default window."""
+    a failed rollout. num_ctx stops Ollama from silently truncating a long prompt to its
+    small default window. `seed`, when given, is sent as options.seed so a sampled answer
+    (temperature above 0) can be asked for again; it is left out when None."""
+    options = {"temperature": temperature, "num_ctx": num_ctx, "num_predict": num_predict}
+    if seed is not None:
+        options["seed"] = seed
     return {"model": model, "prompt": prompt, "stream": False, "think": think,
-            "options": {"temperature": temperature, "num_ctx": num_ctx,
-                        "num_predict": num_predict}}
+            "options": options}
 
 
-def rollout(prompt: str, spec: str, model: str, *, url: str = OLLAMA_URL,
+def rollout(prompt: str, spec: str, model: str, *, seed: Optional[int] = None,
+            temperature: float = PROBE_TEMPERATURE, url: str = OLLAMA_URL,
             timeout: float = DEFAULT_TIMEOUT_S) -> str:
     """Ask the local Ollama `model` for one CadQuery solution and return the code.
 
-    Sends think false, temperature 0, num_ctx and num_predict (generation_body).
+    Sends think false, `temperature` (PROBE_TEMPERATURE by default), `seed` when given,
+    num_ctx and num_predict (generation_body).
     Raises OllamaError when the server is unreachable or does not return a completion."""
-    body = json.dumps(generation_body(model, build_prompt(prompt, spec))).encode("utf-8")
+    body = json.dumps(generation_body(model, build_prompt(prompt, spec),
+                                      temperature=temperature, seed=seed)).encode("utf-8")
     request = urllib.request.Request(
         url, data=body, headers={"Content-Type": "application/json"})
     try:
@@ -205,20 +227,42 @@ def score(parsed: TaskPacket, code: str) -> dict:
     return result
 
 
-def probe(packet, model: str, n: int = DEFAULT_ROLLOUTS, rollout_fn=rollout) -> dict:
+def rollout_seeds(n: int) -> list:
+    """The seeds of a probe's `n` rollouts: distinct within a probe, the same in every probe."""
+    return [ROLLOUT_SEED_BASE + i for i in range(n)]
+
+
+def probe(packet, model: str, n: int = DEFAULT_ROLLOUTS, rollout_fn=rollout, *,
+          temperature: float = PROBE_TEMPERATURE) -> dict:
     """Run `n` rollouts of `model` on a task packet and return its difficulty tier.
 
-    Returns {"tier", "solve_rate", "solved", "verifier_errors", "model", "rollouts"} where
-    `rollouts` holds one {"code", "solved", "verdicts", "error"} per attempt.
+    Rollout i is sampled at `temperature` with seed ROLLOUT_SEED_BASE + i. Temperature 0
+    with n > 1 raises ValueError: every rollout would repeat the same answer, so the solve
+    rate could only be 0 or 1 and the extra rollouts would only look like evidence.
+
+    Returns {"tier", "solve_rate", "solved", "verifier_errors", "model", "temperature",
+    "seeds", "rollouts"} where `rollouts` holds one {"code", "solved", "verdicts", "error",
+    "seed"} per attempt.
 
     Raises PacketError for a malformed packet and OllamaError when generation fails.
-    `rollout_fn(prompt, spec, model) -> code` can be replaced in tests."""
+    `rollout_fn(prompt, spec, model, *, seed, temperature) -> code` can be replaced in
+    tests."""
     if isinstance(n, bool) or not isinstance(n, int) or n < 1:
         raise ValueError("n must be a positive integer")
+    if (isinstance(temperature, bool) or not isinstance(temperature, (int, float))
+            or not 0 <= temperature <= 2):
+        raise ValueError("temperature must be a number from 0 to 2")
+    if temperature == 0 and n > 1:
+        raise ValueError("at temperature 0 every rollout repeats the same answer: "
+                         "use n=1 or a temperature above 0")
     parsed = packet if isinstance(packet, TaskPacket) else TaskPacket.from_dict(packet)
 
-    rollouts = [score(parsed, rollout_fn(parsed.prompt, parsed.spec, model))
-                for _ in range(n)]
+    seeds = rollout_seeds(n)
+    rollouts = []
+    for seed in seeds:
+        code = rollout_fn(parsed.prompt, parsed.spec, model, seed=seed,
+                          temperature=temperature)
+        rollouts.append({**score(parsed, code), "seed": seed})
     solved = sum(r["solved"] for r in rollouts)
     verifier_errors = sum(r["error"] is not None for r in rollouts)
     solve_rate = solved / n
@@ -228,11 +272,14 @@ def probe(packet, model: str, n: int = DEFAULT_ROLLOUTS, rollout_fn=rollout) -> 
         "solved": solved,
         "verifier_errors": verifier_errors,
         "model": model,
+        "temperature": temperature,
+        "seeds": seeds,
         "rollouts": rollouts,
     }
 
 
 __all__ = [
-    "probe", "rollout", "tier", "score", "extract_code", "build_prompt", "generation_body",
-    "OllamaError", "PacketError", "T0", "T1", "T2", "BROKEN", "DEFAULT_ROLLOUTS",
+    "probe", "rollout", "rollout_seeds", "tier", "score", "extract_code", "build_prompt",
+    "generation_body", "OllamaError", "PacketError", "T0", "T1", "T2", "BROKEN",
+    "DEFAULT_ROLLOUTS", "PROBE_TEMPERATURE", "ROLLOUT_SEED_BASE",
 ]

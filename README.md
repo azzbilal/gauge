@@ -16,10 +16,10 @@ the review rules are [docs/pipeline.md](./docs/pipeline.md).
 
 | Phase | Days | Builds | State |
 |---|---|---|---|
-| 1 · Front door | 1–6 | App, auth, intake agent (M1), task campaign + review protocol (M2) | **built**; not deployed (no live URL yet) |
-| 2 · Verification (Layer 2) | 7–13 | Packet Lint (M7), Verifier Pack (M8), Probe Gate (M9), wired into authoring | **built** except: verdicts not on the Review screen, CAD only (no PCB/circuit checks); verifier agreement measured on a 10-task seeded golden set only (8/10, in-sample) |
-| 3 · Data backbone | 14–19 | Dagster ingestion, dbt warehouse, read-only MCP semantic layer (M4) | planned (`data/` holds placeholders) |
-| 4 · Model loop | 20–28 | cad-spec release, synthetic generator, training runs, held-out benchmark (M5) | **in progress**: task format frozen in [model/SPEC.md](./model/SPEC.md), synthetic generator and held-out benchmark harness built; no training run yet |
+| 1 · Front door | 1–6 | App, auth, intake agent (M1), task campaign + review protocol (M2) | **built and deployed**: web on Vercel; API, verify service and Postgres on Render (free tier). Intake agreement **18/20 = 90 %, prompt-tuned on the eval set** (in-sample; see Gate 1) |
+| 2 · Verification (Layer 2) | 7–13 | Packet Lint (M7), Verifier Pack (M8), Probe Gate (M9), wired into authoring | **built**. Stored lint and verifier verdicts show on the Review screen once the reviewer has submitted (hidden while scoring). CAD only (no PCB/circuit checks); verifier agreement measured on a 10-task seeded golden set only (8/10, in-sample) |
+| 3 · Data backbone | 14–19 | Dagster ingestion, dbt warehouse, read-only MCP semantic layer (M4) | **built except the MCP layer**: `warehouse/` holds the Dagster job, dbt on DuckDB (3 marts, all tests pass) and a static dashboard. The daily schedule is defined, not running; the numbers are dev data, not a real campaign ([retro](./docs/results/gate3-retro-2026-11-13.md)) |
+| 4 · Model loop | 20–28 | cad-spec release, synthetic generator, training runs, held-out benchmark (M5) | **built**: [model/SPEC.md](./model/SPEC.md), generator, benchmark harness. Few-shot run (in-context, **no weight training**): **122/300 = 41 % (Wilson 95 %: 35–46 %)** on 300 held-out tasks; 0/20 → 6/20 against zero-shot on the first 20-task set. The 300-task zero-shot baseline is still pending ([results](./docs/results/phase4-heldout300-2026-11-14.md)) |
 
 The plan grew from 21 days / 3 phases to 28 / 4 by inserting the verification layer as
 Phase 2; Phase 1 is unchanged, and the data backbone and model loop each moved back seven days.
@@ -28,6 +28,13 @@ Phase 2; Phase 1 is unchanged, and the data backbone and model loop each moved b
 
 Gate 1 asks for an intake-agent **agreement rate on the 20-pair golden set**
 (`apps/api/prisma/golden-set.json`: 20 CVs scored by hand on the four rubric criteria).
+
+**Current number (2026-11-13, `intake-v5-fewshot@ollama/qwen3.5:9b-q4_K_M`): 18 / 20 pairs
+agree (90 %); 16 / 18 (89 %) without the two leaked pairs. It is prompt-tuned on the eval
+set:** the v5 prompt was rewritten after reading the first run's misses on these same 20 CVs
+(the labels did not change), so 90 % is an in-sample number, not an estimate of agreement on
+new CVs. There is no separate held-out CV set yet. Routing agreement did not move: 55 %.
+Full output: [gate1-golden-2026-11-13-intake-v5.txt](./docs/results/gate1-golden-2026-11-13-intake-v5.txt).
 
 ```bash
 npm run golden                                          # from the repo root; needs the model running
@@ -48,7 +55,8 @@ is repeated without them.
 
 **First run (2026-11-13, `intake-v3-fewshot@ollama/qwen3.5:9b-q4_K_M`): 4 / 20 pairs agree
 (20 %); 3 / 18 (17 %) without the two leaked pairs.** Routing agrees on 55 %.
-Full output: [docs/results/](./docs/results/).
+Full output: [docs/results/](./docs/results/). The table and the analysis below are for this
+first run; they are what led to v5.
 
 | Criterion | exact | within 1 | MAE | bias (agent − gold) |
 |---|---|---|---|---|
@@ -71,9 +79,11 @@ noise:
 - gold-01 and gold-02 are paraphrases of the first few-shot example's CV, so they measure
   recall rather than judgment.
 
-The next step is to reconcile the rubric anchors and the labels (re-label, or change the
-prompt) and re-run, keeping the prompt version in the result. Until then Gate 1's number is
-20 %.
+v5 reconciled the rubric by changing the prompt, not the labels: it credits the
+communication a professional technical role implies, and counts programming roles as
+scripting ability even when no language is named. That moved agreement from 20 % to 90 % on
+the same 20 CVs. To make it a number worth defending, score a fresh set of hand-labelled CVs
+the prompt was never tuned on.
 
 ## Architecture
 
@@ -85,8 +95,10 @@ prompt) and re-run, keeping the prompt version in the result. Until then Gate 1'
             │          ▼                               │      └──────────────────────────┘
             │   PostgreSQL (source of truth)           │
             └──────────┬───────────────────────────────┘
-                       ▼  one way, scheduled (planned)
-            Dagster → dbt on DuckDB → MCP semantic layer → model loop (accepted tasks only)
+                       ▼  one way (Dagster job; daily schedule defined, not running)
+            Dagster → dbt on DuckDB → dashboard        (warehouse/; MCP semantic layer not built)
+
+            model/: synthetic cad-spec tasks → local model → M8 scoring → held-out benchmark
 ```
 
 - **Two independent npm apps.** `apps/web` and `apps/api` each have their own
@@ -159,17 +171,61 @@ A task is a prompt, a machine-checkable spec and a CadQuery reference. The full 
   reading only when cadquery is missing. A reference that crashes fails; one that times out
   is `not_run`. Never a sandbox: only run references you would run yourself.
 - **M9 Probe Gate.** N local-model rollouts per task scored by M8 → tier t0/t1/t2/broken.
+  Each rollout samples at temperature 0.7 with its own fixed seed, so the rollouts can
+  differ, the middle tier is reachable and a re-run asks for the same samples. (At
+  temperature 0 every rollout was the same answer and the rate was always 0 or 1.) This is
+  shown with a mock Ollama in the tests; how often a real model lands in t1 is not measured.
   The API runs it from `POST /tasks/:id/probe` (admin only) and stores a `ProbeRun`
   (`OK` with tier and solve rate, or `NOT_RUN`/`FAILED` with a note when Ollama or the
   verify service is unavailable); `GET /tasks/:id/verification` shows admins the latest.
 - **Wiring.** The Author view's "Run check" calls `POST /tasks/preview` (lint + verify,
   nothing stored). `POST /tasks` lints before inserting and refuses a task with a critical
   finding; then verifies and stores the results, readable at `GET /tasks/:id/verification`.
+  The Review screen shows those stored lint findings and verifier verdicts per criterion
+  once the reviewer has submitted (or on a task they can only read), never while they score.
 - **Verifier agreement (Gate 2).** `GET /tasks/verifier-agreement` (admin, `?campaignId=`)
   sets the stored verifier result against the human accept/reject on decided tasks: rate,
   Cohen's kappa, confusion matrix, and every disagreement with its verdicts. `npm run
   verifier-golden` seeds the 10-task Layer 2 golden set through the real create and review
   path and reports it: **8/10 (kappa 0.58, seeded/in-sample)** with cadquery execution; see `docs/results/`.
+
+### Phase 3 — Data backbone (`warehouse/`)
+
+A Dagster job (`warehouse/dagster/`) copies the app's Postgres tables into DuckDB, then runs
+`dbt build` and `dbt test`. The dbt project (`warehouse/dbt/`) has three marts:
+`mart_campaign`, `mart_task_quality` and `mart_reviewer_calibration`; the last run passed
+31/31 on build and 26/26 on test. `warehouse/dashboard/` renders a static snapshot of the
+marts. Limits: the daily schedule only fires under a running Dagster daemon, the dashboard
+reads the marts directly (the MCP semantic layer is not built), and the numbers come from dev
+data, not a real campaign. See the [Gate 3 retro](./docs/results/gate3-retro-2026-11-13.md).
+
+### Phase 4 — Model loop (`model/`)
+
+The task format is frozen as cad-spec-1.0 ([model/SPEC.md](./model/SPEC.md)). A seeded
+generator (`model/generate.py`) writes templated CAD tasks in five families, and the
+benchmark (`model/benchmark.py`) scores a local Ollama model's answers with the M8 Verifier
+Pack, with Wilson intervals and a paired McNemar comparison. The "training run" is
+**in-context few-shot prompting (five worked examples), not weight training**.
+
+- First 20 held-out tasks: 0/20 zero-shot → 6/20 few-shot
+  ([report](./docs/results/phase4-benchmark-2026-11-14.md)).
+- 300 new held-out tasks, stratified: few-shot **122/300 = 41 % (35–46 %)**. It solves every
+  task with no holes or a single centred hole, except brackets, and no multi-hole task
+  (0/158). The 300-task zero-shot baseline and the paired comparison are still pending
+  ([report](./docs/results/phase4-heldout300-2026-11-14.md)).
+
+"Solved" covers bounding box, hole diameter and hole count only, and the tasks come from the
+same five templates as the examples, so this is not evidence of generalisation.
+
+## Deployment
+
+The web app is deployed on Vercel (`apps/web/vercel.json` forwards `/api/*` to the API). The
+API, the verify service and Postgres run on Render as laid out in `render.yaml`, all on free
+plans, so the first request after an idle spell is slow. The deployed intake agent is
+configured to use Anthropic (`render.yaml`), since neither host runs Ollama, so the probe has
+no model there. The deployed verify image has no cadquery, so it scores from the static
+reading, not executed geometry. See
+[docs/DEPLOY.md](./docs/DEPLOY.md).
 
 ## Quickstart
 
@@ -216,7 +272,8 @@ cd apps/api && npm run verifier-golden   # Gate 2 harness (needs the database an
 ```
 
 CI runs typecheck, the API tests, both builds and the four Python suites on every push to
-main and every pull request.
+main and every pull request. The warehouse's dbt tests run in the Dagster job (or with
+`dbt build` / `dbt test` in `warehouse/dbt/`), not in CI.
 
 ## Repository layout
 
@@ -226,8 +283,8 @@ gauge/
   apps/api/          NestJS: auth, intake (M1), campaign + tasks (M2), review queue, verify client
     prisma/          schema, migrations, seed, golden-set.json (Gate 1)
   verify/            Layer 2 (Python): lint/ (M7), verifiers/ (M8), probe/ (M9), service/
-  data/              Phase 3 placeholders: dagster/, dbt/, mcp/
-  model/             Phase 4: SPEC.md (cad-spec release), generate.py, benchmark.py
+  warehouse/         Phase 3: dagster/ (ingestion job), dbt/ (DuckDB marts), dashboard/
+  model/             Phase 4: SPEC.md (cad-spec release), generate.py, benchmark.py, data/
   docs/              PRD, pipeline spec, results/
   .github/workflows/ CI
 ```
@@ -244,4 +301,7 @@ gauge/
 
 Built in weeks and used by a handful of people. It proves the **loop** and the quality
 machinery around it, not production operation, scale, people management or deep RL. Not yet
-done: deployment (no live URL, no AWS), the data backbone, the model loop, verifier agreement beyond a 10-task golden set, and an intake agreement rate worth defending.
+done: an intake agreement rate measured on CVs the prompt was not tuned on (90 % is
+in-sample), verifier agreement beyond a 10-task golden set, a real campaign in the
+warehouse, the MCP semantic layer, the 300-task zero-shot baseline, any weight training, and
+hosting beyond free tiers (no AWS).

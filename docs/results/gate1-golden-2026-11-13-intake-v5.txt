@@ -3,7 +3,7 @@
 > ts-node src/intake/golden/run-golden.ts --out ../../docs/results/gate1-golden-2026-11-13-intake-v5.json
 
 [Nest] 36780  - 13/11/2026 20:38:08     LOG [OllamaProvider] Using local model qwen3.5:9b-q4_K_M at http://localhost:11434 (num_ctx=16384, 4 few-shot examples)
-Golden set  D:\10_PROJECTS\RECUITE\gauge\apps\api\prisma\golden-set.json (20 pairs)
+Golden set  apps/api/prisma/golden-set.json (20 pairs)
 Scorer      intake-v5-fewshot@ollama/qwen3.5:9b-q4_K_M
 Rule        a criterion agrees when |agent - gold| <= 1; a pair passes when all agree
 Columns     criterion agent/gold (* = outside tolerance), route agent/gold
@@ -40,4 +40,4 @@ Criterion   exact  within  MAE   bias
   comm        60%   100%   0.40 -0.20
   geo         70%   100%   0.30 -0.10
 
-Report      D:\10_PROJECTS\RECUITE\gauge\docs\results\gate1-golden-2026-11-13-intake-v5.json
+Report      docs/results/gate1-golden-2026-11-13-intake-v5.json

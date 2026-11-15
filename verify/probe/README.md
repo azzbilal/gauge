@@ -6,7 +6,8 @@ Pack dimension and hole checks and returns a difficulty tier.
 ```python
 from probe import probe
 result = probe(packet, "qwen2.5-coder:7b")  # 3 rollouts by default
-# {"tier", "solve_rate", "solved", "verifier_errors", "model", "rollouts": [...]}
+# {"tier", "solve_rate", "solved", "verifier_errors", "model", "temperature", "seeds",
+#  "rollouts": [...]}
 ```
 
 | tier   | rule                                   |
@@ -15,6 +16,22 @@ result = probe(packet, "qwen2.5-coder:7b")  # 3 rollouts by default
 | t1     | 0.4 <= solve_rate <= 0.8 (in band)     |
 | t2     | solve_rate < 0.4 (hard)                |
 | broken | verifier errors and solve_rate == 0    |
+
+**Sampling.** Each rollout is sampled at temperature `PROBE_TEMPERATURE` (0.7) with its own
+fixed seed, `ROLLOUT_SEED_BASE + i` (1, 2, 3 by default), sent as Ollama's `options.seed`.
+The rollouts can differ from each other, so the solve rate can fall between 0 and 1, and a
+re-run asks for the same samples. The seeds make a re-run repeatable on the same model, Ollama
+build and hardware; Ollama does not promise identical samples across machines or versions.
+
+The probe used to run at temperature 0. Then every rollout was the same answer, the solve
+rate was always 0 or 1, and t1 could not be reached. `probe()` now refuses temperature 0
+with more than one rollout (`probe(..., n=1, temperature=0)` is allowed and gives a binary
+t0/t2 answer).
+
+With the default 3 rollouts the solve rate can only be 0, 1/3, 2/3 or 1, so the tiers are
+t2, t2, t1 and t0: one wrong sample in three is t1, two are t2. That t1 is reachable is shown
+by tests against a mock Ollama that answers by seed (`SeededProbeEndToEnd`), not by a live
+model run; how often a real model lands in t1 has not been measured.
 
 - **Solved**: the packet has at least one `geometry_cad` or `static_cad` verdict and all
   of them pass. `manifold_volume` verdicts are ignored.
@@ -32,9 +49,10 @@ result = probe(packet, "qwen2.5-coder:7b")  # 3 rollouts by default
   timeout `OLLAMA_TIMEOUT_MS`, default 300 s, both read when the module loads) and raises
   `OllamaError` when the server is down or the model is unknown, so an infrastructure
   failure is never reported as a tier.
-- The request carries the settings the API's intake provider sends
-  (`apps/api/src/intake/llm/ollama.provider.ts`): `think: false`, temperature 0, `num_ctx`
-  (`OLLAMA_NUM_CTX`, default 16384) and `num_predict` (`OLLAMA_NUM_PREDICT`, default 2048).
+- The request carries the context settings the API's intake provider sends
+  (`apps/api/src/intake/llm/ollama.provider.ts`): `think: false`, `num_ctx`
+  (`OLLAMA_NUM_CTX`, default 16384) and `num_predict` (`OLLAMA_NUM_PREDICT`, default 2048),
+  plus the probe's own temperature and per-rollout seed (above).
   Without `think: false` a thinking model such as qwen3.5 spends the whole budget reasoning
   and returns an empty answer, which would be scored as a failed rollout and push the task
   toward t2.

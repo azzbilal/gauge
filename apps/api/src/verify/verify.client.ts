@@ -37,7 +37,7 @@ export interface ProbeResult {
   tier: DifficultyTier;
   solve_rate: number;
   model: string;
-  /** One entry per attempt: {code, solved, verdicts, error}, passed through as given. */
+  /** One entry per attempt: {code, solved, verdicts, error, seed}, passed through as given. */
   rollouts: unknown[];
 }
 
