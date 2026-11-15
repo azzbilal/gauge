@@ -697,7 +697,11 @@ def main(argv=None) -> int:
     def progress(i, n, row):
         outcomes = " ".join(a["outcome"] for a in row["attempts"])
         secs = sum(a["seconds"] for a in row["attempts"])
-        print(f"[{i}/{n}] {row['id']}: {outcomes} ({secs:.0f} s)", file=sys.stderr, flush=True)
+        width = 20
+        filled = round(width * i / max(n, 1))
+        bar = "#" * filled + "." * (width - filled)
+        print(f"[{bar}] {i}/{n} ({100 * i // max(n, 1):3d}%) {row['id']}: {outcomes} ({secs:.0f} s)",
+              file=sys.stderr, flush=True)
 
     label += f"+fewshot{len(examples)}" if examples else ""
     config = {"data": _shown(args.data), "split": args.split, "limit": args.limit,
