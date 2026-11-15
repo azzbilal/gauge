@@ -1,0 +1,4 @@
+# CI only (.github/workflows/ci.yml, job verify-cadquery): the worker interpreter for the
+# executed-geometry tests. 2.7.0 is the version behind the reported results (docs/results/).
+# The verify service itself is standard library only and does not install this.
+cadquery==2.7.0

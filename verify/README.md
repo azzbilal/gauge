@@ -42,4 +42,5 @@ python -m unittest discover -s verify/verifiers/tests -v   # geometry tests skip
 python -m unittest discover -s verify/probe/tests -v       # no live Ollama needed
 ```
 
-CI runs all three on the runner's own Python, without cadquery.
+CI runs all three twice: on the runner's own Python without cadquery (job `verify-python`),
+and with cadquery 2.7.0 installed (job `verify-cadquery`), where any skipped test fails the job.

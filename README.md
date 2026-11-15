@@ -278,9 +278,17 @@ npm run golden      # Gate 1 harness (needs the model)
 cd apps/api && npm run verifier-golden   # Gate 2 harness (needs the database and the verify service)
 ```
 
-CI runs typecheck, the API tests, both builds and the four Python suites on every push to
-main and every pull request. The warehouse's dbt tests run in the Dagster job (or with
-`dbt build` / `dbt test` in `warehouse/dbt/`), not in CI.
+CI runs on every push to main and every pull request (`.github/workflows/ci.yml`):
+
+- `build`: typecheck, the API tests and both builds.
+- `verify-python`: the four Python suites on the runner's own Python, without cadquery, so
+  the stdlib-only fallback is covered (geometry tests skip).
+- `verify-cadquery`: the same suites with cadquery 2.7.0 (`verify/requirements-cad.txt`),
+  where any skipped test fails the job, so the executed-geometry tests always run.
+- `warehouse-dbt`: loads a synthetic fixture into DuckDB
+  (`warehouse/fixtures/load_fixture.py`, since CI has no Postgres), runs `dbt build` and
+  `dbt test`, then checks mart values against the fixture's known answers. Against real data
+  the dbt tests run in the Dagster job or `python warehouse/run.py`.
 
 ## Repository layout
 

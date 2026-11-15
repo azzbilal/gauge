@@ -41,8 +41,9 @@ jobs:
         run: npm run build:api
 
   verify-python:
-    # The verify service is standard library only. This job uses the runner's own Python
-    # and installs nothing: without cadquery the geometry tests skip, the rest must pass.
+    # The verify service is standard library only, and the deployed image has no cadquery.
+    # This job checks that fallback: the runner's own Python, nothing installed, so the
+    # geometry tests skip and the rest must pass. verify-cadquery runs the skipped ones.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -63,3 +64,79 @@ jobs:
 
       - name: Test model (cad-spec, generator, benchmark)
         run: python3 -m unittest discover -s model/tests -v
+
+  verify-cadquery:
+    # The executed-geometry tests every headline number depends on. Same suites as
+    # verify-python, but with cadquery installed, and any skip fails the job: every skip in
+    # verify/ and model/ means "no cadquery", so a skip here means those tests did not run.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: verify/requirements-cad.txt
+
+      # Precaution: cadquery pulls in VTK, which may need libGL on a headless runner.
+      - name: Install OpenGL runtime
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends libgl1
+
+      - name: Install cadquery
+        run: python -m pip install -r verify/requirements-cad.txt
+
+      # A broken import (e.g. a missing shared library) must fail here, loudly, rather than
+      # surface later as tests skipped for "no cadquery".
+      - name: Import cadquery
+        run: python -c "import cadquery; print('cadquery', cadquery.__version__)"
+
+      - name: Test verify/lint
+        run: python .github/scripts/unittest_no_skips.py verify/lint/tests
+
+      - name: Test verify/verifiers (executed geometry)
+        run: python .github/scripts/unittest_no_skips.py verify/verifiers/tests
+
+      - name: Test verify/probe
+        run: python .github/scripts/unittest_no_skips.py verify/probe/tests
+
+      - name: Test model (cad-spec, generator, benchmark)
+        run: python .github/scripts/unittest_no_skips.py model/tests
+
+  warehouse-dbt:
+    # CI has no Postgres, so a synthetic fixture stands in for warehouse/load.py; then the
+    # same dbt build + dbt test as warehouse/run.py, plus known-answer checks on the marts.
+    runs-on: ubuntu-latest
+    env:
+      DBT_SEND_ANONYMOUS_USAGE_STATS: "false"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: warehouse/requirements.txt
+
+      # Only the dbt side of warehouse/requirements.txt (same pins), not dagster.
+      - name: Install duckdb and dbt-duckdb
+        run: |
+          grep -E '^(duckdb|dbt-core|dbt-duckdb)\b' warehouse/requirements.txt > "$RUNNER_TEMP/dbt-requirements.txt"
+          cat "$RUNNER_TEMP/dbt-requirements.txt"
+          python -m pip install -r "$RUNNER_TEMP/dbt-requirements.txt"
+          dbt --version
+
+      - name: Load fixture into DuckDB
+        run: |
+          echo "GAUGE_DUCKDB_PATH=$RUNNER_TEMP/gauge-ci.duckdb" >> "$GITHUB_ENV"
+          python warehouse/fixtures/load_fixture.py --db "$RUNNER_TEMP/gauge-ci.duckdb"
+
+      - name: dbt build
+        run: dbt build --project-dir warehouse/dbt --profiles-dir warehouse/dbt
+
+      - name: dbt test
+        run: dbt test --project-dir warehouse/dbt --profiles-dir warehouse/dbt
+
+      - name: Check mart values against the fixture
+        run: python warehouse/fixtures/load_fixture.py --db "$GAUGE_DUCKDB_PATH" --check
