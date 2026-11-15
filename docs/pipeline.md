@@ -170,7 +170,9 @@ a prompt to recalibrate; it never blocks a reviewer.
 4. **Inter-annotator agreement (IAA)** — reviewers' agreement per criterion; low IAA means
    the task or rubric is unclear, not that a reviewer is bad.
 5. **(M5) cad-spec verifier** — a deterministic geometry check on every accepted task's
-   reference before it enters the training set.
+   reference before it enters the training set. `model/export.py` applies it when accepted
+   tasks are exported to the model loop: a reference that is not solved against its own
+   rubric is left out and listed.
 
 **How IAA is measured.** Per criterion, over non-gold tasks with two reviews: Krippendorff's
 alpha with the interval metric (1 = perfect agreement, 0 = no better than chance). It is used

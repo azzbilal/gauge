@@ -1,7 +1,7 @@
 # Model loop (M5)
 
-The cad-spec release, the synthetic task generator and the held-out benchmark harness, with
-a few-shot prompt as the first "training run". It is in-context examples, not weight
+The cad-spec release, the synthetic task generator, the campaign export and the held-out
+benchmark harness, with a few-shot prompt as the first "training run". It is in-context examples, not weight
 training; no model weights are changed. Results:
 [`docs/results/phase4-benchmark-2026-11-14.md`](../docs/results/phase4-benchmark-2026-11-14.md).
 
@@ -10,10 +10,12 @@ training; no model weights are changed. Results:
 | [`SPEC.md`](./SPEC.md) | The cad-spec release: the frozen task format (prompt, spec, reference, rubric), its version, the reference and wording rules, and what "solved" covers. The version is written there and nowhere else. |
 | `cadspec.py` | Reads the version from SPEC.md (`spec_version()`), validates a task (`check_task`) and turns a task into a Verifier Pack packet (`to_packet`). |
 | `generate.py` | Writes a seeded batch of templated tasks to `data/`. |
+| `export.py` | Writes the campaign's accepted tasks (from the warehouse copy of the database) as a cad-spec batch the benchmark reads. This connects the campaign to the model loop. |
 | `benchmark.py` | Scores a candidate (local Ollama model or a mock) on the held-out split with the M8 Verifier Pack, through the M9 probe's `score()`. |
 | `tests/` | `python -m unittest discover -s model/tests -v`. No live Ollama; executed tests skip without cadquery. |
 
-Standard library only. Scoring imports `verify/` (also standard library); executed geometry
+Standard library only, except that `export.py` reads the warehouse with `duckdb`
+(`warehouse/requirements.txt`). Scoring imports `verify/` (also standard library); executed geometry
 needs an interpreter with cadquery in `GAUGE_CAD_PYTHON` (see `verify/verifiers/README.md`).
 
 ## Generate
@@ -48,6 +50,57 @@ vary.
   exactly the overall size plus the hole diameter and count the generator meant.
   `--check` also scores every reference against its own rubric and exits 1 if one is not
   solved.
+
+## Export campaign tasks
+
+```bash
+python warehouse/load.py                     # copy Postgres into warehouse/gauge.duckdb
+python model/export.py                       # -> model/data/campaign-accepted.json
+python model/export.py --campaign "CAD pilot" --split heldout --out model/data/pilot.json
+python model/benchmark.py --data model/data/pilot.json --mock oracle   # must be 100 %
+python model/benchmark.py --data model/data/pilot.json --model qwen3.5:9b-q4_K_M --out pilot-report.json
+```
+
+`export.py` reads the warehouse copy (`raw.task`, `raw.campaign`), not Postgres: like
+everything downstream of the app it reads copies, so it can never write to the campaign.
+Without duckdb installed: `uv run --no-project --with duckdb python model/export.py`.
+
+- **What goes in.** Tasks with status `ACCEPTED` that are not gold. A gold task or a
+  reviewer's gold clone has a known answer and may be deliberately broken, so it is counted
+  (`gold_excluded`) and never exported. A task with no reference is skipped. A missing spec
+  is read as `""`, as the API's packet builder does.
+- **Rule 6 is enforced.** Each reference is scored against its own rubric, and a task whose
+  reference is not **solved** is skipped and listed in `generator.skipped` with the failing
+  check. Reviewers accepting a task does not make it machine-scorable: free wording can leave
+  only manual requirements (unjudged), and the accepted reference itself can be wrong. Kept
+  in, such a task would count as a model failure on every run.
+- **Record.** `id` is the database task id, `family` is `campaign`, `split` comes from
+  `--split` (default `heldout`, since the benchmark draws only held-out tasks), and the rubric
+  is `extract()` on the task text, exactly as `generate.py` builds it. The batch's
+  `generator` block records the source file, the warehouse load time, the scoring mode, per
+  campaign how many non-gold tasks were accepted and exported, and the skipped tasks. Tasks are in
+  creation order; the same warehouse load and scoring mode give a byte-identical file.
+- **Limits.** Campaign tasks have no `params`, so the benchmark files them under hole pattern
+  `none`, `--mock wrong` cannot run on them, and `--fewshot` never picks them as examples
+  (examples come only from the five synthetic families). Their manual requirements (walls,
+  fillets, positions) are not scored, as for synthetic tasks (SPEC.md, "Solved").
+
+**On the dev data** (warehouse load of 2026-11-13 23:38 UTC, no real campaign yet): 6 accepted
+tasks, no gold. 3 exported (the seeded verifier golden set's plate, block and cover plate).
+3 skipped: a two-ear bracket whose size is unjudged without cadquery (several boxes), a
+"60 x 40 x 10 mm" plate whose accepted reference builds 65 mm (reviewers accepted a wrong
+reference), and a flange whose holes come from a list comprehension the static reader cannot
+count. `benchmark.py --mock oracle` on the export: 3/3. With `GAUGE_CAD_PYTHON` set, the
+bracket would be measured on the executed solid instead.
+
+**A real pilot** runs the campaign, lets `warehouse/load.py` (or the Dagster job) copy it,
+then exports only the pilot campaign with `--campaign`, so the dev campaigns and the verifier
+golden set stay out. It sets `GAUGE_CAD_PYTHON` so multi-box parts are measured, reads the
+skipped list (a wrong accepted reference is a review finding; unjudged wording goes back to
+the authors against SPEC.md's wording rules), and benchmarks the batch zero-shot and few-shot
+with `--compare` as for the synthetic set. The batch is held out by default. `--split train`
+exists for a later training step (today's `--fewshot` does not read campaign tasks); a train
+export should come from a different campaign than the held-out one, so no task is in both.
 
 ## Benchmark
 

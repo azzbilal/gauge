@@ -2,9 +2,10 @@
 
 spec-version: cad-spec-1.0
 
-This file freezes the format of a Gauge CAD task: the record the synthetic generator writes
-(`model/generate.py`) and the benchmark reads (`model/benchmark.py`). Exporting accepted
-campaign tasks to it, before they enter the model loop, is planned and not built. The version on the line above is the only
+This file freezes the format of a Gauge CAD task: the record the synthetic generator
+(`model/generate.py`) and the campaign export (`model/export.py`, accepted expert tasks from
+the warehouse copy of the database) write, and the benchmark (`model/benchmark.py`) reads.
+The version on the line above is the only
 place it is written. Code reads it through `model/cadspec.py` (`spec_version()`), every task
 carries it in `spec_version`, and the benchmark refuses tasks whose version differs. Other docs
 link here instead of restating it.
@@ -31,7 +32,7 @@ A task is one JSON object. A batch file is
 |---|---|---|
 | `id` | string | Unique within a batch, stable across runs with the same seed. |
 | `spec_version` | string | The version above. |
-| `family` | string | Template family (`plate`, `box`, `bracket`, `cutout`, `rounded`), or `campaign` for an expert task. |
+| `family` | string | Template family (`plate`, `box`, `bracket`, `cutout`, `rounded`), or `campaign` for an expert task (its `id` is the database task id). |
 | `split` | `"train"` \| `"heldout"` | Benchmark tasks are drawn only from `heldout`. |
 | `prompt` | string | The instruction a solver reads. Plain language, self-contained. |
 | `spec` | string | The precise requirements: shape, dimensions, hole sizes and counts. |

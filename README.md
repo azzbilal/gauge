@@ -19,7 +19,7 @@ the review rules are [docs/pipeline.md](./docs/pipeline.md).
 | 1 · Front door | 1–6 | App, auth, intake agent (M1), task campaign + review protocol (M2) | **built and deployed**: web on Vercel; API, verify service and Postgres on Render (free tier). Intake agreement **18/20 = 90 %, prompt-tuned on the eval set** (in-sample; see Gate 1) |
 | 2 · Verification (Layer 2) | 7–13 | Packet Lint (M7), Verifier Pack (M8), Probe Gate (M9), wired into authoring | **built**. Stored lint and verifier verdicts show on the Review screen once the reviewer has submitted (hidden while scoring). CAD only (no PCB/circuit checks); verifier agreement measured on a 10-task seeded golden set only (8/10, in-sample) |
 | 3 · Data backbone | 14–19 | Dagster ingestion, dbt warehouse, read-only MCP semantic layer (M4) | **built except the MCP layer**: `warehouse/` holds the Dagster job, dbt on DuckDB (3 marts, all tests pass) and a static dashboard. The daily schedule is defined, not running; the numbers are dev data, not a real campaign ([retro](./docs/results/gate3-retro-2026-11-13.md)) |
-| 4 · Model loop | 20–28 | cad-spec release, synthetic generator, training runs, held-out benchmark (M5) | **built**: [model/SPEC.md](./model/SPEC.md), generator, benchmark harness. Few-shot run (in-context, **no weight training**): **122/300 = 41 % (Wilson 95 %: 35–46 %)** on 300 held-out tasks; 0/20 → 6/20 against zero-shot on the first 20-task set. The 300-task zero-shot baseline is still pending ([results](./docs/results/phase4-heldout300-2026-11-14.md)) |
+| 4 · Model loop | 20–28 | cad-spec release, synthetic generator, training runs, held-out benchmark (M5) | **built**: [model/SPEC.md](./model/SPEC.md), generator, benchmark harness, and the campaign export (`model/export.py`) that feeds accepted campaign tasks to the benchmark, so the campaign is connected to the benchmark (exercised on dev data only; no real campaign yet; few-shot examples still come only from synthetic tasks). Few-shot run (in-context, **no weight training**): **122/300 = 41 % (Wilson 95 %: 35–46 %)** on 300 held-out tasks; 0/20 → 6/20 against zero-shot on the first 20-task set. The 300-task zero-shot baseline is still pending ([results](./docs/results/phase4-heldout300-2026-11-14.md)) |
 
 The plan grew from 21 days / 3 phases to 28 / 4 by inserting the verification layer as
 Phase 2; Phase 1 is unchanged, and the data backbone and model loop each moved back seven days.
@@ -97,8 +97,8 @@ the prompt was never tuned on.
             └──────────┬───────────────────────────────┘
                        ▼  one way (Dagster job; daily schedule defined, not running)
             Dagster → dbt on DuckDB → dashboard        (warehouse/; MCP semantic layer not built)
-
-            model/: synthetic cad-spec tasks → local model → M8 scoring → held-out benchmark
+                       ▼  model/export.py (from the DuckDB copy): ACCEPTED, non-gold, reference solved
+            model/: cad-spec tasks (campaign + synthetic) → local model → M8 scoring → held-out benchmark
 ```
 
 - **Two independent npm apps.** `apps/web` and `apps/api` each have their own
@@ -207,6 +207,13 @@ benchmark (`model/benchmark.py`) scores a local Ollama model's answers with the 
 Pack, with Wilson intervals and a paired McNemar comparison. The "training run" is
 **in-context few-shot prompting (five worked examples), not weight training**.
 
+The campaign is connected to this loop: `model/export.py` reads the accepted, non-gold tasks
+from the warehouse copy of the database, keeps those whose reference scores solved against
+its own rubric, and writes them as a cad-spec batch the benchmark reads. On the dev data it
+exports 3 of 6 accepted tasks and lists why the other 3 were left out (one accepted reference
+is simply wrong). No real campaign has run, so no benchmark number comes from campaign tasks
+yet. How a pilot uses it: [model/README.md](./model/README.md#export-campaign-tasks).
+
 - First 20 held-out tasks: 0/20 zero-shot → 6/20 few-shot
   ([report](./docs/results/phase4-benchmark-2026-11-14.md)).
 - 300 new held-out tasks, stratified: few-shot **122/300 = 41 % (35–46 %)**. It solves every
@@ -284,7 +291,7 @@ gauge/
     prisma/          schema, migrations, seed, golden-set.json (Gate 1)
   verify/            Layer 2 (Python): lint/ (M7), verifiers/ (M8), probe/ (M9), service/
   warehouse/         Phase 3: dagster/ (ingestion job), dbt/ (DuckDB marts), dashboard/
-  model/             Phase 4: SPEC.md (cad-spec release), generate.py, benchmark.py, data/
+  model/             Phase 4: SPEC.md (cad-spec release), generate.py, export.py, benchmark.py, data/
   docs/              PRD, pipeline spec, results/
   .github/workflows/ CI
 ```
@@ -303,5 +310,5 @@ Built in weeks and used by a handful of people. It proves the **loop** and the q
 machinery around it, not production operation, scale, people management or deep RL. Not yet
 done: an intake agreement rate measured on CVs the prompt was not tuned on (90 % is
 in-sample), verifier agreement beyond a 10-task golden set, a real campaign in the
-warehouse, the MCP semantic layer, the 300-task zero-shot baseline, any weight training, and
+warehouse (the campaign export to the model loop is built but has only seen dev data), the MCP semantic layer, the 300-task zero-shot baseline, any weight training, and
 hosting beyond free tiers (no AWS).

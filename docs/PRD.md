@@ -104,8 +104,10 @@ app (React) talks only to the API. The API reaches the verification layer (`veri
 standard library, port 4000) over HTTP only: `/extract`, `/lint`, `/verify`, `/probe`.
 Verification stores its results in its own five tables keyed by `taskId`. A Dagster job copies
 the database into a dbt warehouse on DuckDB (`warehouse/`; the daily schedule is defined but
-not running). The model loop (`model/`) benchmarks a local model on synthetic cad-spec tasks
-scored by the Verifier Pack; it does not yet consume campaign tasks. Data flows one way, so
+not running). The model loop (`model/`) benchmarks a local model on cad-spec tasks scored by
+the Verifier Pack: synthetic tasks, and accepted campaign tasks that `model/export.py` reads
+from the warehouse copy (connected on the benchmark side and run on dev data; no real campaign
+yet; few-shot examples still come only from synthetic tasks). Data flows one way, so
 downstream failure can never corrupt the campaign. Deployed: web on Vercel; API, verify
 service and Postgres on Render.
 

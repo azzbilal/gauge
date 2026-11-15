@@ -1,0 +1,469 @@
+{
+  "count": 3,
+  "generator": {
+    "campaigns": [
+      {
+        "accepted": 1,
+        "exported": 0,
+        "id": "cmwccaant0000w9l8z2fj13t1",
+        "name": "CAD tasks v1",
+        "spec_label": "v1"
+      },
+      {
+        "accepted": 1,
+        "exported": 0,
+        "id": "cmwdyfee5000aw9qcc0gz9rkd",
+        "name": "My first campaign",
+        "spec_label": "v1"
+      },
+      {
+        "accepted": 4,
+        "exported": 3,
+        "id": "cmwfelh1p0000w9qombavrfda",
+        "name": "Verifier golden set v1",
+        "spec_label": "verifier-golden-v1"
+      }
+    ],
+    "extract_version": "extract-7",
+    "gold_excluded": 0,
+    "loaded_at": "2026-11-13T23:38:18Z",
+    "name": "gauge-campaign-export-1",
+    "scoring": "static (no cadquery: box sizes read from code)",
+    "skipped": [
+      {
+        "campaign_id": "cmwccaant0000w9l8z2fj13t1",
+        "id": "cmwcccdnc0002w9l8bt0rfpku",
+        "reason": "reference unjudged against its own rubric: check could not run: thickness: the reference builds more than one box; cannot tell statically which one is the body [static fallback: cadquery is not available to the worker (ModuleNotFoundError)]; depth: the reference builds more than one box; cannot tell statically which one is the body [static fallback: cadquery is not available to the worker (ModuleNotFoundError)]; height: the reference builds more than one box; cannot tell statically which one is the body [static fallback: cadquery is not available to the worker (ModuleNotFoundError)]"
+      },
+      {
+        "campaign_id": "cmwdyfee5000aw9qcc0gz9rkd",
+        "id": "cmwdyrm2u000qw9qcys1scka1",
+        "reason": "reference fails its own rubric: width: spec requires 60 mm but reference has 65 mm [static fallback: cadquery is not available to the worker (ModuleNotFoundError)]"
+      },
+      {
+        "campaign_id": "cmwfelh1p0000w9qombavrfda",
+        "id": "cmwfelh8w001nw9qoqsw1klmx",
+        "reason": "reference unjudged against its own rubric: check could not run: hole count: hole pattern is not statically resolvable in the reference (loop, selector or computed point list)"
+      }
+    ],
+    "source": "warehouse/gauge.duckdb",
+    "split": "heldout"
+  },
+  "spec_version": "cad-spec-1.0",
+  "tasks": [
+    {
+      "family": "campaign",
+      "id": "cmwfelh3u0005w9qoaur5521b",
+      "prompt": "Model a rectangular plate 60 x 40 x 10 mm with 4 holes of 5 mm diameter.",
+      "reference": "\"\"\"Reference: 60 x 40 x 10 mm plate with four 5 mm through holes. Matches the spec.\"\"\"\nimport cadquery as cq\n\nwidth = 60\ndepth = 40\nheight = 10\nhole_d = 5\n\nresult = (\n    cq.Workplane(\"XY\")\n    .box(width, depth, height)\n    .faces(\">Z\")\n    .workplane()\n    .rect(width - 20, depth - 20, forConstruction=True)\n    .vertices()\n    .hole(hole_d)\n)\n",
+      "rubric": {
+        "extract_version": "extract-7",
+        "requirements": [
+          {
+            "check_method": "machine",
+            "id": "cmwfelh3u0005w9qoaur5521b-1",
+            "kind": "dimension",
+            "label": "width",
+            "source": "prompt",
+            "text": "width of 60 mm",
+            "tolerance": null,
+            "value": "60 mm"
+          },
+          {
+            "check_method": "machine",
+            "id": "cmwfelh3u0005w9qoaur5521b-2",
+            "kind": "dimension",
+            "label": "depth",
+            "source": "prompt",
+            "text": "depth of 40 mm",
+            "tolerance": null,
+            "value": "40 mm"
+          },
+          {
+            "check_method": "machine",
+            "id": "cmwfelh3u0005w9qoaur5521b-3",
+            "kind": "dimension",
+            "label": "height",
+            "source": "prompt",
+            "text": "height of 10 mm",
+            "tolerance": null,
+            "value": "10 mm"
+          },
+          {
+            "check_method": "machine",
+            "id": "cmwfelh3u0005w9qoaur5521b-4",
+            "kind": "hole",
+            "label": "hole count",
+            "source": "prompt",
+            "text": "4 holes",
+            "tolerance": null,
+            "value": "4"
+          },
+          {
+            "check_method": "machine",
+            "id": "cmwfelh3u0005w9qoaur5521b-5",
+            "kind": "dimension",
+            "label": "hole diameter",
+            "source": "prompt",
+            "text": "hole diameter of 5 mm",
+            "tolerance": null,
+            "value": "5 mm"
+          }
+        ],
+        "rubric_items": [
+          {
+            "check_method": "manual",
+            "criterion": "verifiable",
+            "id": "cmwfelh3u0005w9qoaur5521b-6",
+            "requirement_id": null,
+            "text": "verifiable: the result can be checked objectively against the spec.",
+            "weight": 1.0
+          },
+          {
+            "check_method": "manual",
+            "criterion": "unambiguous",
+            "id": "cmwfelh3u0005w9qoaur5521b-7",
+            "requirement_id": null,
+            "text": "unambiguous: two solvers would read the spec the same way.",
+            "weight": 1.0
+          },
+          {
+            "check_method": "machine",
+            "criterion": "correct_reference",
+            "id": "cmwfelh3u0005w9qoaur5521b-8:cmwfelh3u0005w9qoaur5521b-1",
+            "requirement_id": "cmwfelh3u0005w9qoaur5521b-1",
+            "text": "correct_reference: the reference solution has every dimension the spec states.",
+            "weight": 1.0
+          },
+          {
+            "check_method": "machine",
+            "criterion": "correct_reference",
+            "id": "cmwfelh3u0005w9qoaur5521b-8:cmwfelh3u0005w9qoaur5521b-2",
+            "requirement_id": "cmwfelh3u0005w9qoaur5521b-2",
+            "text": "correct_reference: the reference solution has every dimension the spec states.",
+            "weight": 1.0
+          },
+          {
+            "check_method": "machine",
+            "criterion": "correct_reference",
+            "id": "cmwfelh3u0005w9qoaur5521b-8:cmwfelh3u0005w9qoaur5521b-3",
+            "requirement_id": "cmwfelh3u0005w9qoaur5521b-3",
+            "text": "correct_reference: the reference solution has every dimension the spec states.",
+            "weight": 1.0
+          },
+          {
+            "check_method": "machine",
+            "criterion": "correct_reference",
+            "id": "cmwfelh3u0005w9qoaur5521b-8:cmwfelh3u0005w9qoaur5521b-4",
+            "requirement_id": "cmwfelh3u0005w9qoaur5521b-4",
+            "text": "correct_reference: the reference solution has every dimension the spec states.",
+            "weight": 1.0
+          },
+          {
+            "check_method": "machine",
+            "criterion": "correct_reference",
+            "id": "cmwfelh3u0005w9qoaur5521b-8:cmwfelh3u0005w9qoaur5521b-5",
+            "requirement_id": "cmwfelh3u0005w9qoaur5521b-5",
+            "text": "correct_reference: the reference solution has every dimension the spec states.",
+            "weight": 1.0
+          },
+          {
+            "check_method": "manual",
+            "criterion": "complete_constraints",
+            "id": "cmwfelh3u0005w9qoaur5521b-9",
+            "requirement_id": null,
+            "text": "complete_constraints: sizes and tolerances are fully specified, with no free parameters.",
+            "weight": 1.0
+          },
+          {
+            "check_method": "manual",
+            "criterion": "difficulty",
+            "id": "cmwfelh3u0005w9qoaur5521b-10",
+            "requirement_id": null,
+            "text": "difficulty: the task is hard enough to be worth solving.",
+            "weight": 1.0
+          }
+        ]
+      },
+      "spec": "",
+      "spec_version": "cad-spec-1.0",
+      "split": "heldout"
+    },
+    {
+      "family": "campaign",
+      "id": "cmwfelh5z000nw9qookjyutf4",
+      "prompt": "Model a mounting block 80 x 50 x 20 mm with 2 holes of 8 mm diameter.",
+      "reference": "\"\"\"Reference: 80 x 50 x 20 mm mounting block with two 8 mm through holes. Matches the spec.\"\"\"\nimport cadquery as cq\n\nresult = (\n    cq.Workplane(\"XY\")\n    .box(80, 50, 20)\n    .faces(\">Z\")\n    .workplane()\n    .pushPoints([(-25, 0), (25, 0)])\n    .hole(8)\n)\n",
+      "rubric": {
+        "extract_version": "extract-7",
+        "requirements": [
+          {
+            "check_method": "machine",
+            "id": "cmwfelh5z000nw9qookjyutf4-1",
+            "kind": "dimension",
+            "label": "width",
+            "source": "prompt",
+            "text": "width of 80 mm",
+            "tolerance": null,
+            "value": "80 mm"
+          },
+          {
+            "check_method": "machine",
+            "id": "cmwfelh5z000nw9qookjyutf4-2",
+            "kind": "dimension",
+            "label": "depth",
+            "source": "prompt",
+            "text": "depth of 50 mm",
+            "tolerance": null,
+            "value": "50 mm"
+          },
+          {
+            "check_method": "machine",
+            "id": "cmwfelh5z000nw9qookjyutf4-3",
+            "kind": "dimension",
+            "label": "height",
+            "source": "prompt",
+            "text": "height of 20 mm",
+            "tolerance": null,
+            "value": "20 mm"
+          },
+          {
+            "check_method": "machine",
+            "id": "cmwfelh5z000nw9qookjyutf4-4",
+            "kind": "hole",
+            "label": "hole count",
+            "source": "prompt",
+            "text": "2 holes",
+            "tolerance": null,
+            "value": "2"
+          },
+          {
+            "check_method": "machine",
+            "id": "cmwfelh5z000nw9qookjyutf4-5",
+            "kind": "dimension",
+            "label": "hole diameter",
+            "source": "prompt",
+            "text": "hole diameter of 8 mm",
+            "tolerance": null,
+            "value": "8 mm"
+          }
+        ],
+        "rubric_items": [
+          {
+            "check_method": "manual",
+            "criterion": "verifiable",
+            "id": "cmwfelh5z000nw9qookjyutf4-6",
+            "requirement_id": null,
+            "text": "verifiable: the result can be checked objectively against the spec.",
+            "weight": 1.0
+          },
+          {
+            "check_method": "manual",
+            "criterion": "unambiguous",
+            "id": "cmwfelh5z000nw9qookjyutf4-7",
+            "requirement_id": null,
+            "text": "unambiguous: two solvers would read the spec the same way.",
+            "weight": 1.0
+          },
+          {
+            "check_method": "machine",
+            "criterion": "correct_reference",
+            "id": "cmwfelh5z000nw9qookjyutf4-8:cmwfelh5z000nw9qookjyutf4-1",
+            "requirement_id": "cmwfelh5z000nw9qookjyutf4-1",
+            "text": "correct_reference: the reference solution has every dimension the spec states.",
+            "weight": 1.0
+          },
+          {
+            "check_method": "machine",
+            "criterion": "correct_reference",
+            "id": "cmwfelh5z000nw9qookjyutf4-8:cmwfelh5z000nw9qookjyutf4-2",
+            "requirement_id": "cmwfelh5z000nw9qookjyutf4-2",
+            "text": "correct_reference: the reference solution has every dimension the spec states.",
+            "weight": 1.0
+          },
+          {
+            "check_method": "machine",
+            "criterion": "correct_reference",
+            "id": "cmwfelh5z000nw9qookjyutf4-8:cmwfelh5z000nw9qookjyutf4-3",
+            "requirement_id": "cmwfelh5z000nw9qookjyutf4-3",
+            "text": "correct_reference: the reference solution has every dimension the spec states.",
+            "weight": 1.0
+          },
+          {
+            "check_method": "machine",
+            "criterion": "correct_reference",
+            "id": "cmwfelh5z000nw9qookjyutf4-8:cmwfelh5z000nw9qookjyutf4-4",
+            "requirement_id": "cmwfelh5z000nw9qookjyutf4-4",
+            "text": "correct_reference: the reference solution has every dimension the spec states.",
+            "weight": 1.0
+          },
+          {
+            "check_method": "machine",
+            "criterion": "correct_reference",
+            "id": "cmwfelh5z000nw9qookjyutf4-8:cmwfelh5z000nw9qookjyutf4-5",
+            "requirement_id": "cmwfelh5z000nw9qookjyutf4-5",
+            "text": "correct_reference: the reference solution has every dimension the spec states.",
+            "weight": 1.0
+          },
+          {
+            "check_method": "manual",
+            "criterion": "complete_constraints",
+            "id": "cmwfelh5z000nw9qookjyutf4-9",
+            "requirement_id": null,
+            "text": "complete_constraints: sizes and tolerances are fully specified, with no free parameters.",
+            "weight": 1.0
+          },
+          {
+            "check_method": "manual",
+            "criterion": "difficulty",
+            "id": "cmwfelh5z000nw9qookjyutf4-10",
+            "requirement_id": null,
+            "text": "difficulty: the task is hard enough to be worth solving.",
+            "weight": 1.0
+          }
+        ]
+      },
+      "spec": "",
+      "spec_version": "cad-spec-1.0",
+      "split": "heldout"
+    },
+    {
+      "family": "campaign",
+      "id": "cmwfelh7i0015w9qoatugmibm",
+      "prompt": "Model a square cover plate 100 x 100 x 8 mm with 1 hole of 20 mm diameter.",
+      "reference": "\"\"\"Reference: 100 x 100 x 8 mm cover plate with one central 20 mm through hole. Matches the spec.\"\"\"\nimport cadquery as cq\n\nresult = cq.Workplane(\"XY\").box(100, 100, 8).faces(\">Z\").workplane().hole(20)\n",
+      "rubric": {
+        "extract_version": "extract-7",
+        "requirements": [
+          {
+            "check_method": "machine",
+            "id": "cmwfelh7i0015w9qoatugmibm-1",
+            "kind": "dimension",
+            "label": "width",
+            "source": "prompt",
+            "text": "width of 100 mm",
+            "tolerance": null,
+            "value": "100 mm"
+          },
+          {
+            "check_method": "machine",
+            "id": "cmwfelh7i0015w9qoatugmibm-2",
+            "kind": "dimension",
+            "label": "depth",
+            "source": "prompt",
+            "text": "depth of 100 mm",
+            "tolerance": null,
+            "value": "100 mm"
+          },
+          {
+            "check_method": "machine",
+            "id": "cmwfelh7i0015w9qoatugmibm-3",
+            "kind": "dimension",
+            "label": "height",
+            "source": "prompt",
+            "text": "height of 8 mm",
+            "tolerance": null,
+            "value": "8 mm"
+          },
+          {
+            "check_method": "machine",
+            "id": "cmwfelh7i0015w9qoatugmibm-4",
+            "kind": "hole",
+            "label": "hole count",
+            "source": "prompt",
+            "text": "1 hole",
+            "tolerance": null,
+            "value": "1"
+          },
+          {
+            "check_method": "machine",
+            "id": "cmwfelh7i0015w9qoatugmibm-5",
+            "kind": "dimension",
+            "label": "hole diameter",
+            "source": "prompt",
+            "text": "hole diameter of 20 mm",
+            "tolerance": null,
+            "value": "20 mm"
+          }
+        ],
+        "rubric_items": [
+          {
+            "check_method": "manual",
+            "criterion": "verifiable",
+            "id": "cmwfelh7i0015w9qoatugmibm-6",
+            "requirement_id": null,
+            "text": "verifiable: the result can be checked objectively against the spec.",
+            "weight": 1.0
+          },
+          {
+            "check_method": "manual",
+            "criterion": "unambiguous",
+            "id": "cmwfelh7i0015w9qoatugmibm-7",
+            "requirement_id": null,
+            "text": "unambiguous: two solvers would read the spec the same way.",
+            "weight": 1.0
+          },
+          {
+            "check_method": "machine",
+            "criterion": "correct_reference",
+            "id": "cmwfelh7i0015w9qoatugmibm-8:cmwfelh7i0015w9qoatugmibm-1",
+            "requirement_id": "cmwfelh7i0015w9qoatugmibm-1",
+            "text": "correct_reference: the reference solution has every dimension the spec states.",
+            "weight": 1.0
+          },
+          {
+            "check_method": "machine",
+            "criterion": "correct_reference",
+            "id": "cmwfelh7i0015w9qoatugmibm-8:cmwfelh7i0015w9qoatugmibm-2",
+            "requirement_id": "cmwfelh7i0015w9qoatugmibm-2",
+            "text": "correct_reference: the reference solution has every dimension the spec states.",
+            "weight": 1.0
+          },
+          {
+            "check_method": "machine",
+            "criterion": "correct_reference",
+            "id": "cmwfelh7i0015w9qoatugmibm-8:cmwfelh7i0015w9qoatugmibm-3",
+            "requirement_id": "cmwfelh7i0015w9qoatugmibm-3",
+            "text": "correct_reference: the reference solution has every dimension the spec states.",
+            "weight": 1.0
+          },
+          {
+            "check_method": "machine",
+            "criterion": "correct_reference",
+            "id": "cmwfelh7i0015w9qoatugmibm-8:cmwfelh7i0015w9qoatugmibm-4",
+            "requirement_id": "cmwfelh7i0015w9qoatugmibm-4",
+            "text": "correct_reference: the reference solution has every dimension the spec states.",
+            "weight": 1.0
+          },
+          {
+            "check_method": "machine",
+            "criterion": "correct_reference",
+            "id": "cmwfelh7i0015w9qoatugmibm-8:cmwfelh7i0015w9qoatugmibm-5",
+            "requirement_id": "cmwfelh7i0015w9qoatugmibm-5",
+            "text": "correct_reference: the reference solution has every dimension the spec states.",
+            "weight": 1.0
+          },
+          {
+            "check_method": "manual",
+            "criterion": "complete_constraints",
+            "id": "cmwfelh7i0015w9qoatugmibm-9",
+            "requirement_id": null,
+            "text": "complete_constraints: sizes and tolerances are fully specified, with no free parameters.",
+            "weight": 1.0
+          },
+          {
+            "check_method": "manual",
+            "criterion": "difficulty",
+            "id": "cmwfelh7i0015w9qoatugmibm-10",
+            "requirement_id": null,
+            "text": "difficulty: the task is hard enough to be worth solving.",
+            "weight": 1.0
+          }
+        ]
+      },
+      "spec": "",
+      "spec_version": "cad-spec-1.0",
+      "split": "heldout"
+    }
+  ]
+}
