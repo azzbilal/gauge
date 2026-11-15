@@ -19,7 +19,7 @@ the review rules are [docs/pipeline.md](./docs/pipeline.md).
 | 1 · Front door | 1–6 | App, auth, intake agent (M1), task campaign + review protocol (M2) | **built and deployed**: web on Vercel; API, verify service and Postgres on Render (free tier). Intake agreement **18/20 = 90 %, prompt-tuned on the eval set** (in-sample; see Gate 1) |
 | 2 · Verification (Layer 2) | 7–13 | Packet Lint (M7), Verifier Pack (M8), Probe Gate (M9), wired into authoring | **built**. Stored lint and verifier verdicts show on the Review screen once the reviewer has submitted (hidden while scoring). CAD only (no PCB/circuit checks); verifier agreement measured on a 10-task seeded golden set only (8/10, in-sample) |
 | 3 · Data backbone | 14–19 | Dagster ingestion, dbt warehouse, read-only MCP semantic layer (M4) | **built except the MCP layer**: `warehouse/` holds the Dagster job, dbt on DuckDB (3 marts, all tests pass) and a static dashboard. The daily schedule is defined, not running; the numbers are dev data, not a real campaign ([retro](./docs/results/gate3-retro-2026-11-13.md)) |
-| 4 · Model loop | 20–28 | cad-spec release, synthetic generator, training runs, held-out benchmark (M5) | **built**: [model/SPEC.md](./model/SPEC.md), generator, benchmark harness, and the campaign export (`model/export.py`) that feeds accepted campaign tasks to the benchmark, so the campaign is connected to the benchmark (exercised on dev data only; no real campaign yet; few-shot examples still come only from synthetic tasks). Few-shot run (in-context, **no weight training**): **122/300 = 41 % (Wilson 95 %: 35–46 %)** on 300 held-out tasks; 0/20 → 6/20 against zero-shot on the first 20-task set. The 300-task zero-shot baseline is still pending ([results](./docs/results/phase4-heldout300-2026-11-14.md)) |
+| 4 · Model loop | 20–28 | cad-spec release, synthetic generator, training runs, held-out benchmark (M5) | **built**: [model/SPEC.md](./model/SPEC.md), generator, benchmark harness, and the campaign export (`model/export.py`) that feeds accepted campaign tasks to the benchmark, so the campaign is connected to the benchmark (exercised on dev data only; no real campaign yet; few-shot examples still come only from synthetic tasks). Few-shot run (in-context, **no weight training**): **122/300 = 41 % (Wilson 95 %: 35–46 %)** on 300 held-out tasks; 0/20 → 6/20 against zero-shot on the first 20-task set. The 300-task zero-shot baseline: 14/300 = 4.7 % (3–8 %), paired McNemar p = 6.2e-33 ([results](./docs/results/phase4-heldout300-2026-11-14.md)) |
 
 The plan grew from 21 days / 3 phases to 28 / 4 by inserting the verification layer as
 Phase 2; Phase 1 is unchanged, and the data backbone and model loop each moved back seven days.
@@ -225,7 +225,7 @@ yet. How a pilot uses it: [model/README.md](./model/README.md#export-campaign-ta
   ([report](./docs/results/phase4-benchmark-2026-11-14.md)).
 - 300 new held-out tasks, stratified: few-shot **122/300 = 41 % (35–46 %)**. It solves every
   task with no holes or a single centred hole, except brackets, and no multi-hole task
-  (0/158). The 300-task zero-shot baseline and the paired comparison are still pending
+  (0/158). Zero-shot baseline 14/300 = 4.7 % (3–8 %); paired McNemar p = 6.2e-33
   ([report](./docs/results/phase4-heldout300-2026-11-14.md)).
 
 "Solved" covers bounding box, hole diameter and hole count only, and the tasks come from the
@@ -325,5 +325,5 @@ Built in weeks and used by a handful of people. It proves the **loop** and the q
 machinery around it, not production operation, scale, people management or deep RL. Not yet
 done: an intake agreement rate measured on CVs the prompt was not tuned on (90 % is
 in-sample), verifier agreement beyond a 10-task golden set, a real campaign in the
-warehouse (the campaign export to the model loop is built but has only seen dev data), the MCP semantic layer, the 300-task zero-shot baseline, any weight training, and
+warehouse (the campaign export to the model loop is built but has only seen dev data), the MCP semantic layer, any weight training, and
 hosting beyond free tiers (no AWS).
