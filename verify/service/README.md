@@ -8,6 +8,13 @@ queued behind a verify or probe waiting on a worker or on Ollama).
 Runs on `http://127.0.0.1:4000`; the API finds it at `VERIFY_SERVICE_URL` (default
 `http://localhost:4000`) and gives each call 5 seconds.
 
+**Authentication.** Set `VERIFY_SERVICE_TOKEN` to the same value on the service and on the
+API. The API then sends `Authorization: Bearer <token>` on every call, and the service answers
+401 to any POST without it (constant-time comparison). `GET /health` stays open, because
+the Render and compose health checks send no header. Unset or empty, the default locally,
+nothing is checked. Set it wherever the service's URL is reachable from outside: on the Render
+free tier the API calls verify on its public URL.
+
 | Endpoint | Body | Answer |
 |---|---|---|
 | `GET /health` | — | `{"service": "verify", "layer": 2, "status": "ok"}` |
@@ -24,6 +31,7 @@ Errors, on every POST:
 
 | Status | When |
 |---|---|
+| 401 | `VERIFY_SERVICE_TOKEN` is set and the request has no matching `Authorization: Bearer` header (checked before anything else) |
 | 400 | body is not valid JSON, has the wrong shape, or the packet is malformed (`PacketError`) |
 | 413 | body over 1 MB |
 | 404 | unknown path |

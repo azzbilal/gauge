@@ -117,7 +117,10 @@ the prompt was never tuned on.
 Every route except `GET /health`, `POST /auth/login` and `POST /auth/register` needs
 `Authorization: Bearer <jwt>`. The token names the user; the guard reloads them on every
 request, so a changed role applies at once. Identity is always taken from the session, never
-from a body field.
+from a body field. Login and register allow 10 attempts per client IP per minute, then
+answer 429 (in-memory, per API instance; set `TRUST_PROXY` behind a proxy, see
+[DEPLOY.md](./docs/DEPLOY.md)). The API authenticates to the verify service with the shared
+`VERIFY_SERVICE_TOKEN`.
 
 | Role | May |
 |---|---|
@@ -150,7 +153,9 @@ A task is a prompt, a machine-checkable spec and a CadQuery reference. The full 
   ≥ 3, *verifiable* ≥ 4), never from a checkbox. Reviews stay hidden from the other reviewer
   until the task is decided or split. No self-review, no third peer review.
 - **Agreement.** Krippendorff's alpha per criterion over doubly-reviewed tasks; low below
-  0.7, reported only from 10 tasks.
+  0.7, reported only from 10 tasks. (The warehouse's `reviewer_exact_agreement` is a
+  different, simpler number: the share of multi-reviewed tasks whose accept/reject verdicts
+  all match.)
 - **Gold calibration.** Admin-planted gold tasks with a known answer reach each reviewer as a
   private clone, one review in five, indistinguishable from a normal task (backdated id and
   time, queue position by id hash, hidden marker, blind author). Reviewer accuracy against
@@ -193,7 +198,9 @@ A task is a prompt, a machine-checkable spec and a CadQuery reference. The full 
 
 A Dagster job (`warehouse/dagster/`) copies the app's Postgres tables into DuckDB, then runs
 `dbt build` and `dbt test`. The dbt project (`warehouse/dbt/`) has three marts:
-`mart_campaign`, `mart_task_quality` and `mart_reviewer_calibration`; the last run passed
+`mart_campaign`, `mart_task_quality` and `mart_reviewer_calibration`. `mart_campaign`'s
+`reviewer_exact_agreement` is raw accept/reject agreement, not the API's Krippendorff alpha
+(named `reviewer_agreement` until 2026-11-15, as in the Gate 3 records). The last run passed
 31/31 on build and 26/26 on test. `warehouse/dashboard/` renders a static snapshot of the
 marts. Limits: the daily schedule only fires under a running Dagster daemon, the dashboard
 reads the marts directly (the MCP semantic layer is not built), and the numbers come from dev

@@ -36,6 +36,8 @@ services:
       # /probe (POST /tasks/:id/probe) asks Ollama; none runs in this stack, so a host one.
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       OLLAMA_TIMEOUT_MS: ${OLLAMA_TIMEOUT_MS:-300000}
+      # Shared secret with the api; empty disables the check (verify is not published here).
+      VERIFY_SERVICE_TOKEN: ${VERIFY_SERVICE_TOKEN:-}
     healthcheck:
       # python:3.12-slim has neither curl nor wget.
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health', timeout=3)"]
@@ -53,7 +55,10 @@ services:
       # Literals, so nothing from a local .env (localhost URLs) can leak in.
       DATABASE_URL: postgresql://gauge:gauge@postgres:5432/gauge
       VERIFY_SERVICE_URL: http://verify:4000
+      VERIFY_SERVICE_TOKEN: ${VERIFY_SERVICE_TOKEN:-}
       PORT: "3000"
+      # Only the web container (nginx) reaches the api: one proxy hop, so req.ip is the client.
+      TRUST_PROXY: "1"
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET (at least 32 characters)}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-12h}
       # Intake agent. No Ollama in this stack: use anthropic, or point OLLAMA_BASE_URL at a

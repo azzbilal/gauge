@@ -133,3 +133,40 @@ describe('VerifyClient.probe', () => {
     expect(err.message).toContain('no answer within');
   });
 });
+
+describe('VerifyClient service token', () => {
+  const lintAnswer = (res: ServerResponse) => reply(res, 200, { findings: [] });
+
+  it('sends no Authorization header when VERIFY_SERVICE_TOKEN is unset or blank', async () => {
+    const seen: (string | undefined)[] = [];
+    handler = (req, _body, res) => {
+      seen.push(req.headers.authorization);
+      lintAnswer(res);
+    };
+    delete process.env.VERIFY_SERVICE_TOKEN;
+    await new VerifyClient().lint(packet);
+    process.env.VERIFY_SERVICE_TOKEN = '   ';
+    await new VerifyClient().lint(packet);
+    expect(seen).toEqual([undefined, undefined]);
+  });
+
+  it('sends the bearer token on fetch calls and on the slow /probe path', async () => {
+    process.env.VERIFY_SERVICE_TOKEN = ' s3cret ';
+    const seen: Record<string, string | undefined> = {};
+    handler = (req, _body, res) => {
+      seen[req.url ?? ''] = req.headers.authorization;
+      if (req.url === '/probe') reply(res, 200, answer(1));
+      else lintAnswer(res);
+    };
+    await new VerifyClient().lint(packet);
+    await new VerifyClient().probe(packet, 'm', 1);
+    expect(seen).toEqual({ '/lint': 'Bearer s3cret', '/probe': 'Bearer s3cret' });
+  });
+
+  it('reports a 401 from the service as a contract error, not unreachable', async () => {
+    handler = (_req, _body, res) => reply(res, 401, { error: 'missing or invalid verify service token' });
+    const err = await new VerifyClient().lint(packet).catch((e) => e);
+    expect(err).toBeInstanceOf(VerifyContractError);
+    expect(err.status).toBe(401);
+  });
+});

@@ -1,4 +1,6 @@
--- Per-campaign throughput, acceptance and reviewer agreement.
+-- Per-campaign throughput, acceptance and raw reviewer agreement (reviewer_exact_agreement:
+-- same accept/reject verdict, not chance-corrected; the API's per-criterion Krippendorff
+-- alpha is a different statistic).
 -- Gold tasks (calibration items, incl. clones) are excluded from every metric and
 -- counted separately in gold_task_count. Definitions are in models/marts/marts.yml.
 with tasks as (
@@ -6,7 +8,7 @@ with tasks as (
 ),
 
 -- Reviews aggregated to one row per task before joining, so task counts don't fan out.
--- Only identified reviews (non-legacy) count toward agreement.
+-- Only identified reviews (non-legacy) count toward reviewer_exact_agreement.
 review_per_task as (
     select
         task_id,
@@ -53,6 +55,6 @@ select
     )                                           as tasks_per_day,
     coalesce(m.multi_reviewed_count, 0)         as multi_reviewed_count,
     coalesce(m.agreed_count, 0)                 as agreed_count,
-    round(m.agreed_count / nullif(m.multi_reviewed_count, 0), 3) as reviewer_agreement
+    round(m.agreed_count / nullif(m.multi_reviewed_count, 0), 3) as reviewer_exact_agreement
 from {{ source('raw', 'campaign') }} c
 left join task_metrics m on m.campaign_id = c.id

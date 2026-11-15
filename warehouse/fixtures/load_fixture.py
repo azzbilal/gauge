@@ -157,11 +157,11 @@ def load(db: Path) -> dict[str, int]:
 CHECKS = [
     ("mart_campaign c_plates",
      "select task_count, gold_task_count, accepted_count, rejected_count, accept_rate, "
-     "active_days, tasks_per_day, multi_reviewed_count, agreed_count, reviewer_agreement "
+     "active_days, tasks_per_day, multi_reviewed_count, agreed_count, reviewer_exact_agreement "
      "from main_marts.mart_campaign where campaign_id = 'c_plates'",
      (7, 4, 3, 1, 0.75, 3, 2.33, 3, 2, 0.667)),
     ("mart_campaign c_empty",
-     "select task_count, gold_task_count, accept_rate, reviewer_agreement "
+     "select task_count, gold_task_count, accept_rate, reviewer_exact_agreement "
      "from main_marts.mart_campaign where campaign_id = 'c_empty'",
      (0, 0, None, None)),
     ("mart_reviewer_calibration e_rev1",

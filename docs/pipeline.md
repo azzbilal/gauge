@@ -212,7 +212,9 @@ phase-2 retro from the warehouse's `fct_campaign_daily` model.
 The phase-2 warehouse models (`fct_tasks`, `fct_agreement`, `fct_campaign_daily`) report:
 
 - tasks written / reviewed / accepted per day,
-- inter-annotator agreement per criterion,
+- inter-annotator agreement per criterion (built so far: the API's Krippendorff alpha per
+  criterion; the warehouse's `mart_campaign` has only `reviewer_exact_agreement`, the raw
+  share of multi-reviewed tasks whose accept/reject verdicts match),
 - cost per accepted task.
 
 These are the real numbers the phase-2 retro is built on — whatever they are.

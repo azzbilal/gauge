@@ -23,6 +23,8 @@ The seed is **never** automatic. Run it once by hand, as described below.
 | `DATABASE_URL` | yes | Postgres connection string. Compose sets `postgresql://gauge:gauge@postgres:5432/gauge`; Render fills it from `gauge-db`. |
 | `JWT_SECRET` | yes | At least 32 characters; the API will not start without it. Generate one with `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`. Render generates it. |
 | `VERIFY_SERVICE_URL` | yes | The full URL of the verify service, **with `http://`**. Compose uses `http://verify:4000`. If it is unset, the API falls back to `http://localhost:4000`, which is wrong inside a container. |
+| `VERIFY_SERVICE_TOKEN` | yes, when verify is reachable from outside | Shared secret: set the **same** value on the api and on verify. The api sends it as `Authorization: Bearer ...`; verify answers 401 to any POST without it. `GET /health` stays open. Empty on both sides disables the check (local default). Generate one like `JWT_SECRET`. |
+| `TRUST_PROXY` | no | Number of reverse-proxy hops in front of the api, so the login/register rate limit (10 attempts per IP per route per minute) sees the client's IP. Compose and `render.yaml` set `1`. Unset, every client behind a proxy shares the proxy's bucket. |
 | `PORT` | no | Defaults to 3000. Render sets its own value. |
 | `NODE_ENV` | set by the image | `production`. This makes the seed refuse default passwords. |
 | `LLM_PROVIDER` | no | Set to `anthropic` for deployments, because neither stack runs Ollama. |
@@ -49,6 +51,7 @@ The seed is **never** automatic. Run it once by hand, as described below.
 
    ```
    JWT_SECRET=<the 96-character hex string>
+   VERIFY_SERVICE_TOKEN=<optional; verify is not published by this stack>
    ANTHROPIC_API_KEY=sk-ant-...   # optional; only intake scoring needs it
    ```
 
@@ -94,6 +97,7 @@ Every plan is set explicitly, because a Blueprint service with no `plan` default
 1. **Create the Blueprint.** In Render, choose **New → Blueprint**, pick this repository, and confirm. Render asks for every variable marked `sync: false`:
    - **`ANTHROPIC_API_KEY`**: your key.
    - **`VERIFY_SERVICE_URL`**: leave blank for now and set it in step 2.
+   - **`VERIFY_SERVICE_TOKEN`**: asked for on **both** `gauge-api` and `gauge-verify`. Enter the same random string on each (generate it as for `JWT_SECRET`). Until it is set on both, the public verify URL accepts calls from anyone; set on only one side, every verify call fails with 401.
    - **`SEED_ADMIN_PASSWORD` and `SEED_REVIEWER_PASSWORD`**: strong passwords. They are used only by the seed.
    - **`SLACK_WEBHOOK_URL`**: optional.
 
@@ -123,6 +127,8 @@ Every plan is set explicitly, because a Blueprint service with no `plan` default
      This also runs `migrate deploy` first, which is harmless.
 
 6. **Open the Vercel URL** and sign in as `admin@gauge.local`.
+
+**Adding the verify token to the existing services.** Render prompts for `sync: false` values when a Blueprint is created; if it does not prompt on the next sync, add `VERIFY_SERVICE_TOKEN` by hand in each service's **Environment** page. Order matters: deploy the code first, then set the token on `gauge-api`, then on `gauge-verify`. With the token on verify but not yet on the API, every verify call fails with 401; in the order above, verify accepts the API's header before it starts requiring it.
 
 **Free tier.** Free services spin down when idle, so the first request after a pause is slow. The API gives each verify call 5 seconds, so a verify service that is waking up from a free-tier spin-down shows as `not_run` in a preview, not as a slow request. Free Postgres databases are time-limited; check Render's current limits before you rely on one.
 

@@ -54,7 +54,7 @@ def write_report(path: Path, load_out: str, build_out: str, test_out: str,
         cols = [
             "campaign_name", "task_count", "gold_task_count", "accepted_count", "rejected_count",
             "accept_rate", "active_days", "tasks_per_day", "multi_reviewed_count",
-            "agreed_count", "reviewer_agreement",
+            "agreed_count", "reviewer_exact_agreement",
         ]
         rows = con.execute(
             f"select {', '.join(cols)} from main_marts.mart_campaign order by task_count desc, campaign_name"
@@ -86,10 +86,11 @@ def write_report(path: Path, load_out: str, build_out: str, test_out: str,
         *lines,
         "",
         "Definitions",
-        "  accept_rate        = accepted / (accepted + rejected); null when nothing is decided",
-        "  tasks_per_day      = task_count / calendar days from first to last task (inclusive)",
-        "  reviewer_agreement = share of tasks with >=2 identified reviews whose accept/reject",
-        "                       verdicts all match; null when no task has two reviews",
+        "  accept_rate              = accepted / (accepted + rejected); null when nothing is decided",
+        "  tasks_per_day            = task_count / calendar days from first to last task (inclusive)",
+        "  reviewer_exact_agreement = share of tasks with >=2 identified reviews whose accept/reject",
+        "                             verdicts all match; null when no task has two reviews. Raw",
+        "                             agreement, not the API's per-criterion Krippendorff alpha",
         "",
     ])
     path.parent.mkdir(parents=True, exist_ok=True)

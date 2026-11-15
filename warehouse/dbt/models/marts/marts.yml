@@ -17,10 +17,12 @@ models:
         description: task_count / calendar days from first to last task createdAt, inclusive.
       - name: multi_reviewed_count
         description: Tasks with at least two identified (non-legacy) peer reviews.
-      - name: reviewer_agreement
+      - name: reviewer_exact_agreement
         description: >
           Share of multi-reviewed tasks where every identified reviewer gave the same
-          accept/reject verdict; null when no task has two reviews.
+          accept/reject verdict; null when no task has two reviews. Raw percent agreement
+          on the verdict, not chance-corrected. Not the API's "agreement" report, which is
+          Krippendorff's alpha per rubric criterion on the 0-5 scores.
 
   - name: mart_task_quality
     description: >

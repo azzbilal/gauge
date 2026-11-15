@@ -25,6 +25,14 @@ services:
         generateValue: true
       - key: JWT_EXPIRES_IN
         value: 12h
+      # Render's proxy is in front of the API: trust one hop so req.ip (login/register rate
+      # limit) is the connecting address, assuming Render adds a single X-Forwarded-For hop
+      # (not checked on the live service). Web users arrive through the Vercel rewrite, so
+      # they likely share buckets per Vercel egress IP: one caller can use up the 10/min for
+      # the others. 2 would reach the user but let direct callers of the onrender.com URL
+      # forge their IP.
+      - key: TRUST_PROXY
+        value: "1"
       # Render has no Ollama, so the intake agent uses Anthropic. ANTHROPIC_MODEL is left to
       # the code default; add it in the dashboard to override.
       - key: LLM_PROVIDER
@@ -33,6 +41,10 @@ services:
         sync: false
       # Entered by hand, WITH the scheme: https://gauge-verify.onrender.com.
       - key: VERIFY_SERVICE_URL
+        sync: false
+      # Shared secret with gauge-verify, sent as "Authorization: Bearer ...". Enter the SAME
+      # value on both services by hand (generateValue would make two different secrets).
+      - key: VERIFY_SERVICE_TOKEN
         sync: false
       # Used only by the one-off seed (required with NODE_ENV=production).
       - key: SEED_ADMIN_PASSWORD
@@ -56,6 +68,10 @@ services:
       # The service always listens on 4000; this tells Render which port to route.
       - key: PORT
         value: "4000"
+      # The verify URL is public; with this set, every POST needs the token (GET /health
+      # stays open for the health check). Same value as on gauge-api.
+      - key: VERIFY_SERVICE_TOKEN
+        sync: false
 
 databases:
   - name: gauge-db

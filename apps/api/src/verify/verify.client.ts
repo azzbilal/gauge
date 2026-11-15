@@ -55,6 +55,19 @@ const PROBE_TIERS: Record<string, DifficultyTier> = {
 const OLLAMA_TIMEOUT_MS = 300_000;
 const PROBE_VERIFY_MARGIN_MS = 60_000;
 
+/**
+ * Headers every call sends. VERIFY_SERVICE_TOKEN is the secret the service checks
+ * (verify/service/main.py); unset or empty, no Authorization header is sent and the service,
+ * with the same variable unset, checks nothing. Read per call, like the base URL.
+ */
+export function verifyHeaders(): Record<string, string> {
+  const token = process.env.VERIFY_SERVICE_TOKEN?.trim();
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
 export function probeTimeoutMs(rollouts: number): number {
   const total = Number(process.env.PROBE_TIMEOUT_MS);
   if (Number.isFinite(total) && total > 0) return total;
@@ -241,7 +254,7 @@ export class VerifyClient implements RequirementExtractor {
     try {
       res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: verifyHeaders(),
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(VERIFY_TIMEOUT_MS),
       });
@@ -289,7 +302,7 @@ export class VerifyClient implements RequirementExtractor {
         url,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Content-Length': payload.length },
+          headers: { ...verifyHeaders(), 'Content-Length': payload.length },
         },
         (res) => {
           answered = true;

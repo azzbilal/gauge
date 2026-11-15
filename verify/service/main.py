@@ -12,9 +12,15 @@ rollout is sampled at the probe's temperature with its own fixed seed. It calls 
 Ollama server and answers 502 when that fails.
 /health proves the seam works. Uses only the standard library.
 
+Authentication: when VERIFY_SERVICE_TOKEN is set, every POST must carry
+"Authorization: Bearer <token>" or is answered 401 before its body is looked at. The API
+sends it from the same variable. Unset or empty (the local default), nothing is checked.
+GET /health stays open so the platform health checks (Render, compose) need no secret.
+
 One thread per request, so a lint (pure and fast) is never queued behind a verify or a
 probe that is waiting on a worker process or on Ollama.
 """
+import hmac
 import json
 import os
 import sys
@@ -32,6 +38,13 @@ PORT = 4000
 HOST = os.environ.get("VERIFY_HOST", "127.0.0.1")
 MAX_BODY_BYTES = 1_000_000
 MAX_ROLLOUTS = 20
+TOKEN_ENV = "VERIFY_SERVICE_TOKEN"
+
+
+def expected_token():
+    """The shared secret, read per request; None when authentication is off."""
+    token = os.environ.get(TOKEN_ENV, "").strip()
+    return token or None
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -61,6 +74,28 @@ class Handler(BaseHTTPRequestHandler):
             self._json(400, {"error": "body must be valid JSON"})
             return None
 
+    def _authorized(self):
+        """True when the request may proceed; otherwise sends 401 and returns False."""
+        token = expected_token()
+        if token is None:
+            return True
+        header = self.headers.get("Authorization") or ""
+        scheme, _, given = header.partition(" ")
+        if scheme.lower() == "bearer" and hmac.compare_digest(
+                given.strip().encode("utf-8"), token.encode("utf-8")):
+            return True
+        # Read (and drop) a body of sane size first: answering before the client has sent it
+        # can reset the connection, and the client then sees no status at all.
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = 0
+        if 0 < length <= MAX_BODY_BYTES:
+            self.rfile.read(length)
+        self.close_connection = True
+        self._json(401, {"error": "missing or invalid verify service token"})
+        return False
+
     def do_GET(self):
         if self.path == "/health":
             self._json(200, {"service": "verify", "layer": 2, "status": "ok"})
@@ -68,6 +103,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(404, {"error": "not found"})
 
     def do_POST(self):
+        if not self._authorized():
+            return
         if self.path == "/extract":
             body = self._read_json()
             if body is None:
@@ -151,5 +188,6 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    print(f"verify service listening on http://{HOST}:{PORT}")
+    auth = "token required" if expected_token() else f"no token ({TOKEN_ENV} unset)"
+    print(f"verify service listening on http://{HOST}:{PORT}, {auth}")
     ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()

@@ -29,7 +29,7 @@ MARTS = {
     "mart_campaign": (
         "Campaigns",
         """
-        select campaign_name, task_count, accept_rate, reviewer_agreement, tasks_per_day,
+        select campaign_name, task_count, accept_rate, reviewer_exact_agreement, tasks_per_day,
                target_count, gold_task_count, accepted_count, rejected_count,
                multi_reviewed_count, agreed_count, active_days
         from main_marts.mart_campaign

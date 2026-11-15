@@ -1,7 +1,8 @@
-import { Body, Controller, Get, HttpCode, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { AuthUser, CurrentUser, Public } from './auth.decorators';
 import { parseLoginDto, parseRegisterDto } from './dto/auth.dto';
+import { AuthRateLimitGuard } from './rate-limit.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -9,12 +10,14 @@ export class AuthController {
 
   /** Public: registers an author. With an admin's token, any role. */
   @Public()
+  @UseGuards(AuthRateLimitGuard)
   @Post('register')
   register(@Body() body: unknown, @CurrentUser() caller?: AuthUser) {
     return this.auth.register(parseRegisterDto(body), caller);
   }
 
   @Public()
+  @UseGuards(AuthRateLimitGuard)
   @Post('login')
   @HttpCode(200)
   login(@Body() body: unknown) {
