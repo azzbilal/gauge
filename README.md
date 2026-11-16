@@ -8,6 +8,11 @@ Every step is measured, and failures are published with the numbers.
 recruit experts → verified, reviewed task campaign → warehouse → train + benchmark a small model
 ```
 
+The last arrow is not yet shown with human data. No campaign data has gone into the model:
+the few-shot examples are synthetic. The 41 % few-shot result is on synthetic templates; on
+100 real parts the same setup solves 24 % (zero-shot 15 %, difference not significant). See
+[Phase 4](#phase-4--model-loop-model).
+
 It is a portfolio project built on a **28-day, four-phase plan**. This README describes what
 is built today and what is still a plan; the one-page spec is [docs/PRD.md](./docs/PRD.md),
 the review rules are [docs/pipeline.md](./docs/pipeline.md).
@@ -22,7 +27,7 @@ after an idle spell is slow (the API on Render has to wake up); give it a minute
 | 1 · Front door | 1–6 | App, auth, intake agent (M1), task campaign + review protocol (M2) | **built and deployed**: web on Vercel; API, verify service and Postgres on Render (free tier). Intake agreement **18/20 = 90 %, prompt-tuned on the eval set** (in-sample; see Gate 1) |
 | 2 · Verification (Layer 2) | 7–13 | Packet Lint (M7), Verifier Pack (M8), Probe Gate (M9), wired into authoring | **built**. Stored lint and verifier verdicts show on the Review screen once the reviewer has submitted; while they can still score, the API refuses them (403), not only the screen. CAD only (no PCB/circuit checks); verifier agreement measured on a 10-task seeded golden set only (8/10, in-sample) |
 | 3 · Data backbone | 14–19 | Dagster ingestion, dbt warehouse, read-only MCP semantic layer (M4) | **built except the MCP layer**: `warehouse/` holds the Dagster job, dbt on DuckDB (3 marts, all tests pass) and a static dashboard. The daily schedule is defined, not running; the numbers are dev data, not a real campaign ([retro](./docs/results/gate3-retro-2026-11-13.md)) |
-| 4 · Model loop | 20–28 | cad-spec release, synthetic generator, training runs, held-out benchmark (M5) | **built**: [model/SPEC.md](./model/SPEC.md), generator, benchmark harness, and the campaign export (`model/export.py`) that feeds accepted campaign tasks to the benchmark, so the campaign is connected to the benchmark (exercised on dev data only; no real campaign yet; few-shot examples still come only from synthetic tasks). Few-shot run (in-context, **no weight training**): **122/300 = 41 % (Wilson 95 %: 35–46 %)** on 300 held-out tasks; 0/20 → 6/20 against zero-shot on the first 20-task set. The 300-task zero-shot baseline: 14/300 = 4.7 % (3–8 %), paired McNemar p = 6.2e-33 ([results](./docs/results/phase4-heldout300-2026-11-14.md)) |
+| 4 · Model loop | 20–28 | cad-spec release, synthetic generator, training runs, held-out benchmark (M5) | **built**: [model/SPEC.md](./model/SPEC.md), generator, benchmark harness, and the campaign export (`model/export.py`) that feeds accepted campaign tasks to the benchmark, so the campaign is connected to the benchmark (exercised on dev data only; no real campaign yet; few-shot examples still come only from synthetic tasks). Few-shot run (in-context, **no weight training**) **on synthetic templates**: **122/300 = 41 % (Wilson 95 %: 35–46 %)** on 300 held-out tasks from the same five templates as the examples, against zero-shot 14/300 = 4.7 % (3–8 %), paired McNemar p = 6.2e-33 ([results](./docs/results/phase4-heldout300-2026-11-14.md)). **On 100 real parts (CADTestBench) the same setup solves 24/100 = 24 % (17–33 %), against zero-shot 15/100 = 15 % (9–23 %): +9 points, p = 0.09, not significant**, under a weaker bounding-box-only check ([results](./docs/results/real-cadtestbench-2026-11-16.md)) |
 
 The plan grew from 21 days / 3 phases to 28 / 4 by inserting the verification layer as
 Phase 2; Phase 1 is unchanged, and the data backbone and model loop each moved back seven days.
@@ -232,13 +237,31 @@ yet. How a pilot uses it: [model/README.md](./model/README.md#export-campaign-ta
 
 - First 20 held-out tasks: 0/20 zero-shot → 6/20 few-shot
   ([report](./docs/results/phase4-benchmark-2026-11-14.md)).
-- 300 new held-out tasks, stratified: few-shot **122/300 = 41 % (35–46 %)**. It solves every
+- 300 new held-out synthetic-template tasks, stratified: few-shot **122/300 = 41 % (35–46 %)**. It solves every
   task with no holes or a single centred hole, except brackets, and no multi-hole task
   (0/158). Zero-shot baseline 14/300 = 4.7 % (3–8 %); paired McNemar p = 6.2e-33
   ([report](./docs/results/phase4-heldout300-2026-11-14.md)).
 
 "Solved" covers bounding box, hole diameter and hole count only, and the tasks come from the
-same five templates as the examples, so this is not evidence of generalisation.
+same five templates as the examples, so **the 41 % is a synthetic-template number**, not
+evidence of general CAD ability.
+
+**Real tasks.** `model/bench_real.py` runs the same model with the same five synthetic
+examples on 100 real parts: CADTestBench text prompts, with ground-truth CadQuery from CADPrompt.
+The candidate code is executed by the verifier's `cad_exec`, and a task counts as solved when
+the solid's sorted bounding-box extents are within 1 % of the reference's.
+
+- Few-shot **24/100 = 24 % (17–33 %)**. Zero-shot 15/100 = 15 % (9–23 %).
+- Paired: +9 points (−0.5 to +18.5), McNemar p = 0.093, not significant.
+- The few-shot lift is much smaller on real parts and not significant at n = 100 (36 points on
+  templates). Truncation confounds the two arms: 13 few-shot answers were cut off, against 7
+  zero-shot.
+- The real check is bounding box only, weaker than the synthetic one, so 41 % and 24 % are
+  not the same metric. On bounding box per axis alone, few-shot solves 63 % of templates and
+  19 % of real parts. With volume also required, it solves 21/100 real parts.
+- Neither arm uses human-labelled data: the examples are synthetic.
+- The main failure is invented CadQuery API: 45 answers raise.
+- Full write-up: [report](./docs/results/real-cadtestbench-2026-11-16.md).
 
 ## Deployment
 

@@ -1,0 +1,101 @@
+{
+  "by_family": {
+    "cadtestbench": {
+      "both": 8,
+      "difference": 0.09,
+      "difference_ci95": [
+        -0.0054296875200731815,
+        0.18527324520951316
+      ],
+      "first_ci95": [
+        0.0930598528365663,
+        0.23283559590832364
+      ],
+      "first_only": 7,
+      "first_rate": 0.15,
+      "mcnemar_exact_p": 0.0931396484375,
+      "n": 100,
+      "neither": 69,
+      "second_ci95": [
+        0.16691325556948772,
+        0.33232336349814473
+      ],
+      "second_only": 16,
+      "second_rate": 0.24
+    }
+  },
+  "by_stratum": null,
+  "changed": {
+    "first_only": [
+      "00001411",
+      "00003219",
+      "00004495",
+      "00004935",
+      "00008138",
+      "00009823",
+      "00670231"
+    ],
+    "second_only": [
+      "00003763",
+      "00004154",
+      "00006863",
+      "00007258",
+      "00008315",
+      "00008597",
+      "00008835",
+      "00009044",
+      "00009863",
+      "00031637",
+      "00037161",
+      "00038614",
+      "00520776",
+      "00520976",
+      "00521969",
+      "00670279"
+    ]
+  },
+  "data": "cadtestbench-detailed/tasks.json",
+  "excluded_not_run": [],
+  "first": "ollama:qwen3.5:9b-q4_K_M",
+  "generation_differs_in": [],
+  "overall": {
+    "both": 8,
+    "difference": 0.09,
+    "difference_ci95": [
+      -0.0054296875200731815,
+      0.18527324520951316
+    ],
+    "first_ci95": [
+      0.0930598528365663,
+      0.23283559590832364
+    ],
+    "first_only": 7,
+    "first_rate": 0.15,
+    "mcnemar_exact_p": 0.0931396484375,
+    "n": 100,
+    "neither": 69,
+    "second_ci95": [
+      0.16691325556948772,
+      0.33232336349814473
+    ],
+    "second_only": 16,
+    "second_rate": 0.24
+  },
+  "scoring": [
+    {
+      "cadquery": "2.7.0",
+      "executor": "verify/verifiers/cad_exec.py measure",
+      "headline": "sorted bounding-box extents within 1%",
+      "volume_tol": 0.02
+    },
+    {
+      "cadquery": "2.7.0",
+      "executor": "verify/verifiers/cad_exec.py measure",
+      "headline": "sorted bounding-box extents within 1%",
+      "volume_tol": 0.02
+    }
+  ],
+  "second": "ollama:qwen3.5:9b-q4_K_M+fewshot5",
+  "spec_version": "cadtestbench-detailed",
+  "split": "real"
+}

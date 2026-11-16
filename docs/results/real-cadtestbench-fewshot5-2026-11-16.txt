@@ -1,0 +1,114 @@
+real-task benchmark  cadtestbench-detailed/tasks.json  (100 CADTestBench tasks, references from CADPrompt)
+candidate ollama:qwen3.5:9b-q4_K_M+fewshot5
+generation {"endpoint": "/api/generate", "fewshot": {"example_ids": ["plate-001", "box-001", "bracket-001", "cutout-001", "rounded-001"], "k": 5}, "num_ctx": 16384, "num_predict": 4096, "temperature": 0.0, "think": false}
+
+Solve rate (sorted extents within 1%): 24/100 = 24 %  95 % Wilson [17-33 %]   (failed 76, unjudged 0, not run 0)
+  strict X/Y/Z extents within 1%:   19/100 = 19 %  [13-28 %]
+  extents and volume within 2%:   21/100 = 21 %  [14-30 %]
+  built a solid at all:              40/100
+
+Where attempts ended: bbox_match 24, bbox_wrong 16, raised 45, syntax_error 15
+
+For comparison, synthetic held-out templates: 122/300 = 41 % (extents + hole diameter + hole count (Verifier Pack); a stricter check than the one above).
+
+Per task
+  00000007  solved   bbox_match   
+  00000633  solved   bbox_match   
+  00000960  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'moved'
+  00001411  failed   bbox_wrong   extents [3.0, 3.0, 0.01443] vs reference [0.02885, 1.5, 0.02885]
+  00001490  failed   bbox_wrong   extents [0.97298, 0.97298, 0.75] vs reference [1.5, 1.5, 0.48649]
+  00001615  solved   bbox_match   
+  00001817  failed   raised       reference raised TypeError: SetFuzzyValue(): incompatible function arguments. The following argument
+  00002221  failed   syntax_error SyntaxError: invalid syntax (line 1)
+  00002298  failed   raised       reference raised TypeError: Workplane.rotate() missing 1 required positional argument: 'angleDegrees
+  00003219  failed   bbox_wrong   extents [2.47436, 2.47436, 0.27226] vs reference [0.54452, 0.54452, 1.23718]
+  00003558  solved   bbox_match   
+  00003763  solved   bbox_match   
+  00003801  solved   bbox_match   
+  00004154  solved   bbox_match   
+  00004495  failed   bbox_wrong   extents [1.5, 1.5, 0.42857] vs reference [0.85714, 0.75, 0.85714]
+  00004596  failed   bbox_wrong   extents [0.75, 3.0, 0.75] vs reference [1.5, 0.75, 0.75]
+  00004935  failed   raised       reference raised ValueError: Cannot convert object type <class 'cadquery.occ_impl.shapes.Solid'> to 
+  00005161  failed   raised       reference raised TypeError: __init__(): incompatible constructor arguments. The following argument t
+  00005358  failed   bbox_wrong   extents [1.5, 1.5, 0.02926] vs reference [1.5, 1.5, 0.01463]
+  00005721  failed   raised       reference raised TypeError: Workplane.polygon() missing 1 required positional argument: 'diameter'
+  00006013  solved   bbox_match   
+  00006136  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'verticesToCenter'
+  00006578  failed   raised       reference raised ValueError: Spacing and count must be > 0 in at least one direction
+  00006863  solved   bbox_match   
+  00006892  failed   syntax_error SyntaxError: invalid syntax (line 1)
+  00007258  solved   bbox_match   
+  00007362  solved   bbox_match   
+  00008138  failed   raised       reference raised TypeError: Expected three floats, OCC gp_, or 3-tuple
+  00008315  solved   bbox_match   
+  00008597  solved   bbox_match   
+  00008835  solved   bbox_match   
+  00009044  solved   bbox_match   
+  00009307  failed   raised       reference raised ValueError: Cannot convert object type <class 'cadquery.occ_impl.shapes.Solid'> to 
+  00009529  failed   raised       reference raised ValueError: Cannot convert object type <class 'cadquery.occ_impl.shapes.Solid'> to 
+  00009823  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'polyloop'
+  00009863  solved   bbox_match   
+  00017291  failed   syntax_error SyntaxError: invalid syntax (line 1)
+  00019015  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'moved'
+  00019066  failed   raised       reference raised TypeError: __init__(): incompatible constructor arguments. The following argument t
+  00031181  failed   bbox_wrong   extents [611.35, 360.26, 338.43] vs reference [0.61135, 0.36026, 0.33843]
+  00031303  failed   syntax_error SyntaxError: invalid syntax (line 1)
+  00031637  solved   bbox_match   
+  00032961  failed   raised       reference raised Standard_DomainError
+  00033093  failed   raised       reference raised ValueError: No pending wires present
+  00033624  failed   raised       reference raised ValueError: Spacing and count must be > 0 in at least one direction
+  00034100  failed   raised       reference raised TypeError: Workplane.extrude() got an unexpected keyword argument 'bothSide'
+  00034239  failed   raised       reference raised TypeError: __init__(): incompatible constructor arguments. The following argument t
+  00034243  failed   raised       reference raised ValueError: Cannot convert object type <class 'cadquery.occ_impl.shapes.Wire'> to v
+  00034256  failed   syntax_error SyntaxError: invalid syntax (line 1)
+  00036518  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'cutPlane'
+  00037135  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'scale'
+  00037161  solved   bbox_match   
+  00037276  failed   syntax_error SyntaxError: invalid syntax (line 1)
+  00037494  failed   raised       reference raised Standard_DomainError
+  00038438  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'polyloop'
+  00038614  solved   bbox_match   
+  00039012  failed   raised       reference raised TypeError: Workplane.extrude() got an unexpected keyword argument 'bothSide'
+  00039227  failed   bbox_wrong   extents [2.0, 2.0, 1.27949] vs reference [1.27949, 0.75, 1.27949]
+  00039365  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'polyloop'
+  00039681  failed   raised       reference raised TypeError: Workplane.extrude() got an unexpected keyword argument 'bothSide'
+  00039777  failed   raised       reference raised StdFail_NotDone: BRep_API: command not done
+  00300037  failed   syntax_error SyntaxError: invalid syntax (line 1)
+  00520130  failed   bbox_wrong   extents [1.05, 0.375, 1.8] vs reference [0.375, 1.05, 0.9]
+  00520150  failed   raised       reference raised TypeError: Multiplied(): incompatible function arguments. The following argument ty
+  00520321  failed   bbox_wrong   extents [1.23418, 0.61719, 0.75] vs reference [1.23418, 0.61719, 0.89062]
+  00520402  failed   syntax_error SyntaxError: invalid syntax (line 1)
+  00520453  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'toLine'
+  00520570  failed   raised       reference raised ValueError: Can not return the Nth element of an empty list
+  00520638  failed   syntax_error SyntaxError: '(' was never closed (line 142)
+  00520671  failed   syntax_error SyntaxError: invalid syntax (line 1)
+  00520675  failed   bbox_wrong   extents [1.65, 1.65, 0.675] vs reference [1.5, 1.5, 0.6]
+  00520699  failed   bbox_wrong   extents [0.69142, 0.0375, 0.15] vs reference [0.0375, 0.15, 0.82502]
+  00520726  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'moved'
+  00520776  solved   bbox_match   
+  00520974  failed   bbox_wrong   extents [0.25, 0.25, 0.5] vs reference [0.75, 0.25, 1.0]
+  00520976  solved   bbox_match   
+  00521000  failed   raised       reference raised NameError: name 'cos' is not defined
+  00521025  failed   syntax_error SyntaxError: invalid syntax (line 1)
+  00521217  failed   raised       reference raised ValueError: Cannot convert object type <class 'cadquery.occ_impl.shapes.Solid'> to 
+  00521230  failed   syntax_error SyntaxError: invalid syntax (line 1)
+  00521437  failed   raised       reference raised TypeError: __init__(): incompatible constructor arguments. The following argument t
+  00521969  solved   bbox_match   
+  00522355  failed   raised       reference raised TypeError: Workplane.cut() got an unexpected keyword argument 'depth'
+  00522404  failed   bbox_wrong   extents [0.30738, 0.73771, 0.30738] vs reference [0.30738, 0.30738, 0.75]
+  00522865  failed   raised       reference raised TypeError: __init__(): incompatible constructor arguments. The following argument t
+  00523882  failed   bbox_wrong   extents [1.27908, 0.75, 1.0011] vs reference [1.27908, 1.20294, 0.75]
+  00524912  failed   syntax_error SyntaxError: invalid syntax (line 1)
+  00670105  failed   syntax_error SyntaxError: unexpected indent (line 188)
+  00670106  failed   raised       reference raised TypeError: Workplane.extrude() got an unexpected keyword argument 'bothSide'
+  00670231  failed   raised       reference raised ValueError: Cannot convert object type <class 'cadquery.occ_impl.shapes.Wire'> to v
+  00670256  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'offset'
+  00670259  failed   bbox_wrong   extents [51.0, 51.0, 750.0] vs reference [0.06, 0.75, 0.06]
+  00670266  failed   syntax_error SyntaxError: invalid syntax (line 1)
+  00670274  failed   raised       reference raised TypeError: 'float' object is not subscriptable
+  00670279  solved   bbox_match   
+  00670334  solved   bbox_match   
+  00670441  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'toOval'
+  00670454  failed   raised       reference raised TypeError: Workplane.circle() got an unexpected keyword argument 'loc'
+  00670457  failed   raised       reference raised ValueError: Workplane object must have at least one solid on the stack to union!
+  00670466  failed   raised       reference raised AttributeError: 'Vector' object has no attribute 'X'

@@ -12,6 +12,7 @@ training; no model weights are changed. Results:
 | `generate.py` | Writes a seeded batch of templated tasks to `data/`. |
 | `export.py` | Writes the campaign's accepted tasks (from the warehouse copy of the database) as a cad-spec batch the benchmark reads. This connects the campaign to the model loop. |
 | `benchmark.py` | Scores a candidate (local Ollama model or a mock) on the held-out split with the M8 Verifier Pack, through the M9 probe's `score()`. |
+| `bench_real.py` | The same model and few-shot examples on 100 real parts: CADTestBench prompts, CADPrompt reference code. Scored on the solid built by the verifier's `cad_exec` (sorted bounding box within 1 %). Data is fetched outside the repo. Results: [`docs/results/real-cadtestbench-2026-11-16.md`](../docs/results/real-cadtestbench-2026-11-16.md). |
 | `tests/` | `python -m unittest discover -s model/tests -v`. No live Ollama; executed tests skip without cadquery. |
 
 Standard library only, except that `export.py` reads the warehouse with `duckdb`

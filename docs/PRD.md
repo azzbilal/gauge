@@ -9,6 +9,9 @@ Building an AI system that produces **reliable human-labeled data** and uses it 
 **improve a model** is hard to demonstrate in an interview. Gauge proves the whole loop at
 miniature scale: recruit experts, run a quality-checked task campaign whose tasks are
 machine-verified, land the data in a warehouse, train and benchmark a small model.
+Status: the "improve a model" half is not yet shown with human-labelled data. The few-shot
+examples are synthetic, the 41 % is on synthetic templates, and on real parts the gain is not
+significant (Gate 4 below).
 
 ## Users
 
@@ -48,7 +51,7 @@ seven days to make room for verification.
 | **2 (day 13)** | M7–M9 built and wired into submission and review | pre-submit check, server-side lint gate and stored verdicts built; the Review screen shows the stored lint and verifier verdicts per criterion after the reviewer submits, and the API refuses them (403) to anyone who may still review or adjudicate the task; the probe runs from the admin-only `POST /tasks/:id/probe` and is stored as a `ProbeRun`, with seeded sampling so all four tiers are reachable |
 | | verifier agreement with human verdicts | **measured on the 10-task Layer 2 golden set: 8/10 = 80 % (seeded, in-sample)**, kappa 0.58 (`npm run verifier-golden`; see below) |
 | **3 (day 19)** | all dbt tests pass, dashboard on the semantic layer, retro with real campaign numbers | **partly met**: Dagster job and dbt warehouse built (`warehouse/`), dbt 31/31 on build and 26/26 on test; the dashboard reads the marts directly because the MCP semantic layer is not built; the retro uses dev data, as no real campaign has run (`docs/results/gate3-retro-2026-11-13.md`) |
-| **4 (day 28)** | held-out scores before and after training, with a failure analysis | **met**: model loop built (`model/`). "Training" is in-context few-shot prompting, not weight training. 300 held-out tasks: zero-shot 14/300 = 4.7 % (3–8 %) → few-shot 122/300 = 40.7 % (35–46 %), McNemar p = 6.2e-33, with a per-stratum failure analysis (`docs/results/phase4-heldout300-2026-11-14.md`) |
+| **4 (day 28)** | held-out scores before and after training, with a failure analysis | **met**: model loop built (`model/`). "Training" is in-context few-shot prompting, not weight training. **On synthetic templates** (300 held-out tasks from the same five templates as the examples): zero-shot 14/300 = 4.7 % (3–8 %) → few-shot 122/300 = 40.7 % (35–46 %), McNemar p = 6.2e-33, with a per-stratum failure analysis (`docs/results/phase4-heldout300-2026-11-14.md`). **On 100 real parts** (CADTestBench prompts, CADPrompt references, sorted bounding box within 1 %, a weaker check): zero-shot 15/100 = 15 % (9–23 %) → few-shot 24/100 = 24 % (17–33 %), +9 points, McNemar p = 0.093, not significant at n = 100 (`docs/results/real-cadtestbench-2026-11-16.md`). The 41 % is a synthetic-template number: on bounding box alone, few-shot solves 63 % of templates and 19 % of real parts. No human-labelled data is used in either arm. |
 
 The plan gives the verification phase a list of deliverables but no gate of its own; Gate 2
 above is that list. Gates 3 and 4 are version 1's Gates 2 and 3, moved to the new phase ends.

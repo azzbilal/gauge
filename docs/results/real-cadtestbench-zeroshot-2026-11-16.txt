@@ -1,0 +1,114 @@
+real-task benchmark  cadtestbench-detailed/tasks.json  (100 CADTestBench tasks, references from CADPrompt)
+candidate ollama:qwen3.5:9b-q4_K_M
+generation {"endpoint": "/api/generate", "num_ctx": 16384, "num_predict": 4096, "temperature": 0.0, "think": false}
+
+Solve rate (sorted extents within 1%): 15/100 = 15 %  95 % Wilson [9-23 %]   (failed 85, unjudged 0, not run 0)
+  strict X/Y/Z extents within 1%:   12/100 = 12 %  [7-20 %]
+  extents and volume within 2%:   13/100 = 13 %  [8-21 %]
+  built a solid at all:              18/100
+
+Where attempts ended: bbox_match 15, bbox_wrong 3, raised 79, syntax_error 3
+
+For comparison, synthetic held-out templates: 122/300 = 41 % (extents + hole diameter + hole count (Verifier Pack); a stricter check than the one above).
+
+Per task
+  00000007  solved   bbox_match   
+  00000633  solved   bbox_match   
+  00000960  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'moved'
+  00001411  solved   bbox_match   
+  00001490  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'moved'
+  00001615  solved   bbox_match   
+  00001817  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'moved'
+  00002221  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'moved'
+  00002298  failed   raised       reference raised TypeError: Workplane.box() got an unexpected keyword argument 'x'
+  00003219  solved   bbox_match   
+  00003558  solved   bbox_match   
+  00003763  failed   raised       reference raised ImportError: cannot import name 'Cylinder' from 'cadquery' (C:\Users\bgare\AppData\
+  00003801  solved   bbox_match   
+  00004154  failed   raised       reference raised AttributeError: 'function' object has no attribute 'z'
+  00004495  solved   bbox_match   
+  00004596  failed   raised       reference raised TypeError: SolidFromShell(): incompatible function arguments. The following argumen
+  00004935  solved   bbox_match   
+  00005161  failed   raised       reference raised IndexError: tuple index out of range
+  00005358  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'moved'
+  00005721  failed   raised       reference raised TypeError: Workplane.extrude() got an unexpected keyword argument 'depth'
+  00006013  solved   bbox_match   
+  00006136  failed   raised       reference raised ValueError: No pending wires present
+  00006578  failed   raised       reference raised TypeError: Workplane.moveTo() takes from 1 to 3 positional arguments but 4 were giv
+  00006863  failed   bbox_wrong   extents [0.33394, 0.375, 0.32847] vs reference [0.66788, 0.75, 0.32847]
+  00006892  failed   raised       reference raised ValueError: You have to keep at least one half
+  00007258  failed   raised       reference raised ValueError: Cannot convert object type <class 'cadquery.occ_impl.shapes.Solid'> to 
+  00007362  solved   bbox_match   
+  00008138  solved   bbox_match   
+  00008315  failed   raised       reference raised TypeError: __init__(): incompatible constructor arguments. The following argument t
+  00008597  failed   raised       reference raised Standard_DomainError
+  00008835  failed   raised       reference raised Standard_DomainError
+  00009044  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'moved'
+  00009307  failed   raised       reference raised AttributeError: 'Solid' object has no attribute 'combine'
+  00009529  failed   raised       reference raised AttributeError: 'Compound' object has no attribute 'val'
+  00009823  solved   bbox_match   
+  00009863  failed   raised       reference raised TypeError: __init__(): incompatible constructor arguments. The following argument t
+  00017291  failed   raised       reference raised ImportError: cannot import name 'BRepPrimAPI_GenBox' from 'OCP.BRepPrimAPI' (C:\Use
+  00019015  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'moved'
+  00019066  failed   raised       reference raised TypeError: Workplane.moveTo() takes from 1 to 3 positional arguments but 4 were giv
+  00031181  failed   raised       reference raised ValueError: Cannot convert object type <class 'cadquery.occ_impl.shapes.Solid'> to 
+  00031303  failed   raised       reference raised Standard_DomainError
+  00031637  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'moved'
+  00032961  failed   raised       reference raised ValueError: Cannot convert object type <class 'cadquery.occ_impl.shapes.Wire'> to v
+  00033093  failed   raised       reference raised TypeError: __init__(): incompatible constructor arguments. The following argument t
+  00033624  failed   raised       reference raised TypeError: __init__(): incompatible constructor arguments. The following argument t
+  00034100  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'moved'
+  00034239  failed   raised       reference raised TypeError: __init__(): incompatible constructor arguments. The following argument t
+  00034243  failed   raised       reference raised ValueError: Cannot convert object type <class 'cadquery.occ_impl.shapes.Solid'> to 
+  00034256  failed   raised       reference raised TypeError: 'float' object is not subscriptable
+  00036518  failed   raised       reference raised AttributeError: 'Plane' object has no attribute 'toPlane'
+  00037135  failed   raised       reference raised TypeError: __init__(): incompatible constructor arguments. The following argument t
+  00037161  failed   raised       reference raised TypeError: __init__(): incompatible constructor arguments. The following argument t
+  00037276  failed   syntax_error SyntaxError: invalid syntax (line 1)
+  00037494  failed   raised       reference raised Standard_DomainError
+  00038438  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'movedTo'
+  00038614  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'moved'
+  00039012  failed   raised       reference raised ImportError: cannot import name 'BRepPrimAPI_AxisAlignedCylinder' from 'OCP.BRepPri
+  00039227  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'moved'
+  00039365  failed   raised       reference raised ValueError: No pending wires present
+  00039681  failed   bbox_wrong   extents [0.72857, 0.72857, 0.32157] vs reference [1.5, 1.5, 0.56371]
+  00039777  failed   syntax_error SyntaxError: invalid syntax. Maybe you meant '==' or ':=' instead of '='? (line 117)
+  00300037  failed   raised       reference raised ValueError: Cannot convert object type <class 'cadquery.occ_impl.shapes.Wire'> to v
+  00520130  failed   raised       reference raised ValueError: Cannot convert object type <class 'cadquery.occ_impl.shapes.Wire'> to v
+  00520150  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'toLine'
+  00520321  failed   raised       reference raised ValueError: Cannot convert object type <class 'cadquery.occ_impl.shapes.Wire'> to v
+  00520402  failed   syntax_error SyntaxError: invalid syntax (line 1)
+  00520453  failed   raised       reference raised TypeError: Workplane.extrude() got an unexpected keyword argument 'depth'
+  00520570  failed   raised       reference raised ModuleNotFoundError: No module named 'OCP.BRepPrimatives'
+  00520638  failed   raised       reference raised TypeError: Workplane.moveTo() takes from 1 to 3 positional arguments but 4 were giv
+  00520671  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'addCircle'
+  00520675  failed   raised       reference raised AttributeError: 'Face' object has no attribute 'normal'
+  00520699  failed   raised       reference raised TypeError: __init__(): incompatible constructor arguments. The following argument t
+  00520726  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'moved'
+  00520776  failed   raised       reference raised TypeError: __init__(): incompatible constructor arguments. The following argument t
+  00520974  failed   raised       reference raised Standard_DomainError
+  00520976  failed   raised       reference raised Standard_DomainError
+  00521000  failed   raised       reference raised TypeError: Workplane.box() got an unexpected keyword argument 'forX'
+  00521025  failed   raised       reference raised ValueError: Cannot convert object type <class 'cadquery.occ_impl.shapes.Solid'> to 
+  00521217  failed   raised       reference raised TypeError: __init__(): incompatible constructor arguments. The following argument t
+  00521230  failed   raised       reference raised TypeError: __init__(): incompatible constructor arguments. The following argument t
+  00521437  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'addLine'
+  00521969  failed   raised       reference raised AttributeError: 'Face' object has no attribute 'isFace'
+  00522355  failed   raised       reference raised TypeError: Workplane.extrude() got an unexpected keyword argument 'bothSide'
+  00522404  failed   bbox_wrong   extents [0.30738, 0.46107, 0.74385] vs reference [0.30738, 0.30738, 0.75]
+  00522865  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'moved'
+  00523882  failed   raised       reference raised ImportError: cannot import name 'BRepPrimAPI_Gen' from 'OCP.BRepPrimAPI' (C:\Users\
+  00524912  failed   raised       reference raised TypeError: Expected three floats, OCC gp_, or 3-tuple
+  00670105  failed   raised       reference raised TypeError: Workplane.box() missing 1 required positional argument: 'height'
+  00670106  failed   raised       reference raised TypeError: Workplane.rotate() missing 1 required positional argument: 'angleDegrees
+  00670231  solved   bbox_match   
+  00670256  failed   raised       reference raised TypeError: Workplane.rotate() missing 1 required positional argument: 'angleDegrees
+  00670259  failed   raised       reference raised AttributeError: 'Face' object has no attribute 'normal'
+  00670266  failed   raised       reference raised ValueError: Cannot find a solid on the stack or in the parent chain
+  00670274  failed   raised       reference raised Standard_DomainError
+  00670279  failed   raised       reference raised TypeError: Workplane.rotate() got an unexpected keyword argument 'X'
+  00670334  solved   bbox_match   
+  00670441  failed   raised       reference raised TypeError: Workplane.polygon() got an unexpected keyword argument 'radius'
+  00670454  failed   raised       reference raised ImportError: cannot import name 'BRepPrimAPI_Shape' from 'OCP.BRepPrimAPI' (C:\User
+  00670457  failed   raised       reference raised ValueError: Workplane object must have at least one solid on the stack to union!
+  00670466  failed   raised       reference raised NameError: name 'tan' is not defined
