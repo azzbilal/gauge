@@ -290,7 +290,11 @@ class SeededProbeEndToEnd(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.server, base = serve(SeedAwareOllama)
-        cls.rollout_fn = functools.partial(rollout, url=base + "/api/generate", timeout=10)
+        # staticmethod: from Python 3.14 a partial is a method descriptor, so stored bare on
+        # the class it would bind `self` as rollout's first argument.
+        cls.rollout_fn = staticmethod(
+            functools.partial(rollout, url=base + "/api/generate", timeout=10)
+        )
 
     @classmethod
     def tearDownClass(cls):

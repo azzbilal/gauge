@@ -12,12 +12,15 @@ It is a portfolio project built on a **28-day, four-phase plan**. This README de
 is built today and what is still a plan; the one-page spec is [docs/PRD.md](./docs/PRD.md),
 the review rules are [docs/pipeline.md](./docs/pipeline.md).
 
+**Live:** <https://web-sigma-lake-16.vercel.app>. It runs on free tiers, so the first request
+after an idle spell is slow (the API on Render has to wake up); give it a minute.
+
 ## Status at a glance
 
 | Phase | Days | Builds | State |
 |---|---|---|---|
 | 1 · Front door | 1–6 | App, auth, intake agent (M1), task campaign + review protocol (M2) | **built and deployed**: web on Vercel; API, verify service and Postgres on Render (free tier). Intake agreement **18/20 = 90 %, prompt-tuned on the eval set** (in-sample; see Gate 1) |
-| 2 · Verification (Layer 2) | 7–13 | Packet Lint (M7), Verifier Pack (M8), Probe Gate (M9), wired into authoring | **built**. Stored lint and verifier verdicts show on the Review screen once the reviewer has submitted (hidden while scoring). CAD only (no PCB/circuit checks); verifier agreement measured on a 10-task seeded golden set only (8/10, in-sample) |
+| 2 · Verification (Layer 2) | 7–13 | Packet Lint (M7), Verifier Pack (M8), Probe Gate (M9), wired into authoring | **built**. Stored lint and verifier verdicts show on the Review screen once the reviewer has submitted; while they can still score, the API refuses them (403), not only the screen. CAD only (no PCB/circuit checks); verifier agreement measured on a 10-task seeded golden set only (8/10, in-sample) |
 | 3 · Data backbone | 14–19 | Dagster ingestion, dbt warehouse, read-only MCP semantic layer (M4) | **built except the MCP layer**: `warehouse/` holds the Dagster job, dbt on DuckDB (3 marts, all tests pass) and a static dashboard. The daily schedule is defined, not running; the numbers are dev data, not a real campaign ([retro](./docs/results/gate3-retro-2026-11-13.md)) |
 | 4 · Model loop | 20–28 | cad-spec release, synthetic generator, training runs, held-out benchmark (M5) | **built**: [model/SPEC.md](./model/SPEC.md), generator, benchmark harness, and the campaign export (`model/export.py`) that feeds accepted campaign tasks to the benchmark, so the campaign is connected to the benchmark (exercised on dev data only; no real campaign yet; few-shot examples still come only from synthetic tasks). Few-shot run (in-context, **no weight training**): **122/300 = 41 % (Wilson 95 %: 35–46 %)** on 300 held-out tasks; 0/20 → 6/20 against zero-shot on the first 20-task set. The 300-task zero-shot baseline: 14/300 = 4.7 % (3–8 %), paired McNemar p = 6.2e-33 ([results](./docs/results/phase4-heldout300-2026-11-14.md)) |
 
@@ -182,12 +185,18 @@ A task is a prompt, a machine-checkable spec and a CadQuery reference. The full 
   shown with a mock Ollama in the tests; how often a real model lands in t1 is not measured.
   The API runs it from `POST /tasks/:id/probe` (admin only) and stores a `ProbeRun`
   (`OK` with tier and solve rate, or `NOT_RUN`/`FAILED` with a note when Ollama or the
-  verify service is unavailable); `GET /tasks/:id/verification` shows admins the latest.
+  verify service is unavailable); `GET /tasks/:id/verification` shows admins the latest, once
+  they cannot act on the task (an admin who could still review it is blind like any reviewer;
+  the probe call itself returns the tier).
 - **Wiring.** The Author view's "Run check" calls `POST /tasks/preview` (lint + verify,
   nothing stored). `POST /tasks` lints before inserting and refuses a task with a critical
   finding; then verifies and stores the results, readable at `GET /tasks/:id/verification`.
   The Review screen shows those stored lint findings and verifier verdicts per criterion
   once the reviewer has submitted (or on a task they can only read), never while they score.
+  The API enforces this: `GET /tasks/:id/verification` answers 403 to anyone who may still
+  review or adjudicate the task (a gold clone's owner included, with the same answer), and
+  opens once they have submitted. It does not stop an adjudicator from reading it on an open
+  task before that task splits and reaches them.
 - **Verifier agreement (Gate 2).** `GET /tasks/verifier-agreement` (admin, `?campaignId=`)
   sets the stored verifier result against the human accept/reject on decided tasks: rate,
   Cohen's kappa, confusion matrix, and every disagreement with its verdicts. `npm run
@@ -233,7 +242,8 @@ same five templates as the examples, so this is not evidence of generalisation.
 
 ## Deployment
 
-The web app is deployed on Vercel (`apps/web/vercel.json` forwards `/api/*` to the API). The
+The web app is deployed on Vercel at <https://web-sigma-lake-16.vercel.app>
+(`apps/web/vercel.json` forwards `/api/*` to the API). The
 API, the verify service and Postgres run on Render as laid out in `render.yaml`, all on free
 plans, so the first request after an idle spell is slow. The deployed intake agent is
 configured to use Anthropic (`render.yaml`), since neither host runs Ollama, so the probe has

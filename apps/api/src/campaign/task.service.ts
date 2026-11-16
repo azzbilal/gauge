@@ -416,14 +416,20 @@ export class TaskService {
    * requirements and rubric items they quote by id, so a reader can name them. A task the
    * viewer may not see answers like a missing one; a gold clone has its own copy
    * (materialiseGold).
+   *
+   * Scoring is blind to the machine verdicts, on the server: while the viewer may still
+   * review or adjudicate the task (canAct), the answer is 403, the same for every task. It
+   * opens once they have submitted, or once the task is no longer theirs to act on. This
+   * holds for admins too, since their reviews count as peer reviews.
    */
   async verification(taskId: string, viewer: AuthUser) {
-    const task = await this.prisma.task.findUnique({
-      where: { id: taskId },
-      select: { id: true, isGold: true, goldSourceId: true, goldForExpertId: true },
-    });
+    const task = await this.prisma.task.findUnique({ where: { id: taskId }, include: TASK_INCLUDE });
     if (!task || !visibleTo(task, viewer)) {
       throw new NotFoundException(`Task "${taskId}" not found`);
+    }
+    const adjudication = (await this.adjudicationsFor([taskId])).get(taskId);
+    if (this.canAct(task, viewer, adjudication, await this.adjudicatorPool())) {
+      throw new ForbiddenException('Verification is shown after you submit your review');
     }
     const orderBy = { createdAt: 'asc' } as const;
     const [lintFindings, verifierRuns, requirements, rubricItems] = await Promise.all([

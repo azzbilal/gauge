@@ -20,7 +20,7 @@ needs an interpreter with `cadquery` (see `verifiers/`).
 |---|---|---|
 | Author clicks "Run check" (`POST /tasks/preview`) | `/extract`, then `/lint` and `/verify` | Findings and verdicts shown in the Author view; nothing stored. Either half that cannot run reports `not_run`, never clean. |
 | Task create (`POST /tasks`) | `/extract`, `/lint` | **Gate:** a critical lint finding refuses the task (422). A service that answered badly refuses it too. Only an unreachable or timed-out service lets the task through, recorded as unlinted: `linted: false` in the response and the `task.created` event, plus a `lint_not_run` finding row. |
-| After create | `/verify` | Requirements, rubric items, lint findings and verifier runs are stored; `GET /tasks/:id/verification` returns them. A verify failure never fails the create. |
+| After create | `/verify` | Requirements, rubric items, lint findings and verifier runs are stored; `GET /tasks/:id/verification` returns them, except to a viewer who may still review or adjudicate the task (403). A verify failure never fails the create. |
 
 The API parses nothing itself (`apps/api/src/verify/packet-builder.ts` only arranges the
 `/extract` answer into rows and a packet) and records the extraction version in the

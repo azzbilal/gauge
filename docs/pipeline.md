@@ -135,6 +135,14 @@ apply that rule first, so a hidden id answers exactly like a missing one. A camp
 count is what the viewer can see of it. Review is blind: reviewers and adjudicators do not see a
 task's author, since only an admin writes gold and an admin author would mark it.
 
+Scoring is also blind to the machine checks, on the server: `GET /tasks/:id/verification`
+answers 403 to anyone who may still review or adjudicate the task (the same rule as the work
+queue, admins included), with the same answer for a gold clone as for a normal task. It opens
+once they have submitted, or once the task is no longer theirs to act on. Two gaps: an
+adjudicator may read it on an open task before that task splits and reaches them, and an
+admin can recompute lint and verifier results from the spec and reference through
+`POST /tasks/preview` (open to authors and admins, not reviewers).
+
 Known limits:
 
 - A clone is backdated, but it is written when the reviewer fetches their list, so it is absent

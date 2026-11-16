@@ -486,6 +486,8 @@ describe('gold clone: written for one reviewer when gold falls due', () => {
     db.tasks.splice(0, db.tasks.length, ...db.tasks.filter((t) => !t.isGold || t.id === 'g0'));
     const [rita] = dueNow(1).map((r) => user(r));
     const [cloneId] = fresh(await db.service.list(rita));
+    // Verification opens to a reviewer only once they have submitted (blind scoring).
+    await db.service.review(cloneId, body, rita);
     const v = await db.service.verification(cloneId, rita);
     expect(v.taskId).toBe(cloneId);
     expect(v.lintFindings).toHaveLength(1);
@@ -671,9 +673,13 @@ describe('visibility: a hidden gold id answers like a missing one, on every endp
   it('shows the owner their clone on every endpoint', async () => {
     const { db, owner, cloneId } = await setup();
     await expect(db.service.get(cloneId, owner)).resolves.toMatchObject({ id: cloneId });
-    await expect(db.service.verification(cloneId, owner)).resolves.toMatchObject({
-      taskId: cloneId,
-    });
+    // Blind scoring: before the owner reviews it, the clone's verification is refused
+    // exactly as an open normal task's is (the blind-scoring tests below cover after).
+    for (const id of [cloneId, 'n0']) {
+      await expect(db.service.verification(id, owner)).rejects.toThrow(
+        new ForbiddenException('Verification is shown after you submit your review'),
+      );
+    }
     // The same answer as for a normal task: a plain reviewer may not adjudicate (403), and
     // to one who may, it is not split, so not awaiting adjudication (409).
     for (const [as, err] of [
@@ -910,6 +916,69 @@ describe('adjudication: a third expert, with a small-team escape for the lead or
   });
 });
 
+describe('blind scoring: verification opens only once the viewer can no longer act', () => {
+  const blind = new ForbiddenException('Verification is shown after you submit your review');
+
+  it('refuses a reviewer before they submit and answers after', async () => {
+    const db = fakeDb([task('n0', { gold: false })]);
+    for (const viewer of [user('rev'), user('boss', Role.ADMIN)]) {
+      await expect(db.service.verification('n0', viewer)).rejects.toThrow(blind);
+      await db.service.review('n0', body, viewer);
+      await expect(db.service.verification('n0', viewer)).resolves.toMatchObject({ taskId: 'n0' });
+    }
+  });
+
+  it('refuses the owner of a gold clone before they submit, with the same answer, and answers after', async () => {
+    const db = fakeDb(backlog());
+    const [owner] = dueNow(1).map((r) => user(r));
+    const [cloneId] = fresh(await db.service.list(owner));
+    const refusal = async (id: string) =>
+      db.service.verification(id, owner).then(
+        () => null,
+        (e: unknown) => [(e as Error).constructor.name, (e as Error).message],
+      );
+    expect(await refusal(cloneId)).toEqual(await refusal('n0'));
+    await expect(db.service.verification(cloneId, owner)).rejects.toThrow(blind);
+    await db.service.review(cloneId, body, owner);
+    await expect(db.service.verification(cloneId, owner)).resolves.toMatchObject({
+      taskId: cloneId,
+    });
+  });
+
+  it('answers the author, who cannot review their own task', async () => {
+    const db = fakeDb([task('n0', { gold: false, authorId: 'ann' })]);
+    await expect(db.service.verification('n0', user('ann', Role.AUTHOR))).resolves.toMatchObject({
+      taskId: 'n0',
+    });
+  });
+
+  it('refuses the adjudicator of a split until they decide; its reviewers already see it', async () => {
+    const adj = user('adj', Role.ADJUDICATOR);
+    const reviews = [review('r1', 's1', 'rob', true), review('r2', 's1', 'rae', false)];
+    const db = fakeDb(
+      [task('s1', { gold: false, status: TaskStatus.IN_REVIEW, reviews, authorId: 'ann' })],
+      {
+        users: [user('ann', Role.AUTHOR), user('rob'), user('rae'), adj],
+        decisions: [
+          {
+            id: 'd1',
+            subjectType: 'task',
+            subjectId: 's1',
+            verdict: 'NEEDS_REVIEW',
+            reason: null,
+            reviewerId: 'system',
+            createdAt: reviewedAt,
+          },
+        ],
+      },
+    );
+    await expect(db.service.verification('s1', user('rob'))).resolves.toMatchObject({ taskId: 's1' });
+    await expect(db.service.verification('s1', adj)).rejects.toThrow(blind);
+    await db.service.adjudicate('s1', { verdict: 'accept', reason: 'meets the spec' }, adj);
+    await expect(db.service.verification('s1', adj)).resolves.toMatchObject({ taskId: 's1' });
+  });
+});
+
 describe('probe: the M9 Probe Gate on a task, stored as a ProbeRun', () => {
   const admin = user('ada', Role.ADMIN);
   const reviewer = user('rev', Role.REVIEWER);
@@ -1027,17 +1096,21 @@ describe('probe: the M9 Probe Gate on a task, stored as a ProbeRun', () => {
     // Stored oldest first, so a read that ignores the order would get the first run.
     expect(db.layer2.probeRun[0].id).toBe(first.id);
 
+    // Verification opens to each of them only after their own review (blind scoring).
+    await db.service.review('n0', body, admin);
     const asAdmin = await db.service.verification('n0', admin);
     expect(asAdmin.probeRun).toMatchObject({ id: second.id, tier: DifficultyTier.T0 });
     expect(asAdmin.probeRun?.id).not.toBe(first.id);
 
     // Reviewers score difficulty blind, so the tier is not theirs to see; the field is.
+    await db.service.review('n0', body, reviewer);
     const asReviewer = await db.service.verification('n0', reviewer);
     expect(asReviewer).toHaveProperty('probeRun', null);
   });
 
   it('answers null for a task never probed', async () => {
     const db = withTask(client(async () => ({})).verify);
+    await db.service.review('n0', body, admin);
     expect((await db.service.verification('n0', admin)).probeRun).toBeNull();
   });
 });

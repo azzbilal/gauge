@@ -137,7 +137,10 @@ export interface StoredVerdict {
   pass?: boolean;
 }
 
-/** The Layer 2 results stored when a task was created (GET /tasks/:id/verification). */
+/**
+ * The Layer 2 results stored when a task was created (GET /tasks/:id/verification). The API
+ * answers 403 while the viewer may still review or adjudicate the task.
+ */
 export interface TaskVerification {
   taskId: string;
   lintFindings: LintFinding[];
