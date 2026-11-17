@@ -1,0 +1,54 @@
+real-task benchmark  cadtestbench-detailed/tasks.json  (40 CADTestBench tasks, references from CADPrompt)
+candidate ollama:gpt-oss:20b
+generation {"endpoint": "/api/generate", "num_ctx": 16384, "num_predict": 4096, "temperature": 0.0, "think": "medium", "timeout_s": 600.0}
+
+Solve rate (sorted extents within 1%): 19/40 = 48 %  95 % Wilson [33-63 %]   (failed 21, unjudged 0, not run 0)
+  strict X/Y/Z extents within 1%:   15/40 = 38 %  [24-53 %]
+  extents and volume within 2%:   16/40 = 40 %  [26-55 %]
+  built a solid at all:              29/40
+
+Where attempts ended: bbox_match 19, bbox_wrong 10, no_code 4, raised 7
+
+For comparison, synthetic held-out templates: 122/300 = 41 % (extents + hole diameter + hole count (Verifier Pack); a stricter check than the one above).
+
+Per task
+  00000633  failed   raised       reference raised TypeError: Multiplied(): incompatible function arguments. The following argument ty
+  00001490  solved   bbox_match   
+  00002221  failed   bbox_wrong   extents [0.0625, 0.75, 0.75] vs reference [0.75, 0.0625, 0.0625]
+  00003219  solved   bbox_match   
+  00003801  solved   bbox_match   
+  00004154  solved   bbox_match   
+  00004935  solved   bbox_match   
+  00005161  failed   bbox_wrong   extents [0.38527, 0.38527, 0.49315] vs reference [0.38527, 0.38527, 0.75]
+  00005721  failed   bbox_wrong   extents [0.76556, 1.5, 0.00472] vs reference [1.5, 0.00472, 0.73113]
+  00006892  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'halfCircle'
+  00007362  solved   bbox_match   
+  00008315  solved   bbox_match   
+  00008835  solved   bbox_match   
+  00009529  failed   bbox_wrong   extents [2.27041, 0.55102, 0.28016] vs reference [1.5, 0.55102, 0.36363]
+  00009823  solved   bbox_match   
+  00019066  failed   bbox_wrong   extents [0.345, 0.0075, 0.75] vs reference [0.345, 0.7524, 0.18]
+  00031303  failed   no_code      the model returned no code
+  00031637  solved   bbox_match   
+  00033093  solved   bbox_match   
+  00034239  solved   bbox_match   
+  00034256  failed   raised       reference raised ValueError: Cannot find a solid on the stack or in the parent chain
+  00037276  failed   no_code      the model returned no code
+  00038438  solved   bbox_match   
+  00039365  solved   bbox_match   
+  00039777  solved   bbox_match   
+  00520150  failed   raised       reference raised TypeError: Workplane.rect() got an unexpected keyword argument 'offset'
+  00520402  failed   raised       reference raised AttributeError: 'Workplane' object has no attribute 'half'
+  00520638  failed   bbox_wrong   extents [1.10769, 0.75165, 0.85061] vs reference [0.61324, 0.47473, 1.10769]
+  00520675  solved   bbox_match   
+  00520776  solved   bbox_match   
+  00520974  failed   bbox_wrong   extents [0.25, 0.25, 0.5] vs reference [0.75, 0.25, 1.0]
+  00521025  solved   bbox_match   
+  00521230  failed   no_code      the model returned no code
+  00521969  failed   raised       reference raised ValueError: Cannot find a solid on the stack or in the parent chain
+  00522404  failed   bbox_wrong   extents [0.30738, 0.73771, 0.30738] vs reference [0.30738, 0.30738, 0.75]
+  00523882  failed   bbox_wrong   extents [1.95551, 0.96066, 1.0011] vs reference [1.27908, 1.20294, 0.75]
+  00670106  solved   bbox_match   
+  00670259  failed   bbox_wrong   extents [60.0, 60.0, 750.0] vs reference [0.06, 0.75, 0.06]
+  00670441  failed   no_code      the model returned no code
+  00670457  failed   raised       reference raised Standard_ConstructionError: BRepSweep_Translation::Constructor

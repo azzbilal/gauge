@@ -1,0 +1,54 @@
+real-task benchmark  cadtestbench-detailed/tasks.json  (40 CADTestBench tasks, references from CADPrompt)
+candidate ollama:gpt-oss:20b+fewshot5
+generation {"endpoint": "/api/generate", "fewshot": {"example_ids": ["plate-001", "box-001", "bracket-001", "cutout-001", "rounded-001"], "k": 5}, "num_ctx": 16384, "num_predict": 4096, "temperature": 0.0, "think": "medium", "timeout_s": 600.0}
+
+Solve rate (sorted extents within 1%): 17/40 = 42 %  95 % Wilson [29-58 %]   (failed 23, unjudged 0, not run 0)
+  strict X/Y/Z extents within 1%:   15/40 = 38 %  [24-53 %]
+  extents and volume within 2%:   16/40 = 40 %  [26-55 %]
+  built a solid at all:              26/40
+
+Where attempts ended: bbox_match 17, bbox_wrong 9, no_code 12, syntax_error 2
+
+For comparison, synthetic held-out templates: 122/300 = 41 % (extents + hole diameter + hole count (Verifier Pack); a stricter check than the one above).
+
+Per task
+  00000633  solved   bbox_match   
+  00001490  failed   bbox_wrong   extents [0.97298, 0.97298, 0.75] vs reference [1.5, 1.5, 0.48649]
+  00002221  failed   no_code      the model returned no code
+  00003219  solved   bbox_match   
+  00003801  solved   bbox_match   
+  00004154  solved   bbox_match   
+  00004935  solved   bbox_match   
+  00005161  failed   bbox_wrong   extents [0.9863, 0.9863, 0.57791] vs reference [0.38527, 0.38527, 0.75]
+  00005721  failed   no_code      the model returned no code
+  00006892  failed   no_code      the model returned no code
+  00007362  solved   bbox_match   
+  00008315  solved   bbox_match   
+  00008835  solved   bbox_match   
+  00009529  failed   no_code      the model returned no code
+  00009823  solved   bbox_match   
+  00019066  failed   bbox_wrong   extents [0.345, 0.0075, 1.0374] vs reference [0.345, 0.7524, 0.18]
+  00031303  failed   no_code      the model returned no code
+  00031637  solved   bbox_match   
+  00033093  solved   bbox_match   
+  00034239  solved   bbox_match   
+  00034256  failed   no_code      the model returned no code
+  00037276  failed   no_code      the model returned no code
+  00038438  failed   no_code      the model returned no code
+  00039365  solved   bbox_match   
+  00039777  solved   bbox_match   
+  00520150  failed   bbox_wrong   extents [0.75, 0.75, 0.1875] vs reference [0.75, 0.75, 0.75]
+  00520402  failed   no_code      the model returned no code
+  00520638  failed   syntax_error SyntaxError: invalid syntax (line 1)
+  00520675  solved   bbox_match   
+  00520776  failed   bbox_wrong   extents [1.5, 1.5, 0.5715] vs reference [1.5, 1.5, 0.381]
+  00520974  failed   bbox_wrong   extents [0.25, 0.25, 0.5] vs reference [0.75, 0.25, 1.0]
+  00521025  solved   bbox_match   
+  00521230  failed   no_code      the model returned no code
+  00521969  solved   bbox_match   
+  00522404  failed   bbox_wrong   extents [0.30738, 0.73771, 0.30738] vs reference [0.30738, 0.30738, 0.75]
+  00523882  failed   syntax_error SyntaxError: invalid syntax (line 1)
+  00670106  failed   bbox_wrong   extents [0.4409, 3.0, 3.0] vs reference [1.5, 0.4409, 1.5]
+  00670259  failed   bbox_wrong   extents [60.0, 60.0, 750.0] vs reference [0.06, 0.75, 0.06]
+  00670441  failed   no_code      the model returned no code
+  00670457  failed   no_code      the model returned no code
