@@ -256,7 +256,8 @@ class OllamaCandidate:
         return Reply(extract_code(reply["response"]),
                      {"done_reason": reply.get("done_reason"),
                       "eval_count": reply.get("eval_count"),
-                      "prompt_eval_count": reply.get("prompt_eval_count")})
+                      "prompt_eval_count": reply.get("prompt_eval_count"),
+                      "thinking_chars": len(reply.get("thinking") or "")})
 
 
 def ollama_has(model: str, url: str = OLLAMA_URL, timeout: float = 10.0) -> bool:

@@ -1,0 +1,1341 @@
+{
+  "attempted": 40,
+  "built_a_solid": 27,
+  "candidate": "ollama:gpt-oss:20b",
+  "data": "cadtestbench-detailed/tasks.json",
+  "generation": {
+    "endpoint": "/api/generate",
+    "num_ctx": 16384,
+    "num_predict": 4096,
+    "temperature": 0.0,
+    "think": "low",
+    "timeout_s": 600.0
+  },
+  "model": "gpt-oss:20b",
+  "per_task": [
+    {
+      "attempts": [
+        {
+          "bbox_sorted": true,
+          "bbox_xyz": true,
+          "code": "import cadquery as cq\n\n# Dimensions (millimetres)\nlength = 0.75\nwidth  = 0.1875\nheight = 0.00391\nhole_diameter = 0.12512\n\n# Create the rectangular block\nblock = (\n    cq.Workplane(\"XY\")\n    .box(length, width, height, centered=True)\n)\n\n# Create the central circular hole\nhole = (\n    cq.Workplane(\"XY\")\n    .workplane(offset=height/2)  # position at top face\n    .circle(hole_diameter/2)\n    .extrude(-height)  # cut through the block\n)\n\n# Subtract the hole from the block\nresult = block.cut(hole)",
+          "detail": "",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 188,
+            "prompt_eval_count": 180,
+            "thinking_chars": 96
+          },
+          "outcome": "solved",
+          "seconds": 43.3,
+          "size": [
+            0.75,
+            0.1875,
+            0.00391
+          ],
+          "stage": "bbox_match",
+          "truncated": false,
+          "volume": 0.0005017686595293124,
+          "volume_match": true
+        }
+      ],
+      "failed": 0,
+      "family": "cadtestbench",
+      "id": "00000633",
+      "not_run": 0,
+      "solved": 1,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": true,
+          "bbox_xyz": true,
+          "code": "import cadquery as cq\n\n# Parameters (in millimetres)\nheight = 0.48649\nouter_radius = 0.75\ninner_diameter = 0.243243243243244\ninner_radius = inner_diameter / 2\n\n# Create the outer cylinder\nouter = (\n    cq.Workplane(\"XY\")\n    .cylinder(height, outer_radius)\n)\n\n# Create the central cutout cylinder\ninner = (\n    cq.Workplane(\"XY\")\n    .cylinder(height, inner_radius)\n)\n\n# Subtract the inner cylinder from the outer cylinder\nresult = outer.cut(inner)",
+          "detail": "",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 199,
+            "prompt_eval_count": 176,
+            "thinking_chars": 244
+          },
+          "outcome": "solved",
+          "seconds": 9.0,
+          "size": [
+            1.5,
+            1.5,
+            0.48649
+          ],
+          "stage": "bbox_match",
+          "truncated": false,
+          "volume": 0.837091666376399,
+          "volume_match": true
+        }
+      ],
+      "failed": 0,
+      "family": "cadtestbench",
+      "id": "00001490",
+      "not_run": 0,
+      "solved": 1,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": false,
+          "bbox_xyz": false,
+          "code": "import cadquery as cq\n\n# Dimensions (mm)\nlength = 0.0625   # short side\nwidth  = 0.75     # long side\nheight = 0.0034   # extrusion height\n\n# First rectangle (aligned with X axis)\nrect1 = (\n    cq.Workplane(\"XY\")\n    .rect(width, length)   # width along Y, length along X\n    .extrude(height)\n)\n\n# Second rectangle (rotated 90\u00b0 around Z, positioned to share the long edge)\nrect2 = (\n    cq.Workplane(\"XY\")\n    .rect(width, length)\n    .extrude(height)\n    .rotate((0, 0, 0), (0, 0, 1), 90)   # rotate 90\u00b0 about Z\n    .translate((length, 0, 0))          # shift along X to share the long edge\n)\n\n# Combine the two rectangles into a single solid\nresult = rect1.union(rect2)",
+          "detail": "extents [0.75, 0.75, 0.0034] vs reference [0.75, 0.0625, 0.0625]",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 590,
+            "prompt_eval_count": 214,
+            "thinking_chars": 1243
+          },
+          "outcome": "failed",
+          "seconds": 19.2,
+          "size": [
+            0.75,
+            0.75,
+            0.0034
+          ],
+          "stage": "bbox_wrong",
+          "truncated": false,
+          "volume": 0.00030546875,
+          "volume_match": true
+        }
+      ],
+      "failed": 1,
+      "family": "cadtestbench",
+      "id": "00002221",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": true,
+          "bbox_xyz": true,
+          "code": "import cadquery as cq\n\n# Create a long cylinder with the specified dimensions\nresult = (\n    cq.Workplane(\"XY\")\n    .cylinder(height=1.23718, radius=0.27226)\n)",
+          "detail": "",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 82,
+            "prompt_eval_count": 149,
+            "thinking_chars": 94
+          },
+          "outcome": "solved",
+          "seconds": 6.6,
+          "size": [
+            0.54452,
+            0.54452,
+            1.23718
+          ],
+          "stage": "bbox_match",
+          "truncated": false,
+          "volume": 0.2881047666851825,
+          "volume_match": true
+        }
+      ],
+      "failed": 0,
+      "family": "cadtestbench",
+      "id": "00003219",
+      "not_run": 0,
+      "solved": 1,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": true,
+          "bbox_xyz": true,
+          "code": "import cadquery as cq\n\n# Cylinder dimensions (millimetres)\nheight = 0.09494\nouter_diameter = 1.5\nhole_diameter = 0.93038\n\n# Create the outer cylinder\ncylinder = (\n    cq.Workplane(\"XY\")\n    .circle(outer_diameter / 2)\n    .extrude(height)\n)\n\n# Create the central hole\nhole = (\n    cq.Workplane(\"XY\")\n    .circle(hole_diameter / 2)\n    .extrude(height)\n)\n\n# Subtract the hole from the cylinder\nresult = cylinder.cut(hole)",
+          "detail": "",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 232,
+            "prompt_eval_count": 176,
+            "thinking_chars": 280
+          },
+          "outcome": "solved",
+          "seconds": 8.7,
+          "size": [
+            1.5,
+            1.5,
+            0.09494
+          ],
+          "stage": "bbox_match",
+          "truncated": false,
+          "volume": 0.10322823952660276,
+          "volume_match": true
+        }
+      ],
+      "failed": 0,
+      "family": "cadtestbench",
+      "id": "00003801",
+      "not_run": 0,
+      "solved": 1,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": false,
+          "bbox_xyz": false,
+          "code": "import cadquery as cq\n\n# Dimensions (in millimetres)\nlength = 0.70588\nwidth  = 0.40809\nheight = 0.22059\nfillet_radius = 0.08\n\n# Create the box, fillet the vertical edges, and translate so the base is at z = 0\nresult = (\n    cq.Workplane(\"XY\")\n    .box(length, width, height, center=False)\n    .edges(\"|Z\")\n    .fillet(fillet_radius)\n    .translate((0, 0, -height / 2))\n)",
+          "detail": "reference raised TypeError: Workplane.box() got an unexpected keyword argument 'center'",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 413,
+            "prompt_eval_count": 199,
+            "thinking_chars": 1061
+          },
+          "outcome": "failed",
+          "seconds": 12.6,
+          "size": null,
+          "stage": "raised",
+          "truncated": false,
+          "volume": null,
+          "volume_match": false
+        }
+      ],
+      "failed": 1,
+      "family": "cadtestbench",
+      "id": "00004154",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": true,
+          "bbox_xyz": true,
+          "code": "import cadquery as cq\n\n# Base cylinder\nbase = (\n    cq.Workplane(\"XY\")\n    .circle(1.5 / 2)          # radius = diameter / 2\n    .extrude(0.114796)\n)\n\n# Top cylinder\ntop = (\n    cq.Workplane(\"XY\")\n    .circle(1.17857 / 2)\n    .extrude(0.306123)\n    .translate((0, 0, 0.114796))  # move up by base height\n)\n\n# Combine the two cylinders\nresult = base.union(top)",
+          "detail": "",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 159,
+            "prompt_eval_count": 220,
+            "thinking_chars": 97
+          },
+          "outcome": "solved",
+          "seconds": 8.0,
+          "size": [
+            1.5,
+            1.5,
+            0.420919
+          ],
+          "stage": "bbox_match",
+          "truncated": false,
+          "volume": 0.536822933372442,
+          "volume_match": true
+        }
+      ],
+      "failed": 0,
+      "family": "cadtestbench",
+      "id": "00004935",
+      "not_run": 0,
+      "solved": 1,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": false,
+          "bbox_xyz": false,
+          "code": "import cadquery as cq\n\n# First cylinder: base diameter 0.38527 mm, height 0.256849 mm\nfirst = cq.Workplane(\"XY\").cylinder(0.256849, 0.38527)\n\n# Second cylinder: base diameter 0.256849 mm, height 0.493151 mm\nsecond = cq.Workplane(\"XY\").cylinder(0.493151, 0.256849)\n\n# Combine the two cylinders into a single solid\nresult = first.union(second)",
+          "detail": "extents [0.77054, 0.77054, 0.49315] vs reference [0.38527, 0.38527, 0.75]",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 311,
+            "prompt_eval_count": 203,
+            "thinking_chars": 744
+          },
+          "outcome": "failed",
+          "seconds": 10.5,
+          "size": [
+            0.77054,
+            0.77054,
+            0.493151
+          ],
+          "stage": "bbox_wrong",
+          "truncated": false,
+          "volume": 0.16874762245955424,
+          "volume_match": false
+        }
+      ],
+      "failed": 1,
+      "family": "cadtestbench",
+      "id": "00005161",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": true,
+          "bbox_xyz": false,
+          "code": "import cadquery as cq\n\n# Triangle dimensions (in mm)\nbase_length   = 1.5          # length of the base\nheight        = 0.73113      # vertical height from base to apex\nextrude_depth = 0.00472      # extrusion depth\n\n# Coordinates of the triangle vertices (centered at origin, apex pointing up)\np1 = (-base_length/2, -height/2)   # left base corner\np2 = ( base_length/2, -height/2)   # right base corner\np3 = (0, height/2)                 # apex\n\n# Create the 2\u2011D triangle and extrude it\ntriangle_2d = cq.Workplane(\"XY\").polyline([p1, p2, p3]).close()\nresult = triangle_2d.extrude(extrude_depth)",
+          "detail": "",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 397,
+            "prompt_eval_count": 184,
+            "thinking_chars": 680
+          },
+          "outcome": "solved",
+          "seconds": 12.3,
+          "size": [
+            1.5,
+            0.73113,
+            0.00472
+          ],
+          "stage": "bbox_match",
+          "truncated": false,
+          "volume": 0.0025882002000000006,
+          "volume_match": true
+        }
+      ],
+      "failed": 0,
+      "family": "cadtestbench",
+      "id": "00005721",
+      "not_run": 0,
+      "solved": 1,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": true,
+          "bbox_xyz": true,
+          "code": "import cadquery as cq\n\n# Dimensions (mm)\nlength = 1.5\nwidth  = 0.52105\nheight = 0.15789\n\n# Semi\u2011circle parameters\ndiameter = 1.701232\nradius   = diameter / 2.0\n\n# Base rectangular prism\nprism = (\n    cq.Workplane(\"XY\")\n    .box(length, width, height, centered=True)\n)\n\n# Half\u2011cylinder to cut out (centered on the middle of the long face)\nhalf_cyl = (\n    cq.Workplane(\"XY\")\n    .center(length/2, 0)          # center at the middle of the long face\n    .circle(radius)\n    .extrude(height)\n    .cut(cq.Workplane(\"XY\").center(length/2, 0).rect(2*radius, 2*radius).extrude(height).faces(\">Y\").workplane().split(keepTop=True))\n)\n\n# Subtract the half\u2011cylinder from the prism\nresult = prism.cut(half_cyl)",
+          "detail": "",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 593,
+            "prompt_eval_count": 239,
+            "thinking_chars": 1369
+          },
+          "outcome": "solved",
+          "seconds": 15.7,
+          "size": [
+            1.5,
+            0.5210500000000011,
+            0.15789
+          ],
+          "stage": "bbox_match",
+          "truncated": false,
+          "volume": 0.08896839595545548,
+          "volume_match": false
+        }
+      ],
+      "failed": 0,
+      "family": "cadtestbench",
+      "id": "00006892",
+      "not_run": 0,
+      "solved": 1,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": true,
+          "bbox_xyz": true,
+          "code": "import cadquery as cq\n\n# Dimensions in millimetres\nlength = 0.75\nwidth  = 0.06429\nheight = 0.03929\n\n# Create a rectangular prism centered at the origin\nresult = (\n    cq.Workplane(\"XY\")\n    .box(length, width, height, centered=True)\n)",
+          "detail": "",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 125,
+            "prompt_eval_count": 177,
+            "thinking_chars": 171
+          },
+          "outcome": "solved",
+          "seconds": 7.1,
+          "size": [
+            0.75,
+            0.06429,
+            0.03929
+          ],
+          "stage": "bbox_match",
+          "truncated": false,
+          "volume": 0.001894465575,
+          "volume_match": true
+        }
+      ],
+      "failed": 0,
+      "family": "cadtestbench",
+      "id": "00007362",
+      "not_run": 0,
+      "solved": 1,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": true,
+          "bbox_xyz": true,
+          "code": "import cadquery as cq\n\n# Dimensions in millimetres\nlength = 0.75\nwidth  = 0.0075\nheight = 0.075\n\n# Create a rectangular prism centered at the origin\nresult = (\n    cq.Workplane(\"XY\")\n    .box(length, width, height, centered=True)\n)",
+          "detail": "",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 133,
+            "prompt_eval_count": 176,
+            "thinking_chars": 174
+          },
+          "outcome": "solved",
+          "seconds": 7.5,
+          "size": [
+            0.75,
+            0.0075,
+            0.075
+          ],
+          "stage": "bbox_match",
+          "truncated": false,
+          "volume": 0.00042187499999999983,
+          "volume_match": true
+        }
+      ],
+      "failed": 0,
+      "family": "cadtestbench",
+      "id": "00008315",
+      "not_run": 0,
+      "solved": 1,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": true,
+          "bbox_xyz": true,
+          "code": "import cadquery as cq\n\n# Create a square of side 0.02812\u202fmm and extrude it by 0.75\u202fmm\nresult = (\n    cq.Workplane(\"XY\")\n    .rect(0.02812, 0.02812)\n    .extrude(0.75)\n)",
+          "detail": "",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 151,
+            "prompt_eval_count": 155,
+            "thinking_chars": 216
+          },
+          "outcome": "solved",
+          "seconds": 8.3,
+          "size": [
+            0.02812,
+            0.02812,
+            0.75
+          ],
+          "stage": "bbox_match",
+          "truncated": false,
+          "volume": 0.0005930507999999999,
+          "volume_match": true
+        }
+      ],
+      "failed": 0,
+      "family": "cadtestbench",
+      "id": "00008835",
+      "not_run": 0,
+      "solved": 1,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": false,
+          "bbox_xyz": false,
+          "code": "import cadquery as cq\n\n# Base rectangle\nrect = (\n    cq.Workplane(\"XY\")\n    .rect(1.5, 0.55102)          # length, width\n    .extrude(0.08347)            # extrusion height\n)\n\n# Left square\nleft_square = (\n    cq.Workplane(\"XY\")\n    .rect(0.331633, 0.331633)    # square dimensions\n    .extrude(0.127551)           # extrusion height\n    .translate((-0.5841835, 0, 0))  # position: left edge of rectangle\n)\n\n# Right square\nright_square = (\n    cq.Workplane(\"XY\")\n    .rect(0.438776, 0.438776)    # square dimensions\n    .extrude(0.280162)           # extrusion height\n    .translate((0.530612, 0, 0))   # position: right edge of rectangle\n)\n\n# Combine all parts\nresult = rect.union(left_square).union(right_square)",
+          "detail": "extents [1.5, 0.55102, 0.28016] vs reference [1.5, 0.55102, 0.36363]",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 705,
+            "prompt_eval_count": 321,
+            "thinking_chars": 1355
+          },
+          "outcome": "failed",
+          "seconds": 17.8,
+          "size": [
+            1.5,
+            0.55102,
+            0.280162
+          ],
+          "stage": "bbox_wrong",
+          "truncated": false,
+          "volume": 0.11170651216269163,
+          "volume_match": false
+        }
+      ],
+      "failed": 1,
+      "family": "cadtestbench",
+      "id": "00009529",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": true,
+          "bbox_xyz": true,
+          "code": "import cadquery as cq\n\n# Create a regular hexagon with side length 1.5 mm\nhexagon = cq.Workplane(\"XY\").polygon(6, 1.5)\n\n# Extrude the hexagon to a height of 0.016238 mm\nresult = hexagon.extrude(0.016238)",
+          "detail": "",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 143,
+            "prompt_eval_count": 161,
+            "thinking_chars": 194
+          },
+          "outcome": "solved",
+          "seconds": 7.1,
+          "size": [
+            1.5,
+            1.2990381056766582,
+            0.016238
+          ],
+          "stage": "bbox_match",
+          "truncated": false,
+          "volume": 0.023730503354974765,
+          "volume_match": true
+        }
+      ],
+      "failed": 0,
+      "family": "cadtestbench",
+      "id": "00009823",
+      "not_run": 0,
+      "solved": 1,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": false,
+          "bbox_xyz": false,
+          "code": "import cadquery as cq\n\n# Base rectangle dimensions (mm)\nrect_length = 0.345      # length (x\u2011direction)\nrect_width  = 0.0024     # width  (y\u2011direction)\nrect_thickness = 0.002   # extrusion thickness (z\u2011direction)\n\n# Create the base extruded rectangle\nbase = (\n    cq.Workplane(\"XY\")\n    .rect(rect_length, rect_width)\n    .extrude(rect_thickness)\n)\n\n# Rod dimensions (mm)\nrod_length = 0.00375   # x\u2011direction\nrod_depth  = 0.0075    # y\u2011direction\nrod_height = 0.75      # z\u2011direction (height)\n\n# Position the rod at one corner of the base rectangle\n# The rod is placed so that its base sits on the top face of the base\nrod = (\n    cq.Workplane(\"XY\")\n    .rect(rod_length, rod_depth)\n    .extrude(rod_height)\n    .translate((rect_length/2 - rod_length/2, rect_width/2 - rod_depth/2, rect_thickness))\n)\n\n# Combine the base and the rod\nresult = base.union(rod)",
+          "detail": "extents [0.345, 0.0075, 0.752] vs reference [0.345, 0.7524, 0.18]",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 646,
+            "prompt_eval_count": 229,
+            "thinking_chars": 1182
+          },
+          "outcome": "failed",
+          "seconds": 17.1,
+          "size": [
+            0.345,
+            0.0075,
+            0.752
+          ],
+          "stage": "bbox_wrong",
+          "truncated": false,
+          "volume": 2.2749749999999824e-05,
+          "volume_match": false
+        }
+      ],
+      "failed": 1,
+      "family": "cadtestbench",
+      "id": "00019066",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": false,
+          "bbox_xyz": false,
+          "code": "import cadquery as cq\n\n# Dimensions (millimetres)\nrect_len = 0.75\nrect_wid = 0.75\nsemi_dia = 0.75\nsemi_rad = semi_dia / 2\nextrude_h = 0.16071\ncut_dia = 0.267857\ncut_rad = cut_dia / 2\n\n# Create the U\u2011shaped base\nbase = (\n    cq.Workplane(\"XY\")\n    .rect(rect_len, rect_wid)\n    .circle(semi_rad)\n    .cutThruAll()          # remove the lower half of the circle\n    .extrude(extrude_h)\n)\n\n# Create the cylindrical cutout at the centre of the semicircle\ncut = (\n    cq.Workplane(\"XY\")\n    .center(semi_rad, 0)   # centre of the semicircle\n    .circle(cut_rad)\n    .extrude(extrude_h)\n)\n\n# Subtract the cutout from the base\nresult = base.cut(cut)",
+          "detail": "reference raised ValueError: Cannot find a solid on the stack or in the parent chain",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 319,
+            "prompt_eval_count": 257,
+            "thinking_chars": 273
+          },
+          "outcome": "failed",
+          "seconds": 10.3,
+          "size": null,
+          "stage": "raised",
+          "truncated": false,
+          "volume": null,
+          "volume_match": false
+        }
+      ],
+      "failed": 1,
+      "family": "cadtestbench",
+      "id": "00031303",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": true,
+          "bbox_xyz": true,
+          "code": "import cadquery as cq\n\n# Original dimensions (in mm)\nlength = 1.05964\nwidth  = 0.56859\nheight = 0.26362\n\n# Small cut\u2011out dimensions\nsmall_length = length / 4          # 0.206758\nsmall_width  = width               # same as original\nsmall_height = height * 3 / 4      # 0.186082\n\n# Create the main rectangular prism\nmain = (\n    cq.Workplane(\"XY\")\n    .box(length, width, height)\n)\n\n# Position the small prism so its left face is flush with the right face of the main prism\n# Main prism is centered at the origin, so its right face is at +length/2.\n# The small prism's center x-coordinate should be:\n#   +length/2 - small_length/2\noffset_x = length / 2 - small_length / 2\n\nsmall = (\n    cq.Workplane(\"XY\")\n    .box(small_length, small_width, small_height)\n    .translate((offset_x, 0, 0))\n)\n\n# Subtract the small prism from the main prism\nresult = main.cut(small)",
+          "detail": "",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 442,
+            "prompt_eval_count": 231,
+            "thinking_chars": 700
+          },
+          "outcome": "solved",
+          "seconds": 13.1,
+          "size": [
+            1.05964,
+            0.56859,
+            0.26362
+          ],
+          "stage": "bbox_match",
+          "truncated": false,
+          "volume": 0.12905037968672853,
+          "volume_match": false
+        }
+      ],
+      "failed": 0,
+      "family": "cadtestbench",
+      "id": "00031637",
+      "not_run": 0,
+      "solved": 1,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": true,
+          "bbox_xyz": true,
+          "code": "import cadquery as cq\n\n# Plate dimensions (mm)\nlength = 1.16102\nwidth  = 0.0729\nheight = 1.5\n\n# Hole parameters\nhole_dia = 0.072899\nhole_rad = hole_dia / 2\n\n# Hole positions\n# Left hole: 0.252909 mm from left edge\nx_left = 0.252909\n# Right hole: 0.127776 mm from right edge\nx_right = length - 0.127776\n# Both holes: 0.595655 mm from top edge (along the length direction)\ny_hole = 0.595655\n\n# Create the plate\nplate = (\n    cq.Workplane(\"XY\")\n    .box(length, width, height, centered=True)\n)\n\n# Cut the holes through the entire height\nresult = (\n    plate\n    .faces(\">Z\")  # top face\n    .workplane()\n    .pushPoints([(x_left, y_hole), (x_right, y_hole)])\n    .hole(hole_dia, depth=height + 1)  # depth > height to ensure full cut\n)",
+          "detail": "",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 1454,
+            "prompt_eval_count": 256,
+            "thinking_chars": 4447
+          },
+          "outcome": "solved",
+          "seconds": 31.8,
+          "size": [
+            1.16102,
+            0.0729,
+            1.5
+          ],
+          "stage": "bbox_match",
+          "truncated": false,
+          "volume": 0.12695753699999998,
+          "volume_match": true
+        }
+      ],
+      "failed": 0,
+      "family": "cadtestbench",
+      "id": "00033093",
+      "not_run": 0,
+      "solved": 1,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": false,
+          "bbox_xyz": false,
+          "code": "import cadquery as cq\n\n# Base rectangular prism\nresult = (\n    cq.Workplane(\"XY\")\n    .box(1.5, 1.2, 0.15, centered=True)\n    # Large central hole\n    .workplane()\n    .center(0, 0)\n    .hole(0.675, depth=0.15, centered=True)\n    # Small left hole\n    .workplane()\n    .center(-0.6186, 0)\n    .hole(0.1968, depth=0.15)\n    # Small right hole\n    .workplane()\n    .center(0.6186, 0)\n    .hole(0.1968, depth=0.15)\n)",
+          "detail": "reference raised TypeError: Workplane.hole() got an unexpected keyword argument 'centered'",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 577,
+            "prompt_eval_count": 228,
+            "thinking_chars": 1249
+          },
+          "outcome": "failed",
+          "seconds": 20.3,
+          "size": null,
+          "stage": "raised",
+          "truncated": false,
+          "volume": null,
+          "volume_match": false
+        }
+      ],
+      "failed": 1,
+      "family": "cadtestbench",
+      "id": "00034239",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": false,
+          "bbox_xyz": false,
+          "code": "import cadquery as cq\n\n# Base dimensions (mm)\nbase_length = 0.75\nbase_width  = 0.30\nbase_height = 0.15\n\n# Additional height for the clamping part\nclamp_height = 0.45\n\n# Create the U\u2011shaped profile\nu_profile = (\n    cq.Workplane(\"XY\")\n    # Outer rectangle\n    .rect(base_length, base_width)\n    .extrude(0)  # keep as 2D sketch\n    # Cut out the inner rectangle to form the U\n    .rect(base_length - 0.15, base_width - 0.15)  # 0.15 mm clearance on each side\n    .cutThruAll()\n)\n\n# Extrude the U\u2011shape to the base height\nbase = u_profile.extrude(base_height)\n\n# Create the top clamp rectangle (wider than the U by 0.45 mm)\nclamp_width = base_width + 0.45\nclamp_length = base_length  # same as base length\n\nclamp = (\n    cq.Workplane(\"XY\")\n    .rect(clamp_length, clamp_width)\n    .extrude(clamp_height - base_height)  # additional height above the base\n    .translate((0, 0, base_height))  # position it on top of the base\n)\n\n# Combine the base and the clamp\nresult = base.union(clamp)",
+          "detail": "reference raised Standard_ConstructionError: BRepSweep_Translation::Constructor",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 500,
+            "prompt_eval_count": 261,
+            "thinking_chars": 608
+          },
+          "outcome": "failed",
+          "seconds": 22.6,
+          "size": null,
+          "stage": "raised",
+          "truncated": false,
+          "volume": null,
+          "volume_match": false
+        }
+      ],
+      "failed": 1,
+      "family": "cadtestbench",
+      "id": "00034256",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": false,
+          "bbox_xyz": false,
+          "code": "import cadquery as cq\nimport math\n\n# Radii (in mm)\nr1 = 0.485133 / 2          # large circle radius\nr2 = 0.157385 / 2          # small circle radius\n\n# Distance between centers\ntotal_length = 0.993343\nd = total_length - (r1 + r2)\n\n# Angle for external tangent\nalpha = math.acos((r1 - r2) / d)\n\n# Tangent points on the large circle\npt1 = (r1 * math.cos(alpha),  r1 * math.sin(alpha))\npt4 = (r1 * math.cos(alpha), -r1 * math.sin(alpha))\n\n# Tangent points on the small circle\npt2 = (d - r2 * math.cos(alpha),  r2 * math.sin(alpha))\npt3 = (d - r2 * math.cos(alpha), -r2 * math.sin(alpha))\n\n# Build the 2\u2011D sketch\nsketch = (\n    cq.Workplane(\"XY\")\n    .circle(r1)          # large circle\n    .circle(r2)          # small circle\n    .moveTo(*pt1)        # start at first tangent point on large circle\n    .lineTo(*pt2)        # line to tangent point on small circle\n    .lineTo(*pt3)        # line to opposite tangent point on small circle\n    .lineTo(*pt4)        # line back to opposite tangent point on large circle\n    .close()             # close the shape\n)\n\n# Extrude to create the 3\u2011D object\nresult = sketch.extrude(0.243343)",
+          "detail": "extents [0.89546, 0.48513, 0.24334] vs reference [0.99334, 0.24334, 0.48513]",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 820,
+            "prompt_eval_count": 259,
+            "thinking_chars": 1538
+          },
+          "outcome": "failed",
+          "seconds": 21.1,
+          "size": [
+            0.8954629360273418,
+            0.48513300000000004,
+            0.243343
+          ],
+          "stage": "bbox_wrong",
+          "truncated": false,
+          "volume": 0.07002362342756824,
+          "volume_match": false
+        }
+      ],
+      "failed": 1,
+      "family": "cadtestbench",
+      "id": "00037276",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": false,
+          "bbox_xyz": false,
+          "code": "import cadquery as cq\n\n# Diagonals of the rhombus\ndiag_long = 0.375      # mm\ndiag_short = 0.11438   # mm\n\n# Half\u2011diagonals\nhx = diag_long / 2\nhy = diag_short / 2\n\n# Define the four vertices of the rhombus\nvertices = [\n    ( hx,  0.0),\n    ( 0.0, hy),\n    (-hx,  0.0),\n    ( 0.0,-hy)\n]\n\n# Create the 2\u2011D rhombus and extrude to 0.75\u202fmm height\nresult = (\n    cq.Workplane(\"XY\")\n      .polygon(vertices)\n      .extrude(0.75)\n)",
+          "detail": "reference raised TypeError: Workplane.polygon() missing 1 required positional argument: 'diameter'",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 1042,
+            "prompt_eval_count": 164,
+            "thinking_chars": 3331
+          },
+          "outcome": "failed",
+          "seconds": 29.8,
+          "size": null,
+          "stage": "raised",
+          "truncated": false,
+          "volume": null,
+          "volume_match": false
+        }
+      ],
+      "failed": 1,
+      "family": "cadtestbench",
+      "id": "00038438",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": true,
+          "bbox_xyz": false,
+          "code": "import cadquery as cq\n\n# Parallelogram vertices (in mm)\np1 = (0.6147, 0.0)\np2 = (1.500795, 0.0)\np3 = (0.886095, 0.354438)\np4 = (0.0, 0.354438)\n\n# Height of the extruded parallelogram\nheight = 0.425326\n\n# Create the parallelogram sketch and extrude\nparallelogram = (\n    cq.Workplane(\"XY\")\n    .polyline([p1, p2, p3, p4])\n    .close()\n    .extrude(height)\n)\n\n# Square hole dimensions (in mm)\nsquare_w = 0.306589\nsquare_h = 0.25874\n\n# Center of the parallelogram (average of vertices)\ncenter_x = (p1[0] + p2[0] + p3[0] + p4[0]) / 4\ncenter_y = (p1[1] + p2[1] + p3[1] + p4[1]) / 4\n\n# Create the square hole and extrude it through the entire height\nsquare_hole = (\n    cq.Workplane(\"XY\")\n    .center(center_x, center_y)\n    .rect(square_w, square_h)\n    .extrude(height)\n)\n\n# Subtract the square hole from the parallelogram\nresult = parallelogram.cut(square_hole)",
+          "detail": "",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 606,
+            "prompt_eval_count": 276,
+            "thinking_chars": 865
+          },
+          "outcome": "solved",
+          "seconds": 17.4,
+          "size": [
+            1.500795,
+            0.354438,
+            0.425326
+          ],
+          "stage": "bbox_match",
+          "truncated": false,
+          "volume": 0.09984055812572049,
+          "volume_match": true
+        }
+      ],
+      "failed": 0,
+      "family": "cadtestbench",
+      "id": "00039365",
+      "not_run": 0,
+      "solved": 1,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": true,
+          "bbox_xyz": false,
+          "code": "import cadquery as cq\nimport math\n\n# Define the vertices of the pentagon-like shape (in mm)\npts = [\n    (0.0, 0.0),\n    (0.725228, 0.0),\n    (0.932436, 0.725228/4 + 0.0155),\n    (1.05676, 0.725228/2),\n    (0.932436, 0.725228 - (0.725228/4 + 0.0155)),\n    (0.725228, 0.725228),\n    (0.0, 0.725228)\n]\n\n# Create the 2\u2011D profile\nprofile = cq.Workplane(\"XY\").polyline(pts).close()\n\n# Extrude to the specified height (in mm)\nheight = 0.103604\nsolid = profile.extrude(height)\n\n# Optional: translate and rotate for proper orientation\n# (example: rotate 90\u00b0 about the X\u2011axis and translate by (10, 20, 0))\nsolid = solid.rotate((0, 0, 0), (1, 0, 0), 90).translate((10, 20, 0))\n\n# Assign the final solid to the variable `result`\nresult = solid",
+          "detail": "",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 329,
+            "prompt_eval_count": 326,
+            "thinking_chars": 180
+          },
+          "outcome": "solved",
+          "seconds": 10.9,
+          "size": [
+            1.0567600000000006,
+            0.1036040000000007,
+            0.725228
+          ],
+          "stage": "bbox_match",
+          "truncated": false,
+          "volume": 0.0679706992520722,
+          "volume_match": true
+        }
+      ],
+      "failed": 0,
+      "family": "cadtestbench",
+      "id": "00039777",
+      "not_run": 0,
+      "solved": 1,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": false,
+          "bbox_xyz": false,
+          "code": "import cadquery as cq\n\n# 2\u2011D L\u2011shaped profile (in the XY plane)\n# Horizontal bar: 0.75\u202fmm long, 0.1875\u202fmm thick\n# Vertical bar: 0.75\u202fmm long, 0.1875\u202fmm thick\n# The bars overlap at the corner to form an L shape\n\nprofile = (\n    cq.Workplane(\"XY\")\n    .rect(0.75, 0.1875)          # horizontal bar\n    .translate((0, 0.1875, 0))   # move it up so it overlaps at the corner\n    .rect(0.1875, 0.75)          # vertical bar\n    .translate((0.5625, 0, 0))   # move it right so it overlaps at the corner\n    .union()                     # combine the two rectangles\n)\n\n# Extrude the 2\u2011D profile to give the part a height of 0.1875\u202fmm\nresult = profile.extrude(0.1875)",
+          "detail": "reference raised IndexError: list index out of range",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 464,
+            "prompt_eval_count": 167,
+            "thinking_chars": 692
+          },
+          "outcome": "failed",
+          "seconds": 13.8,
+          "size": null,
+          "stage": "raised",
+          "truncated": false,
+          "volume": null,
+          "volume_match": false
+        }
+      ],
+      "failed": 1,
+      "family": "cadtestbench",
+      "id": "00520150",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": false,
+          "bbox_xyz": false,
+          "code": "import cadquery as cq\n\n# Dimensions (in millimetres)\nheight          = 0.75\nouter_diameter  = 0.078575\ninner_diameter  = 0.058318\ncut_diameter    = 0.078654\n\n# Create the hollow cylinder\nouter_radius = outer_diameter / 2\ninner_radius = inner_diameter / 2\ncylinder = (\n    cq.Workplane(\"XY\")\n    .circle(outer_radius)\n    .extrude(height)\n    .faces(\">Z\")\n    .workplane()\n    .hole(inner_radius * 2, height)  # subtract inner cylinder\n)\n\n# Create the semi\u2011circular cut\n# Start with a full cylinder of the cut diameter\ncut_cylinder = (\n    cq.Workplane(\"XY\")\n    .circle(cut_diameter / 2)\n    .extrude(height)\n)\n\n# Cut the cylinder in half by a vertical plane\nhalf_cut = (\n    cut_cylinder\n    .faces(\">Z\")\n    .workplane()\n    .split(keepOriginal=False, keepBottom=True)  # keep one half\n)\n\n# Position the cut at the centre of the main cylinder\nhalf_cut = half_cut.translate((0, 0, 0))\n\n# Subtract the half\u2011cylinder from the main cylinder\nresult = cylinder.cut(half_cut)",
+          "detail": "reference raised TypeError: got an unexpected keyword argument 'keepOriginal'",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 428,
+            "prompt_eval_count": 213,
+            "thinking_chars": 523
+          },
+          "outcome": "failed",
+          "seconds": 12.2,
+          "size": null,
+          "stage": "raised",
+          "truncated": false,
+          "volume": null,
+          "volume_match": false
+        }
+      ],
+      "failed": 1,
+      "family": "cadtestbench",
+      "id": "00520402",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": false,
+          "bbox_xyz": false,
+          "code": "import cadquery as cq\n\n# Base dimensions (in mm)\nbase_len = 1.10769\nbase_wid = 0.474725\nbase_hgt = 0.18989\n\n# Cylinder dimensions\ncyl_dia = base_len / 2          # ~0.553845\ncyl_hgt = base_wid              # 0.474725\n\n# Connector box dimensions\nconn_dia = cyl_dia\nconn_hgt = cyl_hgt / 2          # 0.2373625\n\n# Inner cutout dimensions\ninner_dia = 0.194358\ninner_box_size = inner_dia\n\n# Arm polyline points (in mm)\narm_pts = [\n    (0, 0.316484),\n    (-0.056, 0.483119),\n    (base_len / 2, 0.613244),\n    (base_len / 2, 0.434708)\n]\n\n# ---------- Build the base ----------\nbase = (\n    cq.Workplane(\"XY\")\n    .box(base_len, base_wid, base_hgt, centered=True)\n)\n\n# ---------- Add the top cylinder ----------\ncyl = (\n    cq.Workplane(\"XY\")\n    .center(0, 0, base_hgt / 2)  # center at top of base\n    .circle(cyl_dia / 2)\n    .extrude(cyl_hgt, combine=True)\n)\n\n# ---------- Add the connector box ----------\nconn = (\n    cq.Workplane(\"XY\")\n    .center(0, 0, base_hgt + cyl_hgt / 2)  # center on top of cylinder\n    .box(conn_dia, conn_dia, conn_hgt, centered=True)\n)\n\n# ---------- Subtract inner cylinder ----------\ninner_cyl = (\n    cq.Workplane(\"XY\")\n    .center(0, 0, base_hgt + cyl_hgt / 2)\n    .circle(inner_dia / 2)\n    .extrude(cyl_hgt + conn_hgt + base_hgt, combine=True)\n)\n\n# ---------- Subtract inner box ----------\ninner_box = (\n    cq.Workplane(\"XY\")\n    .center(0, 0, base_hgt + cyl_hgt / 2)\n    .box(inner_box_size, inner_box_size, cyl_hgt + conn_hgt + base_hgt, centered=True)\n)\n\n# ---------- Assemble the main body ----------\nbody = (\n    base\n    .union(cyl)\n    .union(conn)\n    .cut(inner_cyl)\n    .cut(inner_box)\n)\n\n# ---------- Create the arm ----------\narm_profile = (\n    cq.Workplane(\"XY\")\n    .polyline(arm_pts)\n    .close()\n    .extrude(base_wid, combine=True)\n)\n\n# ---------- Position the arm ----------\narm = (\n    arm_profile\n    .translate((0, 0, base_hgt + cyl_hgt + conn_hgt / 2))\n)\n\n# ---------- Final assembly ----------\nresult = body.union(arm)",
+          "detail": "reference raised TypeError: Workplane.center() takes 3 positional arguments but 4 were given",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 659,
+            "prompt_eval_count": 378,
+            "thinking_chars": 81
+          },
+          "outcome": "failed",
+          "seconds": 16.5,
+          "size": null,
+          "stage": "raised",
+          "truncated": false,
+          "volume": null,
+          "volume_match": false
+        }
+      ],
+      "failed": 1,
+      "family": "cadtestbench",
+      "id": "00520638",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": false,
+          "bbox_xyz": false,
+          "code": "import cadquery as cq\n\n# Create a cylinder of height 0.6 mm and diameter 1.5 mm\ncyl = (\n    cq.Workplane(\"XY\")\n    .cylinder(0.6, 0.75)          # radius = diameter/2\n)\n\n# Shell the top face inward by 0.075 mm\n# Select the top face with the >Z normal\nresult = (\n    cyl\n    .shell(0.075, faces=\">Z\")\n    .translate((0, 0, 0))        # base centered at the origin\n)",
+          "detail": "reference raised TypeError: Workplane.shell() got an unexpected keyword argument 'faces'",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 417,
+            "prompt_eval_count": 178,
+            "thinking_chars": 1063
+          },
+          "outcome": "failed",
+          "seconds": 12.1,
+          "size": null,
+          "stage": "raised",
+          "truncated": false,
+          "volume": null,
+          "volume_match": false
+        }
+      ],
+      "failed": 1,
+      "family": "cadtestbench",
+      "id": "00520675",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": true,
+          "bbox_xyz": true,
+          "code": "import cadquery as cq\n\n# Outer cylinder\nouter_diameter = 1.5\nouter_radius = outer_diameter / 2\nheight = 0.381001\n\n# Hole\nhole_diameter = 0.060198\nhole_radius = hole_diameter / 2\n\n# Create the outer cylinder\nresult = (\n    cq.Workplane(\"XY\")\n    .circle(outer_radius)\n    .extrude(height)\n    .faces(\">Z\")\n    .workplane()\n    .circle(hole_radius)\n    .cutThruAll()\n)",
+          "detail": "",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 145,
+            "prompt_eval_count": 218,
+            "thinking_chars": 67
+          },
+          "outcome": "solved",
+          "seconds": 7.0,
+          "size": [
+            1.5,
+            1.5,
+            0.381001
+          ],
+          "stage": "bbox_match",
+          "truncated": false,
+          "volume": 0.6721999661560154,
+          "volume_match": true
+        }
+      ],
+      "failed": 0,
+      "family": "cadtestbench",
+      "id": "00520776",
+      "not_run": 0,
+      "solved": 1,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": false,
+          "bbox_xyz": false,
+          "code": "import cadquery as cq\n\nresult = (\n    cq.Workplane(\"XY\")\n    .rect(0.25, 0.25)   # square 0.25\u202fmm \u00d7 0.25\u202fmm\n    .extrude(0.5)       # extrude to 0.5\u202fmm height\n)",
+          "detail": "extents [0.25, 0.25, 0.5] vs reference [0.75, 0.25, 1.0]",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 150,
+            "prompt_eval_count": 150,
+            "thinking_chars": 191
+          },
+          "outcome": "failed",
+          "seconds": 7.1,
+          "size": [
+            0.25,
+            0.25,
+            0.5
+          ],
+          "stage": "bbox_wrong",
+          "truncated": false,
+          "volume": 0.031249999999999993,
+          "volume_match": false
+        }
+      ],
+      "failed": 1,
+      "family": "cadtestbench",
+      "id": "00520974",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": false,
+          "bbox_xyz": false,
+          "code": "import cadquery as cq\n\n# Base dimensions (mm)\nlength = 1.0\nwidth  = 0.1\nheight = 1.25\n\n# Create the rectangular prism\nbase = (\n    cq.Workplane(\"XY\")\n    .rect(length, width)\n    .extrude(height)\n)\n\n# Slight extrusion (optional)\nextruded = base.extrude(0.01)\n\n# Hole dimensions (mm)\nhole_length = 0.5\nhole_width  = 0.1\nhole_height = 0.075\nbottom_padding = 0.25\n\n# Create the hole\nhole = (\n    cq.Workplane(\"XY\")\n    .rect(hole_length, hole_width)\n    .extrude(hole_height)\n    .translate((length/2, 0, bottom_padding))\n)\n\n# Subtract the hole from the prism\nresult = extruded.cut(hole)\n\n# Translate the whole part for better visualization\nresult = result.translate((0, 0, 0.5))",
+          "detail": "reference raised ValueError: No pending wires present",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 429,
+            "prompt_eval_count": 259,
+            "thinking_chars": 639
+          },
+          "outcome": "failed",
+          "seconds": 12.2,
+          "size": null,
+          "stage": "raised",
+          "truncated": false,
+          "volume": null,
+          "volume_match": false
+        }
+      ],
+      "failed": 1,
+      "family": "cadtestbench",
+      "id": "00521025",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": true,
+          "bbox_xyz": true,
+          "code": "import cadquery as cq\n\n# Dimensions (millimetres)\ncyl_diameter = 0.02262\ncyl_height   = 0.75\nhole_diameter = 0.015476\n\n# Create the main cylinder\ncylinder = (\n    cq.Workplane(\"XY\")\n    .circle(cyl_diameter / 2)\n    .extrude(cyl_height)\n)\n\n# Hole positions along the cylinder axis (from the bottom)\nhole_z_bottom1 = 0.06399          # 0.06399 mm from bottom edge\nhole_z_bottom2 = 0.123228         # 0.123228 mm from bottom edge\nhole_z_top     = cyl_height - 0.004167  # 0.004167 mm from top edge\n\n# Create the holes\nhole1 = (\n    cq.Workplane(\"XY\")\n    .circle(hole_diameter / 2)\n    .extrude(cyl_height + 2)  # extra length to ensure full cut\n    .translate((0, 0, hole_z_bottom1))\n)\n\nhole2 = (\n    cq.Workplane(\"XY\")\n    .circle(hole_diameter / 2)\n    .extrude(cyl_height + 2)\n    .translate((0, 0, hole_z_bottom2))\n)\n\nhole3 = (\n    cq.Workplane(\"XY\")\n    .circle(hole_diameter / 2)\n    .extrude(cyl_height + 2)\n    .translate((0, 0, hole_z_top))\n)\n\n# Subtract the holes from the cylinder\nresult = (\n    cylinder\n    .cut(hole1)\n    .cut(hole2)\n    .cut(hole3)\n    .rotate((0, 0, 0), (1, 0, 0), 90)  # rotate 90\u00b0 about X to lay horizontal\n)",
+          "detail": "",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 600,
+            "prompt_eval_count": 248,
+            "thinking_chars": 688
+          },
+          "outcome": "solved",
+          "seconds": 15.4,
+          "size": [
+            0.02262,
+            0.75,
+            0.022620000000000084
+          ],
+          "stage": "bbox_match",
+          "truncated": false,
+          "volume": 0.0001723512238570041,
+          "volume_match": false
+        }
+      ],
+      "failed": 0,
+      "family": "cadtestbench",
+      "id": "00521230",
+      "not_run": 0,
+      "solved": 1,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": true,
+          "bbox_xyz": true,
+          "code": "import cadquery as cq\n\n# Dimensions (millimetres)\nlength = 0.74999\nwidth  = 0.73843\nheight = 0.11078\nfillet_radius = 0.038\n\n# Create a rounded square base and extrude it\nresult = (\n    cq.Workplane(\"XY\")\n    .rect(length, width)\n    .extrude(height)\n    .fillet(fillet_radius)\n)",
+          "detail": "",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 189,
+            "prompt_eval_count": 178,
+            "thinking_chars": 338
+          },
+          "outcome": "solved",
+          "seconds": 8.1,
+          "size": [
+            0.74999,
+            0.73843,
+            0.11078000000000002
+          ],
+          "stage": "bbox_match",
+          "truncated": false,
+          "volume": 0.059442852279856816,
+          "volume_match": false
+        }
+      ],
+      "failed": 0,
+      "family": "cadtestbench",
+      "id": "00521969",
+      "not_run": 0,
+      "solved": 1,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": false,
+          "bbox_xyz": false,
+          "code": "import cadquery as cq\n\n# Base square on the X\u2011Z plane, extruded along Y\nbase = (\n    cq.Workplane(\"XZ\")\n    .rect(0.307377, 0.307377)\n    .extrude(0.012295)\n)\n\n# Smaller rectangle (main body) on the same plane, extruded along Y\nmain_body = (\n    cq.Workplane(\"XZ\")\n    .rect(0.307377, 0.184426)\n    .extrude(0.737705)\n)\n\n# Combine the two solids into the final pillar\nresult = base.union(main_body)",
+          "detail": "extents [0.30738, 0.73771, 0.30738] vs reference [0.30738, 0.30738, 0.75]",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 271,
+            "prompt_eval_count": 246,
+            "thinking_chars": 423
+          },
+          "outcome": "failed",
+          "seconds": 9.4,
+          "size": [
+            0.307377,
+            0.737705,
+            0.307377
+          ],
+          "stage": "bbox_wrong",
+          "truncated": false,
+          "volume": 0.04228390661828288,
+          "volume_match": true
+        }
+      ],
+      "failed": 1,
+      "family": "cadtestbench",
+      "id": "00522404",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": false,
+          "bbox_xyz": false,
+          "code": "import cadquery as cq\n\n# First trapezoid\nbase1   = 1.11043\ntop1    = 0.55953\nheight1 = 0.625913\nwidth1  = 1.0011\n\npoly1 = (\n    cq.Workplane(\"XY\")\n    .polyline([(0, 0), (base1, 0), (top1, height1), (0, height1)])\n    .close()\n    .extrude(width1)\n)\n\n# Second trapezoid\nbase2   = 1.27908\ntop2    = 0.619642\nheight2 = 0.75\nwidth2  = 0.201835\n\npoly2 = (\n    cq.Workplane(\"XY\")\n    .polyline([(0, 0), (base2, 0), (top2, height2), (0, height2)])\n    .close()\n    .extrude(width2)\n)\n\n# Position the second trapezoid so that it attaches to the first one.\n# Here we translate it to the right of the first trapezoid and rotate it\n# 90\u00b0 around the Z\u2011axis so that its long side aligns with the short side\n# of the first trapezoid. Adjust the translation vector as needed for the\n# exact fit.\npoly2 = poly2.translate((base1, 0, 0)).rotate((0, 0, 1), 90)\n\n# Combine the two solids\nresult = poly1.union(poly2)",
+          "detail": "reference raised TypeError: Workplane.rotate() missing 1 required positional argument: 'angleDegrees'",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 513,
+            "prompt_eval_count": 297,
+            "thinking_chars": 678
+          },
+          "outcome": "failed",
+          "seconds": 13.8,
+          "size": null,
+          "stage": "raised",
+          "truncated": false,
+          "volume": null,
+          "volume_match": false
+        }
+      ],
+      "failed": 1,
+      "family": "cadtestbench",
+      "id": "00523882",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": true,
+          "bbox_xyz": false,
+          "code": "import cadquery as cq\n\n# Create a cylinder with radius 0.75 (diameter 1.5) and height 0.440903\ncyl = cq.Workplane(\"XY\").cylinder(\n    height=0.440903,\n    radius=0.75,\n    centered=True\n)\n\n# Rotate the cylinder so its axis aligns with the X\u2011axis\nresult = cyl.rotate((0, 0, 0), (0, 1, 0), 90)",
+          "detail": "",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 178,
+            "prompt_eval_count": 164,
+            "thinking_chars": 231
+          },
+          "outcome": "solved",
+          "seconds": 7.5,
+          "size": [
+            0.44090300000000016,
+            1.5,
+            1.5
+          ],
+          "stage": "bbox_match",
+          "truncated": false,
+          "volume": 0.7791399144819565,
+          "volume_match": true
+        }
+      ],
+      "failed": 0,
+      "family": "cadtestbench",
+      "id": "00670106",
+      "not_run": 0,
+      "solved": 1,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": false,
+          "bbox_xyz": false,
+          "code": "import cadquery as cq\n\n# Dimensions in millimetres\nouter_length = 60.0   # 0.06 m\nouter_width  = 60.0   # 0.06 m\nheight       = 750.0  # 0.75 m\npadding      = 4.5    # 0.0045 m\n\n# Outer solid\nouter = (\n    cq.Workplane(\"XY\")\n    .box(outer_length, outer_width, height)\n)\n\n# Inner solid (hollow)\ninner = (\n    cq.Workplane(\"XY\")\n    .box(outer_length - 2 * padding,\n         outer_width  - 2 * padding,\n         height)\n)\n\n# Subtract inner from outer to create the pipe\nresult = outer.cut(inner)",
+          "detail": "extents [60.0, 60.0, 750.0] vs reference [0.06, 0.75, 0.06]",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 316,
+            "prompt_eval_count": 177,
+            "thinking_chars": 473
+          },
+          "outcome": "failed",
+          "seconds": 13.0,
+          "size": [
+            60.0,
+            60.0,
+            750.0
+          ],
+          "stage": "bbox_wrong",
+          "truncated": false,
+          "volume": 749250.0000000002,
+          "volume_match": false
+        }
+      ],
+      "failed": 1,
+      "family": "cadtestbench",
+      "id": "00670259",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": false,
+          "bbox_xyz": false,
+          "code": "import cadquery as cq\n\n# Create a regular octagon with side length 1.00328 mm\noctagon = (\n    cq.Workplane(\"XY\")\n    .polygon(8, 1.00328)\n    .extrude(0.271665)          # Extrude to height 0.271665 mm\n)\n\n# Apply rotations: 22.4\u00b0 about Z, then -90\u00b0 about X\nrotated = (\n    octagon\n    .rotate((0, 0, 1), 22.4)    # Rotate 22.4\u00b0 around Z-axis\n    .rotate((1, 0, 0), -90)    # Rotate -90\u00b0 around X-axis\n)\n\n# Translate to the specified position\nresult = rotated.translate((-0.176576, 0, 0.286546))",
+          "detail": "reference raised TypeError: Workplane.rotate() missing 1 required positional argument: 'angleDegrees'",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 290,
+            "prompt_eval_count": 200,
+            "thinking_chars": 333
+          },
+          "outcome": "failed",
+          "seconds": 12.9,
+          "size": null,
+          "stage": "raised",
+          "truncated": false,
+          "volume": null,
+          "volume_match": false
+        }
+      ],
+      "failed": 1,
+      "family": "cadtestbench",
+      "id": "00670441",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    },
+    {
+      "attempts": [
+        {
+          "bbox_sorted": false,
+          "bbox_xyz": false,
+          "code": "import cadquery as cq\n\n# Dimensions (millimetres)\nrect_length = 0.051687          # shorter edge of the rectangle\nrect_width  = 0.120604          # longer edge of the rectangle\ntrapezium_height = 0.05         # arbitrary height for the trapezium\ntrapezium_top_base = 0.120604   # top base of the trapezium (same as rectangle width)\n\n# Create the rectangle\nrect = (\n    cq.Workplane(\"XY\")\n    .rect(rect_length, rect_width)\n    .extrude(0)  # keep it 2\u2011D for now\n)\n\n# Create the trapezium as a 2\u2011D polygon\n# Coordinates are defined relative to the origin (0,0)\n# The base of the trapezium is aligned with the shorter edge of the rectangle\ntrapezium = (\n    cq.Workplane(\"XY\")\n    .polygon(\n        4,\n        [rect_length, 0,          # bottom right\n         0,          0,          # bottom left\n         0,          trapezium_height,          # top left\n         trapezium_top_base, trapezium_height]  # top right\n    )\n    .extrude(0)  # keep it 2\u2011D for now\n)\n\n# Combine the two shapes\ncombined_2d = rect.union(trapezium)\n\n# Extrude to 3\u2011D\nresult = combined_2d.extrude(0.75)",
+          "detail": "reference raised Standard_ConstructionError: BRepSweep_Translation::Constructor",
+          "meta": {
+            "done_reason": "stop",
+            "eval_count": 548,
+            "prompt_eval_count": 257,
+            "thinking_chars": 757
+          },
+          "outcome": "failed",
+          "seconds": 19.2,
+          "size": null,
+          "stage": "raised",
+          "truncated": false,
+          "volume": null,
+          "volume_match": false
+        }
+      ],
+      "failed": 1,
+      "family": "cadtestbench",
+      "id": "00670457",
+      "not_run": 0,
+      "solved": 0,
+      "unjudged": 0
+    }
+  ],
+  "rollouts": 1,
+  "scoring": {
+    "cadquery": "2.7.0",
+    "executor": "verify/verifiers/cad_exec.py measure",
+    "headline": "sorted bounding-box extents within 1%",
+    "volume_tol": 0.02
+  },
+  "secondary": {
+    "bbox_and_volume": {
+      "ci95": [
+        0.24222979167233266,
+        0.5296756086269889
+      ],
+      "rate": 0.375,
+      "solved": 15
+    },
+    "bbox_xyz_strict": {
+      "ci95": [
+        0.24222979167233266,
+        0.5296756086269889
+      ],
+      "rate": 0.375,
+      "solved": 15
+    }
+  },
+  "solve_rate": 0.475,
+  "solve_rate_ci95": [
+    0.329354701126789,
+    0.6250263789330753
+  ],
+  "spec_version": "cadtestbench-detailed",
+  "split": "real",
+  "stages": {
+    "bbox_match": 19,
+    "bbox_wrong": 8,
+    "raised": 13
+  },
+  "subset": {
+    "count": 40,
+    "ids_file": "real-cadtestbench-gptoss20b-subset40-ids.json"
+  },
+  "synthetic_reference": {
+    "attempted": 300,
+    "metric": "extents + hole diameter + hole count (Verifier Pack)",
+    "report": "docs/results/phase4-heldout300-fewshot5-2026-11-14.json",
+    "solve_rate": 0.4066666666666667,
+    "solved": 122
+  },
+  "tasks": 40,
+  "totals": {
+    "failed": 21,
+    "not_run": 0,
+    "solved": 19,
+    "unjudged": 0
+  },
+  "train_data": null
+}

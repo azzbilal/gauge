@@ -6,6 +6,24 @@
     python model/bench_real.py run --tasks DIR/tasks.json --mock wrong    # must be 0 %
     python model/bench_real.py run --tasks DIR/tasks.json --fewshot 5 --out report.json
     python model/bench_real.py compare zeroshot.json fewshot5.json        # paired McNemar
+    python model/bench_real.py run --tasks DIR/tasks.json --model gpt-oss:20b --reasoning high
+
+--reasoning LEVEL turns thinking on for a reasoning model (Ollama `think: LEVEL`; gpt-oss's
+template turns it into "Reasoning: low|medium|high", while `think: true` means medium). The
+reasoning tokens come out of num_predict before any code, so with --reasoning the defaults
+become num_predict REASONING_NUM_PREDICT and a REASONING_TIMEOUT_S request timeout (a
+timeout is `not_run`, left out of the rate, so it must not be hit). Without the flag every
+setting is what the qwen3.5 runs used: think false, num_predict 4096, temperature 0.
+
+    python model/bench_real.py subset --tasks DIR/tasks.json --n 40 \\
+        --by zeroshot.json fewshot5.json --out ids.json
+    python model/bench_real.py run --tasks DIR/tasks.json --ids ids.json ...
+
+`subset` picks a stratified subset for runs too slow for all 100 tasks. The strata are the
+joint outcome (solved or not) of earlier reports on the full set, so the subset keeps their
+rates; no output of the model about to be run goes into the choice. Seats go to strata in
+proportion (largest remainder), and within a stratum the ids, sorted, are taken at evenly
+spaced positions. `run --ids` then runs only those tasks, in tasks.json order.
 
 Why: model/benchmark.py measures the model only on held-out tasks drawn from the same five
 synthetic templates its few-shot examples come from. This harness asks the same model, with
@@ -71,6 +89,11 @@ WRONG_SCALE = 1.07  # the `wrong` mock scales the reference solid by this
 DEFAULT_TRAIN = benchmark.generate.DATA_DIR / "synthetic-seed0-n100.json"
 # The 41 % run's few-shot examples (docs/results/phase4-heldout300-fewshot5-2026-11-14.json).
 EXPECTED_EXAMPLES = ["plate-001", "box-001", "bracket-001", "cutout-001", "rounded-001"]
+# --reasoning defaults. Prompt + reasoning + code share num_ctx (16384, kept from the qwen runs):
+# the few-shot prompt is ~2k tokens, so 12288 leaves the whole budget inside the window.
+REASONING_LEVELS = ("low", "medium", "high")
+REASONING_NUM_PREDICT = 12288
+REASONING_TIMEOUT_S = 1800.0
 SYNTHETIC_REFERENCE = {"solved": 122, "attempted": 300, "solve_rate": 122 / 300,
                        "report": "docs/results/phase4-heldout300-fewshot5-2026-11-14.json",
                        "metric": "extents + hole diameter + hole count (Verifier Pack)"}
@@ -212,6 +235,53 @@ def outcome_of(stage: str) -> str:
     return FAILED
 
 
+# ----------------------------------------------------------------------------- subset
+
+def stratified_ids(ids: list, strata: dict, n: int) -> list:
+    """`n` of `ids`, allocated to `strata` ({id: key}) in proportion, evenly spaced within."""
+    groups = {}
+    for i in sorted(ids):
+        groups.setdefault(strata[i], []).append(i)
+    exact = {k: n * len(v) / len(ids) for k, v in groups.items()}
+    seats = {k: int(q) for k, q in exact.items()}
+    for k in sorted(exact, key=lambda k: (-(exact[k] - seats[k]), str(k)))[:n - sum(seats.values())]:
+        seats[k] += 1
+    chosen = []
+    for k, members in groups.items():
+        m = seats[k]
+        chosen += [members[int((j + 0.5) * len(members) / m)] for j in range(m)]
+    return sorted(chosen)
+
+
+def subset_cmd(args) -> int:
+    tasks = [t["id"] for t in json.loads(args.tasks.read_text(encoding="utf-8"))["tasks"]]
+    reports = [json.loads(p.read_text(encoding="utf-8")) for p in args.by]
+    solved = [{r["id"]: r["attempts"][0]["outcome"] == SOLVED for r in rep["per_task"]}
+              for rep in reports]
+    missing = [i for i in tasks if any(i not in s for s in solved)]
+    if missing or not 0 < args.n <= len(tasks):
+        print(f"error: {len(missing)} task(s) missing from --by reports, or bad --n",
+              file=sys.stderr)
+        return 2
+    strata = {i: "".join("S" if s[i] else "f" for s in solved) for i in tasks}
+    ids = stratified_ids(tasks, strata, args.n)
+    counts = {}
+    for i in ids:
+        counts[strata[i]] = counts.get(strata[i], 0) + 1
+    out = {"rule": f"{args.n} of {len(tasks)} tasks, stratified on the joint solved (S) / "
+                   f"not solved (f) outcome in {[p.name for p in args.by]}, proportional "
+                   f"(largest remainder), evenly spaced by sorted id within each stratum",
+           "strata_full": {k: sum(v == k for v in strata.values())
+                           for k in sorted(set(strata.values()))},
+           "strata_subset": dict(sorted(counts.items())),
+           "count": len(ids), "ids": ids}
+    text = json.dumps(out, indent=1) + "\n"
+    if args.out:
+        args.out.write_text(text, encoding="utf-8", newline="\n")
+    print(text, end="")
+    return 0
+
+
 # ----------------------------------------------------------------------------- run
 
 def oracle(task):
@@ -306,6 +376,15 @@ def render(report: dict) -> str:
 def run_cmd(args) -> int:
     data = json.loads(args.tasks.read_text(encoding="utf-8"))
     tasks = data["tasks"][:args.limit] if args.limit else data["tasks"]
+    subset_ids = None
+    if args.ids:
+        subset_ids = json.loads(args.ids.read_text(encoding="utf-8"))["ids"]
+        unknown = set(subset_ids) - {t["id"] for t in tasks}
+        if unknown:
+            print(f"error: --ids lists {len(unknown)} id(s) not in the tasks, e.g. "
+                  f"{sorted(unknown)[0]}", file=sys.stderr)
+            return 2
+        tasks = [t for t in tasks if t["id"] in set(subset_ids)]
     examples, generation = [], None
     if args.mock:
         if args.fewshot:
@@ -328,15 +407,28 @@ def run_cmd(args) -> int:
         except benchmark.OllamaError as err:
             print(f"error: {err}", file=sys.stderr)
             return 1
+        reasoning = args.reasoning
+        num_predict = args.num_predict or (REASONING_NUM_PREDICT if reasoning else 4096)
+        timeout = args.timeout or (REASONING_TIMEOUT_S if reasoning
+                                   else benchmark.DEFAULT_TIMEOUT_S)
+        if num_predict >= args.num_ctx:
+            print(f"error: --num-predict {num_predict} must be below --num-ctx {args.num_ctx} "
+                  f"(prompt, reasoning and code share the window)", file=sys.stderr)
+            return 2
         candidate = benchmark.OllamaCandidate(
             temperature=args.temperature, num_ctx=args.num_ctx,
-            num_predict=args.num_predict, examples=examples)
-        generation = candidate.settings
+            num_predict=num_predict, think=reasoning or False, timeout=timeout,
+            examples=examples)
+        generation = dict(candidate.settings)
+        if reasoning:
+            generation["timeout_s"] = timeout
         candidate_for, label = (lambda task: candidate), f"ollama:{args.model}"
         label += f"+fewshot{len(examples)}" if examples else ""
 
     config = {"data": "cadtestbench-detailed/" + args.tasks.name, "tasks": len(tasks),
               "candidate": label, "generation": generation}
+    if subset_ids is not None:
+        config["subset"] = {"ids_file": args.ids.name, "count": len(tasks)}
     log = args.out.with_name(args.out.name + ".progress.jsonl") if args.out else None
     done = {}
     if log and args.resume and log.exists():
@@ -372,6 +464,7 @@ def run_cmd(args) -> int:
 
     report = {**summarise(per_task), "per_task": per_task, "tasks": len(per_task),
               "rollouts": 1, "data": config["data"], "split": "real",
+              "subset": config.get("subset"),
               "spec_version": "cadtestbench-detailed", "candidate": label,
               "model": None if args.mock else args.model, "generation": generation,
               "train_data": benchmark._shown(args.train_data) if examples else None,
@@ -408,16 +501,31 @@ def main(argv=None) -> int:
     r = sub.add_parser("run", help="benchmark a candidate on the prepared tasks")
     r.add_argument("--tasks", type=Path, required=True)
     r.add_argument("--limit", type=int, default=None)
+    r.add_argument("--ids", type=Path, default=None,
+                   help="run only the ids in this file (written by `subset`)")
     r.add_argument("--model", default=benchmark.DEFAULT_MODEL)
     r.add_argument("--mock", choices=sorted(MOCKS), default=None)
     r.add_argument("--fewshot", type=int, default=0, metavar="K")
     r.add_argument("--train-data", type=Path, default=DEFAULT_TRAIN)
     r.add_argument("--temperature", type=float, default=0.0)
     r.add_argument("--num-ctx", type=int, default=16384)
-    r.add_argument("--num-predict", type=int, default=4096,
-                   help="default 4096, as in the 41 %% synthetic run")
+    r.add_argument("--num-predict", type=int, default=None,
+                   help="default 4096, as in the 41 %% synthetic run; "
+                        f"{REASONING_NUM_PREDICT} with --reasoning")
+    r.add_argument("--reasoning", "--think", choices=REASONING_LEVELS, default=None,
+                   help="enable thinking at this level (Ollama think: LEVEL); default off "
+                        "(think false)")
+    r.add_argument("--timeout", type=float, default=None,
+                   help="seconds per Ollama request; default the probe's (300 s), "
+                        f"{REASONING_TIMEOUT_S:.0f} s with --reasoning")
     r.add_argument("--out", type=Path, default=None)
     r.add_argument("--resume", action="store_true")
+    s = sub.add_parser("subset", help="stratified subset of task ids for a slow model")
+    s.add_argument("--tasks", type=Path, required=True)
+    s.add_argument("--n", type=int, required=True)
+    s.add_argument("--by", type=Path, nargs="+", required=True,
+                   help="earlier full-set reports whose joint outcome is the strata")
+    s.add_argument("--out", type=Path, default=None)
     c = sub.add_parser("compare", help="paired comparison of two run reports")
     c.add_argument("reports", type=Path, nargs=2)
     c.add_argument("--out", type=Path, default=None)
@@ -428,6 +536,8 @@ def main(argv=None) -> int:
         return prepare(args.dir, args.limit)
     if args.cmd == "compare":
         return compare_cmd(args)
+    if args.cmd == "subset":
+        return subset_cmd(args)
     return run_cmd(args)
 
 

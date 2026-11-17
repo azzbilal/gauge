@@ -555,5 +555,86 @@ class BenchmarkExecuted(unittest.TestCase):
         self.assertEqual(report["totals"]["failed"], len(HELDOUT), report["totals"])
 
 
+class BenchRealReasoning(unittest.TestCase):
+    """bench_real.py: --reasoning settings and the stratified --ids subset (no live model)."""
+
+    @classmethod
+    def setUpClass(cls):
+        import bench_real
+        cls.br = bench_real
+
+    def _run(self, *extra):
+        seen = []
+
+        class Fake:
+            def __init__(self, **kwargs):
+                seen.append(kwargs)
+                self.settings = {"think": kwargs["think"], "num_predict": kwargs["num_predict"]}
+
+            def __call__(self, prompt, spec, model):
+                return ""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tasks = Path(tmp) / "tasks.json"
+            rows = [{"id": i, "prompt": "p", "reference": "", "ref_size": [1, 1, 1],
+                     "ref_volume": 1.0} for i in ("a", "b", "c")]
+            tasks.write_text(json.dumps({"tasks": rows}), encoding="utf-8")
+            ids = Path(tmp) / "ids.json"
+            ids.write_text(json.dumps({"ids": ["c", "a"]}), encoding="utf-8")
+            argv = ["run", "--tasks", str(tasks), "--model", "m",
+                    "--out", str(Path(tmp) / "r.json"), *extra]
+            argv = [a.replace("IDS", str(ids)) for a in argv]
+            with mock.patch.object(self.br.benchmark, "ollama_has", return_value=True), \
+                    mock.patch.object(self.br.benchmark, "OllamaCandidate", Fake), \
+                    contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                code = self.br.main(argv)
+            report = json.loads((Path(tmp) / "r.json").read_text(encoding="utf-8"))
+        return code, seen[0], report
+
+    def test_default_keeps_the_qwen_settings(self):
+        code, kwargs, report = self._run()
+        self.assertEqual(code, 0)
+        self.assertIs(kwargs["think"], False)
+        self.assertEqual(kwargs["num_predict"], 4096)
+        self.assertEqual(kwargs["temperature"], 0.0)
+        self.assertNotIn("timeout_s", report["generation"])
+        self.assertEqual(report["tasks"], 3)
+
+    def test_reasoning_sends_the_level_a_larger_budget_and_timeout(self):
+        code, kwargs, report = self._run("--reasoning", "high")
+        self.assertEqual(kwargs["think"], "high")
+        self.assertEqual(kwargs["num_predict"], self.br.REASONING_NUM_PREDICT)
+        self.assertEqual(kwargs["timeout"], self.br.REASONING_TIMEOUT_S)
+        self.assertEqual(kwargs["temperature"], 0.0)
+        self.assertEqual(report["generation"]["timeout_s"], self.br.REASONING_TIMEOUT_S)
+        self.assertEqual(report["totals"]["failed"], 3)  # no code from the fake
+
+    def test_budget_must_fit_the_context_window(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tasks = Path(tmp) / "tasks.json"
+            tasks.write_text(json.dumps({"tasks": []}), encoding="utf-8")
+            with mock.patch.object(self.br.benchmark, "ollama_has", return_value=True), \
+                    contextlib.redirect_stderr(io.StringIO()) as err:
+                code = self.br.main(["run", "--tasks", str(tasks), "--reasoning", "high",
+                                     "--num-predict", "16384"])
+        self.assertEqual(code, 2)
+        self.assertIn("must be below --num-ctx", err.getvalue())
+
+    def test_ids_runs_only_the_subset_in_task_order(self):
+        _, _, report = self._run("--ids", "IDS")
+        self.assertEqual([r["id"] for r in report["per_task"]], ["a", "c"])
+        self.assertEqual(report["subset"]["count"], 2)
+
+    def test_stratified_ids_is_proportional_and_deterministic(self):
+        ids = [f"{i:03d}" for i in range(100)]
+        strata = {i: ("x" if int(i) < 8 else "y" if int(i) < 30 else "z") for i in ids}
+        chosen = self.br.stratified_ids(ids, strata, 40)
+        self.assertEqual(chosen, self.br.stratified_ids(list(reversed(ids)), strata, 40))
+        self.assertEqual(len(set(chosen)), 40)
+        counts = Counter(strata[i] for i in chosen)
+        self.assertEqual(counts, {"x": 3, "y": 9, "z": 28})
+
+
 if __name__ == "__main__":
     unittest.main()
